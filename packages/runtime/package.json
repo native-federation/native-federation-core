@@ -1,0 +1,58 @@
+{
+  "name": "@native-federation/runtime",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@native-federation-core/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!**/*.tsbuildinfo"
+  ],
+"nx": {
+    "targets": {
+      "build": {
+        "executor": "@nx/esbuild:esbuild",
+        "outputs": [
+          "{options.outputPath}"
+        ],
+        "options": {
+          "outputPath": "packages/runtime/dist",
+          "main": "packages/runtime/src/index.ts",
+          "tsConfig": "packages/runtime/tsconfig.build.json",
+          "format": [
+            "esm"
+          ],
+          "declarationRootDir": "packages/runtime/src"
+        }
+      }
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.4",
+    "vitest": "^3.0.0",
+    "@vitest/ui": "^3.0.0"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "test:unit": "vitest run --project=unit",
+    "test:integration": "vitest run --project=integration"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
+  }
+}
