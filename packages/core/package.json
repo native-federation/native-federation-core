@@ -5,37 +5,9 @@
   "dependencies": {
     "@native-federation/runtime": "workspace:*"
   },
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    "./package.json": "./package.json",
-    ".": {
-      "@native-federation-core/source": "./src/index.ts",
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "default": "./dist/index.js"
-    }
-  },
+
   "files": [
-    "dist",
+    "lib",
     "!**/*.tsbuildinfo"
-  ],
-  "nx": {
-    "targets": {
-      "build": {
-        "executor": "@nx/esbuild:esbuild",
-        "outputs": [
-          "{options.outputPath}"
-        ],
-        "options": {
-          "outputPath": "packages/core/dist",
-          "main": "packages/core/src/index.ts",
-          "tsConfig": "packages/core/tsconfig.lib.json",
-          "assets": ["packages/core/*.md", "packages/core/package.json"],
-          "format": ["esm"]
-        }
-      }
-    }
-  }
+  ]
 }

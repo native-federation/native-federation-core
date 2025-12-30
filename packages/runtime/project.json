@@ -3,7 +3,63 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "library",
   "sourceRoot": "packages/runtime/src",
+  "prefix": "nf",
   "targets": {
+    "build": {
+      "executor": "@nx/esbuild:esbuild",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "packages/runtime/dist",
+        "main": "packages/runtime/src/index.ts",
+        "tsConfig": "packages/runtime/tsconfig.build.json",
+        "format": ["esm"],
+        "declarationRootDir": "packages/runtime/src",
+        "target": "esnext"
+      },
+      "dependsOn": ["^build"],
+      "cache": true,
+      "inputs": ["production", "^production"]
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run"
+      },
+      "dependsOn": ["^build"]
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "packages/runtime",
+        "command": "tsc --build --emitDeclarationOnly"
+      },
+      "cache": true,
+      "inputs": [
+        "production",
+        "^production",
+        {
+          "externalDependencies": ["typescript"]
+        }
+      ],
+      "dependsOn": ["^typecheck"]
+    },
+    "build-deps": {
+      "executor": "nx:noop",
+      "dependsOn": ["^build"]
+    },
+    "watch-deps": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm exec nx watch --projects @native-federation/runtime --includeDependentProjects -- pnpm exec nx build-deps @native-federation/runtime"
+      },
+      "continuous": true,
+      "dependsOn": ["build-deps"]
+    },
+    "nx-release-publish": {
+      "executor": "@nx/js:release-publish",
+      "dependsOn": ["^nx-release-publish"],
+      "options": {}
+    },
     "publish": {
       "dependsOn": ["build"],
       "executor": "nx:run-commands",
@@ -19,5 +75,5 @@
       }
     }
   },
-  "tags": ["org:softarc", "scope:nf"]
+  "tags": ["npm:public", "org:softarc", "scope:nf"]
 }
