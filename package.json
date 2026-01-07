@@ -5,6 +5,7 @@
   "scripts": {
     "test:e2e:runtime": "cd packages/runtime && pnpm test:e2e"
   },
+  "type": "module",
   "private": true,
   "devDependencies": {
     "@eslint/js": "^9.39.1",

@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
-import * as JSON5 from 'json5';
+import JSON5 from 'json5';
 
 export interface MappedPath {
   key: string;

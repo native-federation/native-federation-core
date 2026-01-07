@@ -13,8 +13,8 @@
         "main": "packages/runtime/src/index.ts",
         "tsConfig": "packages/runtime/tsconfig.build.json",
         "format": ["esm"],
-        "declarationRootDir": "packages/runtime/src",
-        "target": "esnext"
+        "bundle": true,
+        "declarationRootDir": "packages/runtime/src"
       },
       "dependsOn": ["^build"],
       "cache": true,

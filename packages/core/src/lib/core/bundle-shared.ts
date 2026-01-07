@@ -18,6 +18,7 @@ import {
   rewriteChunkImports,
 } from '../utils/rewrite-chunk-imports.js';
 import { cacheEntry, getChecksum, getFilename } from './../utils/bundle-caching.js';
+import { fileURLToPath } from 'url';
 
 export async function bundleShared(
   sharedBundles: Record<string, NormalizedSharedConfig>,
@@ -59,9 +60,11 @@ export async function bundleShared(
 
   const packageInfos = [...inferredPackageInfos, ...configuredPackageInfos];
 
+  const __filename = fileURLToPath(import.meta.url);
+
   const configState =
     'BUNDLER_CHUNKS' + // TODO: Replace this with lib version
-    fs.readFileSync(path.join(__dirname, '../../../package.json')) +
+    fs.readFileSync(path.join(path.dirname(__filename), '../../../package.json')) +
     JSON.stringify(config);
 
   const allEntryPoints: EntryPoint[] = packageInfos.map(pi => {

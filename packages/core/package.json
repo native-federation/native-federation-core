@@ -1,13 +1,30 @@
 {
-  "name": "@native-federation/core",
+  "name": "@nf-debug/core",
   "version": "0.0.1",
   "type": "module",
   "dependencies": {
     "@native-federation/runtime": "workspace:*"
   },
-
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js",
+      "default": "./src/index.js"
+    },
+    "./build": {
+      "types": "./src/build.d.ts",
+      "import": "./src/build.js",
+      "default": "./src/build.js"
+    },
+    "./util": {
+      "types": "./src/util.d.ts",
+      "import": "./src/util.js",
+      "default": "./av/util.js"
+    }
+  },
   "files": [
-    "lib",
+    "src/lib",
     "!**/*.tsbuildinfo"
   ]
 }
