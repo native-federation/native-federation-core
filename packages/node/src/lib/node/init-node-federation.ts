@@ -9,7 +9,7 @@ import {
   type ImportMap,
   mergeImportMaps,
   processHostInfo,
-} from '@native-federation/runtime';
+} from '@nf-beta/runtime';
 import { IMPORT_MAP_FILE_NAME } from '../utils/import-map-loader.js';
 import { resolver } from '../utils/loader-as-data-url.js';
 

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import type { ExposesInfo, SharedInfo } from '@native-federation/runtime';
+import type { ExposesInfo, SharedInfo } from '@nf-beta/runtime';
 import type { NormalizedFederationConfig } from '../config/federation-config.js';
 import { createBuildResultMap, lookupInResultMap } from '../utils/build-result-map.js';
 import { bundle } from '../utils/build-utils.js';

@@ -1,4 +1,4 @@
-import type { FederationInfo } from '@native-federation/runtime';
+import type { FederationInfo } from '@nf-beta/runtime';
 import { getConfigContext, usePackageJson, useWorkspace } from '../config/configuration-context.js';
 import type { NormalizedFederationConfig } from '../config/federation-config.js';
 import { type BuildAdapter, setBuildAdapter } from './build-adapter.js';

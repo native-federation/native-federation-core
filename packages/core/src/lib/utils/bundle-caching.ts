@@ -2,7 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import type { NormalizedSharedConfig } from '../config/federation-config.js';
-import type { SharedInfo } from '@native-federation/runtime';
+import type { SharedInfo } from '@nf-beta/runtime';
 import { logger } from '../utils/logger.js';
 
 export const getCachePath = (workspaceRoot: string, project: string) =>

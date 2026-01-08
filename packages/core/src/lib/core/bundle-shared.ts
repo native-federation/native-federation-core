@@ -6,7 +6,7 @@ import {
 } from '../config/federation-config.js';
 import { bundle } from '../utils/build-utils.js';
 import { getPackageInfo, type PackageInfo } from '../utils/package-info.js';
-import { type SharedInfo } from '@native-federation/runtime';
+import { type SharedInfo } from '@nf-beta/runtime';
 import { type FederationOptions } from './federation-options.js';
 import { logger } from '../utils/logger.js';
 import crypto from 'crypto';

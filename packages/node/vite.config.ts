@@ -9,7 +9,7 @@ export default defineConfig(() => ({
   //  plugins: [],
   // },
   test: {
-    name: '@native-federation/node',
+    name: '@nf-beta/node',
     watch: false,
     globals: true,
     environment: 'node',

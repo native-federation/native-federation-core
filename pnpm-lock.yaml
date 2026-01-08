@@ -117,13 +117,13 @@ importers:
 
   packages/core:
     dependencies:
-      '@native-federation/runtime':
+      '@nf-beta/runtime':
         specifier: workspace:*
         version: link:../runtime
 
   packages/node:
     dependencies:
-      '@native-federation/runtime':
+      '@nf-beta/runtime':
         specifier: workspace:*
         version: link:../runtime
 

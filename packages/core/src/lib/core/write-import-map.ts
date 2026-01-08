@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
-import type { SharedInfo } from '@native-federation/runtime';
+import type { SharedInfo } from '@nf-beta/runtime';
 import type { FederationOptions } from './federation-options.js';
 
 export function writeImportMap(sharedInfo: SharedInfo[], fedOption: FederationOptions) {

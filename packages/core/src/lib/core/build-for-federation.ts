@@ -1,4 +1,4 @@
-import type { FederationInfo, SharedInfo } from '@native-federation/runtime';
+import type { FederationInfo, SharedInfo } from '@nf-beta/runtime';
 import type {
   NormalizedFederationConfig,
   NormalizedSharedConfig,

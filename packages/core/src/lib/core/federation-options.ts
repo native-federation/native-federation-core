@@ -1,4 +1,4 @@
-import type { BuildNotificationOptions } from '@native-federation/runtime';
+import type { BuildNotificationOptions } from '@nf-beta/runtime';
 
 export interface FederationOptions {
   workspaceRoot: string;

@@ -2,7 +2,6 @@
   "compilerOptions": {
     "composite": true,
     "declarationMap": true,
-    "emitDeclarationOnly": true,
     "importHelpers": true,
     "isolatedModules": true,
     "lib": ["es2022", "dom"],
@@ -18,6 +17,6 @@
     "noUncheckedIndexedAccess": true,
     "strict": true,
     "target": "esnext",
-    "customConditions": ["@native-federation-core/source"]
+    "customConditions": ["@nf-beta/source"]
   }
 }

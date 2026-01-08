@@ -1,1 +1,1 @@
-export * from '@native-federation/runtime';
+export * from '@nf-beta/runtime';

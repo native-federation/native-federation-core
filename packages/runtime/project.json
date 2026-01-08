@@ -1,5 +1,5 @@
 {
-  "name": "@native-federation/runtime",
+  "name": "@nf-beta/runtime",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "library",
   "sourceRoot": "packages/runtime/src",
@@ -50,7 +50,7 @@
     "watch-deps": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "pnpm exec nx watch --projects @native-federation/runtime --includeDependentProjects -- pnpm exec nx build-deps @native-federation/runtime"
+        "command": "pnpm exec nx watch --projects @nf-beta/runtime --includeDependentProjects -- pnpm exec nx build-deps @nf-beta/runtime"
       },
       "continuous": true,
       "dependsOn": ["build-deps"]
