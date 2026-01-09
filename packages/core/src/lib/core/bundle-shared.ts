@@ -33,7 +33,10 @@ export async function bundleShared(
     ? path.dirname(fedOptions.packageJson)
     : fedOptions.workspaceRoot;
 
-  const bundleCache = cacheEntry(cacheOptions.pathToCache, getFilename(cacheOptions.bundleName));
+  const bundleCache = cacheEntry(
+    cacheOptions.pathToCache,
+    getFilename(cacheOptions.bundleName, fedOptions.dev)
+  );
 
   if (fedOptions?.cacheExternalArtifacts) {
     const cacheMetadata = bundleCache.getMetadata(checksum);
