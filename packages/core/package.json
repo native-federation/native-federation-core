@@ -20,10 +20,10 @@
       "import": "./src/config.js",
       "default": "./src/config.js"
     },
-    "./util": {
-      "types": "./src/util.d.ts",
-      "import": "./src/util.js",
-      "default": "./src/util.js"
+    "./internal": {
+      "types": "./src/internal.d.ts",
+      "import": "./src/internal.js",
+      "default": "./src/internal.js"
     }
   },
   "files": [

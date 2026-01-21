@@ -4,13 +4,12 @@ export interface ExternalConfig {
   requiredVersion?: string;
   version?: string;
   includeSecondaries?: boolean;
-  transient?: boolean;
   platform?: 'browser' | 'node';
   build?: 'default' | 'separate';
   packageInfo?: {
     entryPoint: string;
-    version: string;
-    esm: boolean;
+    version?: string;
+    esm?: boolean;
   };
 }
 
@@ -37,8 +36,8 @@ export type SharedExternalsConfig = Record<string, ExternalConfig>;
 
 export type NormalizedSharedExternalsConfig = Record<string, NormalizedExternalConfig>;
 
-export type ShareExternalsOptions = (string | SharedExternalsConfig)[] | SharedExternalsConfig;
-
 export type ShareAllExternalsOptions = ExternalConfig & {
   includeSecondaries?: IncludeSecondariesOptions;
 };
+
+export type ShareExternalsOptions = Record<string, ShareAllExternalsOptions>;

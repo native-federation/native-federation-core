@@ -400,75 +400,6 @@ export function setInferVersion(infer: boolean): void {
   inferVersion = infer;
 }
 
-type TransientDependency = {
-  packageName: string;
-  requiredVersion: string;
-  packagePath: string;
-};
-
-function findTransientDeps(
-  configuredShareObjects: ShareExternalsOptions,
-  projectRoot: string,
-  preparedSkipList: PreparedSkipList
-): TransientDependency[] {
-  const discovered = new Set<string>();
-  const result: TransientDependency[] = [];
-
-  const packageNames = Object.keys(configuredShareObjects) as Array<
-    keyof typeof configuredShareObjects
-  >;
-
-  for (const packageName of packageNames) {
-    const shareConfig = configuredShareObjects[packageName];
-
-    if (typeof shareConfig === 'object' && shareConfig.transient) {
-      logger.warn('PLEASE NOTE: The transient flag in your federation.config.js');
-      logger.warn('is deprecated. Please remove it. Meanwhile, Native Federation');
-      logger.warn('uses the underlying bundler for splitting transient');
-      logger.warn('dependencies into separate chunks, _when_ necessary.');
-      const packagePath = path.join(projectRoot, 'node_modules', packageName, 'package.json');
-      _findTransientDeps(packagePath, projectRoot, preparedSkipList, discovered, result);
-    }
-  }
-
-  return result;
-}
-
-function _findTransientDeps(
-  packagePath: string,
-  projectRoot: string,
-  preparedSkipList: PreparedSkipList,
-  discovered: Set<string>,
-  result: TransientDependency[]
-) {
-  if (!fs.existsSync(packagePath)) {
-    return;
-  }
-
-  const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf-8'));
-
-  const deps = Object.keys(packageJson.dependencies ?? {});
-  for (const dep of deps) {
-    const depPackageJson = path.join(projectRoot, 'node_modules', dep, 'package.json');
-    const depPath = path.dirname(depPackageJson);
-
-    if (
-      !discovered.has(depPackageJson) &&
-      !isInSkipList(dep, preparedSkipList) &&
-      fs.existsSync(depPackageJson)
-    ) {
-      discovered.add(depPackageJson);
-      const version = packageJson.dependencies[dep];
-      result.push({
-        packageName: dep,
-        requiredVersion: version,
-        packagePath: depPath,
-      });
-      _findTransientDeps(depPackageJson, projectRoot, preparedSkipList, discovered, result);
-    }
-  }
-}
-
 export function share(
   configuredShareObjects: ShareExternalsOptions,
   projectPath = '',
@@ -477,28 +408,9 @@ export function share(
   projectPath = inferProjectPath(projectPath);
   const packagePath = findPackageJson(projectPath);
 
-  const packageDirectory = path.dirname(packagePath);
-
   const preparedSkipList = prepareSkipList(skipList);
 
-  const transientDeps = findTransientDeps(
-    configuredShareObjects,
-    packageDirectory,
-    preparedSkipList
-  );
-
-  const transientShareObject = transientDeps.reduce(
-    (acc, curr) => ({
-      ...acc,
-      [curr.packageName]: { path: curr.packagePath },
-    }),
-    {}
-  );
-
-  const shareObjects = {
-    ...configuredShareObjects,
-    ...transientShareObject,
-  };
+  const shareObjects = { ...configuredShareObjects };
 
   const result: any = {};
   let includeSecondaries;
