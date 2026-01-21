@@ -1,6 +1,6 @@
 {
   "name": "@nf-beta/node",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -38,6 +38,7 @@
     }
   },
   "dependencies": {
-    "@nf-beta/runtime": "workspace:*"
+    "@nf-beta/core": "^0.0.7",
+    "@nf-beta/runtime": "^0.0.2"
   }
 }

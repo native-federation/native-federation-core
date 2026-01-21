@@ -4,12 +4,12 @@ import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import {
-  type FederationInfo,
   fetchAndRegisterRemotes,
   type ImportMap,
   mergeImportMaps,
   processHostInfo,
 } from '@nf-beta/runtime';
+import { type FederationInfo } from '@nf-beta/core';
 import { IMPORT_MAP_FILE_NAME } from '../utils/import-map-loader.js';
 import { resolver } from '../utils/loader-as-data-url.js';
 

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { getExternalUrl, setExternalUrl } from './externals';
-import { SharedInfo } from './federation-info';
-import { globalCache } from './global-cache';
+import { getExternalUrl, setExternalUrl } from './externals.js';
+import type { SharedInfo } from '@nf-beta/core';
+import { globalCache } from './global-cache.js';
 
 describe('externals', () => {
   const fakeSharedInfo: SharedInfo = {

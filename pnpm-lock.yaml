@@ -51,9 +51,6 @@ importers:
       '@types/node':
         specifier: 20.19.9
         version: 20.19.9
-      '@types/trusted-types':
-        specifier: ^2.0.7
-        version: 2.0.7
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.46.4
         version: 8.46.4(@typescript-eslint/parser@8.46.4(eslint@9.39.1(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.1(jiti@2.6.1))(typescript@5.9.3)
@@ -135,9 +132,12 @@ importers:
 
   packages/node:
     dependencies:
+      '@nf-beta/core':
+        specifier: ^0.0.7
+        version: 0.0.7(typescript@5.9.3)
       '@nf-beta/runtime':
-        specifier: workspace:*
-        version: link:../runtime
+        specifier: ^0.0.2
+        version: 0.0.2
 
   packages/runtime:
     devDependencies:
@@ -147,6 +147,9 @@ importers:
       '@types/node':
         specifier: ^22.5.4
         version: 22.19.3
+      '@types/trusted-types':
+        specifier: ^2.0.7
+        version: 2.0.7
       '@vitest/ui':
         specifier: ^3.0.0
         version: 3.2.4(vitest@3.2.4)
@@ -1186,6 +1189,9 @@ packages:
 
   '@nf-beta/core@0.0.7':
     resolution: {integrity: sha512-hvQnHYdxZLKVCmfzj6vcRpMN7N528uwCJy5sHVRVyepRJtfQEaf2cVlSCfGZ60nr6N1fSwMAqWfyr4UUaLZPVA==}
+
+  '@nf-beta/runtime@0.0.2':
+    resolution: {integrity: sha512-MJTxHa1JQWbvZCGxIVryb5ydvSs/lQwa42ZDp//HDoz0X6aKFqS0qwjT0S7O25/uIEawOvXgOjJHX7tFyEPPzg==}
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -5297,6 +5303,8 @@ snapshots:
       json5: 2.2.3
     transitivePeerDependencies:
       - typescript
+
+  '@nf-beta/runtime@0.0.2': {}
 
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
