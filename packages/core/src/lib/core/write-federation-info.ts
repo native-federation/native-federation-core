@@ -1,4 +1,4 @@
-import type { FederationInfo } from '@nf-beta/runtime';
+import type { FederationInfo } from '../domain/federation-info.contract.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { FederationOptions } from './federation-options.js';

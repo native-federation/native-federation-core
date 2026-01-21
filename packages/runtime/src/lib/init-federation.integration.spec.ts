@@ -1,20 +1,12 @@
 import { http, HttpResponse } from 'msw';
 import { setupWorker } from 'msw/browser';
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-} from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   clearFederationDOMEffects,
   getImportMapContent,
   getImportMapScriptCount,
   getImportMapScripts,
-} from './__test-helpers__/dom-helpers';
+} from './__test-helpers__/dom-helpers.js';
 import {
   createFederationInfo,
   createHostInfo,
@@ -22,7 +14,7 @@ import {
   createRemoteConfig,
   createRemoteInfo,
   TEST_URLS,
-} from './__test-helpers__/federation-fixtures';
+} from './__test-helpers__/federation-fixtures.js';
 import {
   createFederationHandlers,
   hostRemoteEntryHandler,
@@ -30,8 +22,8 @@ import {
   networkErrorHandler,
   notFoundHandler,
   remoteEntryHandler,
-} from './__test-helpers__/msw-handlers';
-import { initFederation } from './init-federation';
+} from './__test-helpers__/msw-handlers.js';
+import { initFederation } from './init-federation.js';
 
 // ============================================================================
 // TEST UTILITIES
@@ -110,7 +102,7 @@ describe('initFederation - Browser Integration Test', () => {
             rxjs: './rxjs.js',
           }),
           scopes: {},
-        }),
+        })
       );
     });
 
@@ -132,23 +124,23 @@ describe('initFederation - Browser Integration Test', () => {
 
       worker.use(
         hostRemoteEntryHandler(hostInfo),
-        remoteEntryHandler(TEST_URLS.MFE1_REMOTE_ENTRY, remoteInfo),
+        remoteEntryHandler(TEST_URLS.MFE1_REMOTE_ENTRY, remoteInfo)
       );
 
       const result = await initFederation(
-        createRemoteConfig({ name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY }),
+        createRemoteConfig({ name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY })
       );
 
       expect(result.imports).toEqual(
         expect.objectContaining({
           'mfe1/Component': `${TEST_URLS.MFE1_BASE}/Component.js`,
-        }),
+        })
       );
       expect(result.scopes).toHaveProperty(`${TEST_URLS.MFE1_BASE}/`);
       expect(result.scopes[`${TEST_URLS.MFE1_BASE}/`]).toEqual(
         expect.objectContaining({
           lodash: `${TEST_URLS.MFE1_BASE}/lodash.js`,
-        }),
+        })
       );
     });
 
@@ -157,9 +149,7 @@ describe('initFederation - Browser Integration Test', () => {
       const mfe1Info = createRemoteInfo('mfe1', [
         { key: './Component', outFileName: 'Component.js' },
       ]);
-      const mfe2Info = createRemoteInfo('mfe2', [
-        { key: './Button', outFileName: 'Button.js' },
-      ]);
+      const mfe2Info = createRemoteInfo('mfe2', [{ key: './Button', outFileName: 'Button.js' }]);
 
       worker.use(
         ...createFederationHandlers({
@@ -168,21 +158,21 @@ describe('initFederation - Browser Integration Test', () => {
             { url: TEST_URLS.MFE1_REMOTE_ENTRY, info: mfe1Info },
             { url: TEST_URLS.MFE2_REMOTE_ENTRY, info: mfe2Info },
           ],
-        }),
+        })
       );
 
       const result = await initFederation(
         createRemoteConfig(
           { name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY },
-          { name: 'mfe2', url: TEST_URLS.MFE2_REMOTE_ENTRY },
-        ),
+          { name: 'mfe2', url: TEST_URLS.MFE2_REMOTE_ENTRY }
+        )
       );
 
       expect(result.imports).toEqual(
         expect.objectContaining({
           'mfe1/Component': `${TEST_URLS.MFE1_BASE}/Component.js`,
           'mfe2/Button': `${TEST_URLS.MFE2_BASE}/Button.js`,
-        }),
+        })
       );
       expect(result.scopes).toHaveProperty(`${TEST_URLS.MFE1_BASE}/`);
       expect(result.scopes).toHaveProperty(`${TEST_URLS.MFE2_BASE}/`);
@@ -205,7 +195,7 @@ describe('initFederation - Browser Integration Test', () => {
 
       const scripts = getImportMapScripts();
       expect(scripts.length).toBe(1);
-      expect(scripts[0].type).toBe('importmap-shim');
+      expect(scripts[0]?.type).toBe('importmap-shim');
     });
 
     it('should create importmap with correct structure', async () => {
@@ -222,7 +212,7 @@ describe('initFederation - Browser Integration Test', () => {
         expect.objectContaining({
           angular: './angular.js',
           rxjs: './rxjs.js',
-        }),
+        })
       );
     });
 
@@ -257,7 +247,7 @@ describe('initFederation - Browser Integration Test', () => {
         http.get('./remoteEntry.json', ({ request }) => {
           capturedUrl = request.url;
           return HttpResponse.json(hostInfo);
-        }),
+        })
       );
 
       await initFederation({}, { cacheTag: 'v1.0.0' });
@@ -278,16 +268,15 @@ describe('initFederation - Browser Integration Test', () => {
         http.get(TEST_URLS.MFE1_REMOTE_ENTRY, ({ request }) => {
           capturedUrls.push(request.url);
           return HttpResponse.json(remoteInfo);
-        }),
+        })
       );
 
-      await initFederation(
-        createRemoteConfig({ name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY }),
-        { cacheTag: 'v2.5.1' },
-      );
+      await initFederation(createRemoteConfig({ name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY }), {
+        cacheTag: 'v2.5.1',
+      });
 
       expect(capturedUrls.length).toBe(2);
-      expect(capturedUrls.every((url) => url.includes('t=v2.5.1'))).toBe(true);
+      expect(capturedUrls.every(url => url.includes('t=v2.5.1'))).toBe(true);
     });
 
     it('should append cacheTag with & when URL has existing query params', async () => {
@@ -301,13 +290,12 @@ describe('initFederation - Browser Integration Test', () => {
         http.get(TEST_URLS.MFE1_REMOTE_ENTRY, ({ request }) => {
           capturedRemoteUrl = request.url;
           return HttpResponse.json(remoteInfo);
-        }),
+        })
       );
 
-      await initFederation(
-        createRemoteConfig({ name: 'mfe1', url: urlWithParams }),
-        { cacheTag: 'v1.0.0' },
-      );
+      await initFederation(createRemoteConfig({ name: 'mfe1', url: urlWithParams }), {
+        cacheTag: 'v1.0.0',
+      });
 
       expect(capturedRemoteUrl).toContain('env=prod');
       expect(capturedRemoteUrl).toContain('&t=v1.0.0');
@@ -325,19 +313,17 @@ describe('initFederation - Browser Integration Test', () => {
   describe('Import Map Merging', () => {
     it('should merge host and remote import maps correctly', async () => {
       const hostInfo = createHostInfo();
-      const remoteInfo = createRemoteInfo('mfe1', [
-        { key: './Button', outFileName: 'Button.js' },
-      ]);
+      const remoteInfo = createRemoteInfo('mfe1', [{ key: './Button', outFileName: 'Button.js' }]);
 
       worker.use(
         ...createFederationHandlers({
           host: hostInfo,
           remotes: [{ url: TEST_URLS.MFE1_REMOTE_ENTRY, info: remoteInfo }],
-        }),
+        })
       );
 
       const result = await initFederation(
-        createRemoteConfig({ name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY }),
+        createRemoteConfig({ name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY })
       );
 
       // Host shared dependencies in root imports
@@ -345,13 +331,11 @@ describe('initFederation - Browser Integration Test', () => {
       expect(result.imports['rxjs']).toBe('./rxjs.js');
 
       // Remote exposed modules in root imports
-      expect(result.imports['mfe1/Button']).toBe(
-        `${TEST_URLS.MFE1_BASE}/Button.js`,
-      );
+      expect(result.imports['mfe1/Button']).toBe(`${TEST_URLS.MFE1_BASE}/Button.js`);
 
       // Remote shared dependencies in scopes
-      expect(result.scopes[`${TEST_URLS.MFE1_BASE}/`]['lodash']).toBe(
-        `${TEST_URLS.MFE1_BASE}/lodash.js`,
+      expect(result.scopes[`${TEST_URLS.MFE1_BASE}/`]?.['lodash']).toBe(
+        `${TEST_URLS.MFE1_BASE}/lodash.js`
       );
     });
 
@@ -384,19 +368,19 @@ describe('initFederation - Browser Integration Test', () => {
             { url: TEST_URLS.MFE1_REMOTE_ENTRY, info: mfe1Info },
             { url: TEST_URLS.MFE2_REMOTE_ENTRY, info: mfe2Info },
           ],
-        }),
+        })
       );
 
       const result = await initFederation(
         createRemoteConfig(
           { name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY },
-          { name: 'mfe2', url: TEST_URLS.MFE2_REMOTE_ENTRY },
-        ),
+          { name: 'mfe2', url: TEST_URLS.MFE2_REMOTE_ENTRY }
+        )
       );
 
       // Both remotes should have lodash in their scopes
-      expect(result.scopes[`${TEST_URLS.MFE1_BASE}/`]['lodash']).toBeDefined();
-      expect(result.scopes[`${TEST_URLS.MFE2_BASE}/`]['lodash']).toBeDefined();
+      expect(result.scopes[`${TEST_URLS.MFE1_BASE}/`]?.['lodash']).toBeDefined();
+      expect(result.scopes[`${TEST_URLS.MFE2_BASE}/`]?.['lodash']).toBeDefined();
     });
   });
 
@@ -412,34 +396,26 @@ describe('initFederation - Browser Integration Test', () => {
   describe('Error Handling', () => {
     it('should handle 404 response for remote gracefully when throwIfRemoteNotFound is false', async () => {
       const hostInfo = createFederationInfo({ name: 'host' });
-      worker.use(
-        hostRemoteEntryHandler(hostInfo),
-        notFoundHandler(TEST_URLS.MFE1_REMOTE_ENTRY),
-      );
+      worker.use(hostRemoteEntryHandler(hostInfo), notFoundHandler(TEST_URLS.MFE1_REMOTE_ENTRY));
 
       const [errorMessages, cleanup] = captureConsoleErrorMessages();
 
       const result = await initFederation(
-        createRemoteConfig({ name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY }),
+        createRemoteConfig({ name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY })
       );
 
       expect(result.imports).toEqual({});
       expect(result.scopes).toEqual({});
-      expect(
-        errorMessages.some((msg) =>
-          msg.includes('Error loading remote entry for mfe1'),
-        ),
-      ).toBe(true);
+      expect(errorMessages.some(msg => msg.includes('Error loading remote entry for mfe1'))).toBe(
+        true
+      );
 
       cleanup();
     });
 
     it('should throw error when remote not found and throwIfRemoteNotFound is true', async () => {
       const hostInfo = createFederationInfo({ name: 'host' });
-      worker.use(
-        hostRemoteEntryHandler(hostInfo),
-        notFoundHandler(TEST_URLS.MFE1_REMOTE_ENTRY),
-      );
+      worker.use(hostRemoteEntryHandler(hostInfo), notFoundHandler(TEST_URLS.MFE1_REMOTE_ENTRY));
 
       // TODO Note: throwIfRemoteNotFound is not exposed in InitFederationOptions,
       // but it's used internally. We test the default behavior (false) above.
@@ -447,7 +423,7 @@ describe('initFederation - Browser Integration Test', () => {
       // or test processRemoteInfos directly.
 
       // For now, this test documents the expected behavior if the option were exposed
-      const { fetchAndRegisterRemotes } = await import('./init-federation');
+      const { fetchAndRegisterRemotes } = await import('./init-federation.js');
 
       await expect(
         fetchAndRegisterRemotes(
@@ -455,8 +431,8 @@ describe('initFederation - Browser Integration Test', () => {
             name: 'mfe1',
             url: TEST_URLS.MFE1_REMOTE_ENTRY,
           }),
-          { throwIfRemoteNotFound: true },
-        ),
+          { throwIfRemoteNotFound: true }
+        )
       ).rejects.toThrow('Error loading remote entry for mfe1');
     });
 
@@ -464,7 +440,7 @@ describe('initFederation - Browser Integration Test', () => {
       const hostInfo = createFederationInfo({ name: 'host' });
       worker.use(
         hostRemoteEntryHandler(hostInfo),
-        networkErrorHandler(TEST_URLS.MFE1_REMOTE_ENTRY),
+        networkErrorHandler(TEST_URLS.MFE1_REMOTE_ENTRY)
       );
 
       let errorCalled = false;
@@ -473,7 +449,7 @@ describe('initFederation - Browser Integration Test', () => {
       });
 
       const result = await initFederation(
-        createRemoteConfig({ name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY }),
+        createRemoteConfig({ name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY })
       );
 
       expect(result.imports).toEqual({});
@@ -487,7 +463,7 @@ describe('initFederation - Browser Integration Test', () => {
       const hostInfo = createFederationInfo({ name: 'host' });
       worker.use(
         hostRemoteEntryHandler(hostInfo),
-        malformedJsonHandler(TEST_URLS.MFE1_REMOTE_ENTRY),
+        malformedJsonHandler(TEST_URLS.MFE1_REMOTE_ENTRY)
       );
 
       let errorCalled = false;
@@ -496,7 +472,7 @@ describe('initFederation - Browser Integration Test', () => {
       });
 
       const result = await initFederation(
-        createRemoteConfig({ name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY }),
+        createRemoteConfig({ name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY })
       );
 
       expect(result.imports).toEqual({});
@@ -519,7 +495,7 @@ describe('initFederation - Browser Integration Test', () => {
       worker.use(
         hostRemoteEntryHandler(hostInfo),
         notFoundHandler(TEST_URLS.MFE1_REMOTE_ENTRY),
-        remoteEntryHandler(TEST_URLS.MFE2_REMOTE_ENTRY, mfe2Info),
+        remoteEntryHandler(TEST_URLS.MFE2_REMOTE_ENTRY, mfe2Info)
       );
 
       const [errorMessages, cleanup] = captureConsoleErrorMessages();
@@ -527,8 +503,8 @@ describe('initFederation - Browser Integration Test', () => {
       const result = await initFederation(
         createRemoteConfig(
           { name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY },
-          { name: 'mfe2', url: TEST_URLS.MFE2_REMOTE_ENTRY },
-        ),
+          { name: 'mfe2', url: TEST_URLS.MFE2_REMOTE_ENTRY }
+        )
       );
 
       // mfe2 should be loaded successfully
@@ -538,11 +514,9 @@ describe('initFederation - Browser Integration Test', () => {
       // mfe1 should not be in the result
       expect(result.imports['mfe1/Component']).toBeUndefined();
 
-      expect(
-        errorMessages.some((msg) =>
-          msg.includes('Error loading remote entry for mfe1'),
-        ),
-      ).toBe(true);
+      expect(errorMessages.some(msg => msg.includes('Error loading remote entry for mfe1'))).toBe(
+        true
+      );
 
       cleanup();
     });
@@ -578,15 +552,15 @@ describe('initFederation - Browser Integration Test', () => {
         ...createFederationHandlers({
           host: hostInfo,
           remotes: [{ url: TEST_URLS.MFE1_REMOTE_ENTRY, info: remoteInfo }],
-        }),
+        })
       );
 
       const result = await initFederation(
-        createRemoteConfig({ name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY }),
+        createRemoteConfig({ name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY })
       );
 
       expect(Object.keys(result.imports)).toHaveLength(0);
-      expect(result.scopes[`${TEST_URLS.MFE1_BASE}/`]['lodash']).toBeDefined();
+      expect(result.scopes[`${TEST_URLS.MFE1_BASE}/`]?.['lodash']).toBeDefined();
     });
 
     it('should handle remote with no shared dependencies', async () => {
@@ -597,11 +571,11 @@ describe('initFederation - Browser Integration Test', () => {
         ...createFederationHandlers({
           host: hostInfo,
           remotes: [{ url: TEST_URLS.MFE1_REMOTE_ENTRY, info: remoteInfo }],
-        }),
+        })
       );
 
       const result = await initFederation(
-        createRemoteConfig({ name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY }),
+        createRemoteConfig({ name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY })
       );
 
       expect(result.imports['mfe1/Module']).toBeDefined();
@@ -629,14 +603,14 @@ describe('initFederation - Browser Integration Test', () => {
 
       worker.use(
         hostRemoteEntryHandler(hostInfo),
-        remoteEntryHandler(TEST_URLS.MFE1_REMOTE_ENTRY, remoteInfo),
+        remoteEntryHandler(TEST_URLS.MFE1_REMOTE_ENTRY, remoteInfo)
       );
 
       const result = await initFederation(
         createRemoteConfig({
           name: 'my-mfe-1',
           url: TEST_URLS.MFE1_REMOTE_ENTRY,
-        }),
+        })
       );
 
       expect(result.imports['my-mfe-1/Component']).toBeDefined();
@@ -649,11 +623,11 @@ describe('initFederation - Browser Integration Test', () => {
 
       worker.use(
         hostRemoteEntryHandler(hostInfo),
-        remoteEntryHandler(urlWithTrailingSlash, remoteInfo),
+        remoteEntryHandler(urlWithTrailingSlash, remoteInfo)
       );
 
       const result = await initFederation(
-        createRemoteConfig({ name: 'mfe1', url: urlWithTrailingSlash }),
+        createRemoteConfig({ name: 'mfe1', url: urlWithTrailingSlash })
       );
 
       expect(result.imports['mfe1/Component']).toBeDefined();
@@ -669,22 +643,16 @@ describe('initFederation - Browser Integration Test', () => {
 
       worker.use(
         hostRemoteEntryHandler(hostInfo),
-        remoteEntryHandler(TEST_URLS.MFE1_REMOTE_ENTRY, remoteInfo),
+        remoteEntryHandler(TEST_URLS.MFE1_REMOTE_ENTRY, remoteInfo)
       );
 
       const result = await initFederation(
-        createRemoteConfig({ name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY }),
+        createRemoteConfig({ name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY })
       );
 
-      expect(result.imports['mfe1/Component']).toBe(
-        `${TEST_URLS.MFE1_BASE}/Component.js`,
-      );
-      expect(result.imports['mfe1/Button']).toBe(
-        `${TEST_URLS.MFE1_BASE}/Button.js`,
-      );
-      expect(result.imports['mfe1/Service']).toBe(
-        `${TEST_URLS.MFE1_BASE}/Service.js`,
-      );
+      expect(result.imports['mfe1/Component']).toBe(`${TEST_URLS.MFE1_BASE}/Component.js`);
+      expect(result.imports['mfe1/Button']).toBe(`${TEST_URLS.MFE1_BASE}/Button.js`);
+      expect(result.imports['mfe1/Service']).toBe(`${TEST_URLS.MFE1_BASE}/Service.js`);
     });
 
     it('should handle remote with nested exposed paths', async () => {
@@ -699,18 +667,18 @@ describe('initFederation - Browser Integration Test', () => {
 
       worker.use(
         hostRemoteEntryHandler(hostInfo),
-        remoteEntryHandler(TEST_URLS.MFE1_REMOTE_ENTRY, remoteInfo),
+        remoteEntryHandler(TEST_URLS.MFE1_REMOTE_ENTRY, remoteInfo)
       );
 
       const result = await initFederation(
-        createRemoteConfig({ name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY }),
+        createRemoteConfig({ name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY })
       );
 
       expect(result.imports['mfe1/components/Button']).toBe(
-        `${TEST_URLS.MFE1_BASE}/components-Button.js`,
+        `${TEST_URLS.MFE1_BASE}/components-Button.js`
       );
       expect(result.imports['mfe1/services/api/DataService']).toBe(
-        `${TEST_URLS.MFE1_BASE}/services-api-DataService.js`,
+        `${TEST_URLS.MFE1_BASE}/services-api-DataService.js`
       );
     });
   });
@@ -733,7 +701,7 @@ describe('initFederation - Browser Integration Test', () => {
       worker.use(
         http.get(manifestUrl, () => HttpResponse.json(manifest)),
         hostRemoteEntryHandler(hostInfo),
-        remoteEntryHandler(TEST_URLS.MFE1_REMOTE_ENTRY, remoteInfo),
+        remoteEntryHandler(TEST_URLS.MFE1_REMOTE_ENTRY, remoteInfo)
       );
 
       const result = await initFederation(manifestUrl);
@@ -752,7 +720,7 @@ describe('initFederation - Browser Integration Test', () => {
           capturedUrl = request.url;
           return HttpResponse.json(manifest);
         }),
-        hostRemoteEntryHandler(hostInfo),
+        hostRemoteEntryHandler(hostInfo)
       );
 
       await initFederation(manifestUrl, { cacheTag: 'v1.0.0' });

@@ -1,8 +1,4 @@
-import type { FederationInfo, SharedInfo } from '@nf-beta/runtime';
-import type {
-  NormalizedFederationConfig,
-  NormalizedSharedConfig,
-} from '../config/federation-config.js';
+import type { FederationInfo, SharedInfo } from '../domain/federation-info.contract.js';
 import {
   type ArtefactInfo,
   bundleExposedAndMappings,
@@ -17,6 +13,8 @@ import { logger } from '../utils/logger.js';
 import { getCachePath } from './../utils/bundle-caching.js';
 import { normalizePackageName } from '../utils/normalize.js';
 import { AbortedError } from '../utils/errors.js';
+import type { NormalizedFederationConfig } from '../config/federation-config.contract.js';
+import type { NormalizedExternalConfig } from '../config/external-config.contract.js';
 
 export interface BuildParams {
   skipMappingsAndExposed: boolean;
@@ -167,10 +165,10 @@ export async function buildForFederation(
 }
 
 type SplitSharedResult = {
-  sharedServer: Record<string, NormalizedSharedConfig>;
-  sharedBrowser: Record<string, NormalizedSharedConfig>;
-  separateBrowser: Record<string, NormalizedSharedConfig>;
-  separateServer: Record<string, NormalizedSharedConfig>;
+  sharedServer: Record<string, NormalizedExternalConfig>;
+  sharedBrowser: Record<string, NormalizedExternalConfig>;
+  separateBrowser: Record<string, NormalizedExternalConfig>;
+  separateServer: Record<string, NormalizedExternalConfig>;
 };
 
 function inferPackageFromSecondary(secondary: string): string {
@@ -182,14 +180,14 @@ function inferPackageFromSecondary(secondary: string): string {
 }
 
 async function bundleSeparatePackages(
-  separateBrowser: Record<string, NormalizedSharedConfig>,
+  separateBrowser: Record<string, NormalizedExternalConfig>,
   externals: string[],
   config: NormalizedFederationConfig,
   fedOptions: FederationOptions,
   platform: 'node' | 'browser',
   pathToCache: string
 ) {
-  const groupedByPackage: Record<string, Record<string, NormalizedSharedConfig>> = {};
+  const groupedByPackage: Record<string, Record<string, NormalizedExternalConfig>> = {};
 
   for (const [key, shared] of Object.entries(separateBrowser)) {
     const packageName = shared.build === 'separate' ? key : inferPackageFromSecondary(key);
@@ -225,11 +223,11 @@ function notifyBundling(platform: string) {
   logger.notice("Skip packages you don't want to share in your federation config");
 }
 
-function splitShared(shared: Record<string, NormalizedSharedConfig>): SplitSharedResult {
-  const sharedServer: Record<string, NormalizedSharedConfig> = {};
-  const sharedBrowser: Record<string, NormalizedSharedConfig> = {};
-  const separateBrowser: Record<string, NormalizedSharedConfig> = {};
-  const separateServer: Record<string, NormalizedSharedConfig> = {};
+function splitShared(shared: Record<string, NormalizedExternalConfig>): SplitSharedResult {
+  const sharedServer: Record<string, NormalizedExternalConfig> = {};
+  const sharedBrowser: Record<string, NormalizedExternalConfig> = {};
+  const separateBrowser: Record<string, NormalizedExternalConfig> = {};
+  const separateServer: Record<string, NormalizedExternalConfig> = {};
 
   for (const key in shared) {
     const obj = shared[key];

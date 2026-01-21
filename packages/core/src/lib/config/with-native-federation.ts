@@ -1,13 +1,10 @@
 import { getMappedPaths, type MappedPath } from '../utils/mapped-paths.js';
 import { shareAll, findRootTsConfigJson } from './share-utils.js';
-import type {
-  FederationConfig,
-  NormalizedFederationConfig,
-  NormalizedSharedConfig,
-} from './federation-config.js';
+import type { FederationConfig, NormalizedFederationConfig } from './federation-config.contract.js';
 import { isInSkipList, type PreparedSkipList, prepareSkipList } from '../core/default-skip-list.js';
 import { logger } from '../utils/logger.js';
 import { DEFAULT_SERVER_DEPS_LIST } from '../core/default-server-deps-list.js';
+import type { NormalizedSharedExternalsConfig } from './external-config.contract.js';
 
 export function withNativeFederation(config: FederationConfig): NormalizedFederationConfig {
   const skip = prepareSkipList(config.skip ?? []);
@@ -33,9 +30,7 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
   return normalized;
 }
 
-function filterShared(
-  shared: Record<string, NormalizedSharedConfig>
-): Record<string, NormalizedSharedConfig> {
+function filterShared(shared: NormalizedSharedExternalsConfig): NormalizedSharedExternalsConfig {
   const keys = Object.keys(shared).filter(k => !k.startsWith('@angular/common/locales'));
 
   const filtered = keys.reduce(
@@ -52,8 +47,8 @@ function filterShared(
 function normalizeShared(
   config: FederationConfig,
   skip: PreparedSkipList
-): Record<string, NormalizedSharedConfig> {
-  let result: Record<string, NormalizedSharedConfig> = {};
+): NormalizedSharedExternalsConfig {
+  let result: NormalizedSharedExternalsConfig = {};
 
   const shared = config.shared;
 
@@ -63,7 +58,7 @@ function normalizeShared(
       strictVersion: true,
       requiredVersion: 'auto',
       platform: 'browser',
-    }) as Record<string, NormalizedSharedConfig>;
+    }) as NormalizedSharedExternalsConfig;
   } else {
     result = Object.keys(shared).reduce(
       (acc, cur) => ({

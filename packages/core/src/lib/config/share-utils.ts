@@ -1,7 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import { cwd } from 'process';
-import type { SharedConfig } from './federation-config.js';
 import {
   DEFAULT_SKIP_LIST,
   isInSkipList,
@@ -14,19 +13,17 @@ import { getConfigContext } from './configuration-context.js';
 import { logger } from '../utils/logger.js';
 
 import { type KeyValuePair, resolveWildcardKeys } from '../utils/resolve-wildcard-keys.js';
+import type {
+  ExternalConfig,
+  IncludeSecondariesOptions,
+  ShareAllExternalsOptions,
+  SharedExternalsConfig,
+  ShareExternalsOptions,
+} from './external-config.contract.js';
 
 let inferVersion = false;
 
 export const DEFAULT_SECONDARIES_SKIP_LIST = ['@angular/router/upgrade', '@angular/common/upgrade'];
-
-type IncludeSecondariesOptions =
-  | { skip: string | string[]; resolveGlob?: boolean; keepAll?: boolean }
-  | boolean;
-type CustomSharedConfig = SharedConfig & {
-  includeSecondaries?: IncludeSecondariesOptions;
-};
-type ConfigObject = Record<string, CustomSharedConfig>;
-type Config = (string | ConfigObject)[] | ConfigObject;
 
 export function findRootTsConfigJson(): string {
   const packageJson = findPackageJson(cwd());
@@ -95,8 +92,8 @@ function lookupVersionInMap(key: string, versions: VersionMap): string | null {
 function _findSecondaries(
   libPath: string,
   excludes: string[],
-  shareObject: SharedConfig,
-  acc: Record<string, SharedConfig>,
+  shareObject: ExternalConfig,
+  acc: SharedExternalsConfig,
   preparedSkipList: PreparedSkipList
 ): void {
   const files = fs.readdirSync(libPath);
@@ -129,10 +126,10 @@ function _findSecondaries(
 function findSecondaries(
   libPath: string,
   excludes: string[],
-  shareObject: SharedConfig,
+  shareObject: ExternalConfig,
   preparedSkipList: PreparedSkipList
-): Record<string, SharedConfig> {
-  const acc = {} as Record<string, SharedConfig>;
+): SharedExternalsConfig {
+  const acc = {} as SharedExternalsConfig;
   _findSecondaries(libPath, excludes, shareObject, acc, preparedSkipList);
   return acc;
 }
@@ -141,9 +138,9 @@ function getSecondaries(
   includeSecondaries: IncludeSecondariesOptions,
   libPath: string,
   key: string,
-  shareObject: SharedConfig,
+  shareObject: ExternalConfig,
   preparedSkipList: PreparedSkipList
-): Record<string, SharedConfig> | null {
+): SharedExternalsConfig | null {
   let exclude = [...DEFAULT_SECONDARIES_SKIP_LIST];
 
   let resolveGlob = false;
@@ -183,10 +180,10 @@ function readConfiguredSecondaries(
   parent: string,
   libPath: string,
   exclude: string[],
-  shareObject: SharedConfig,
+  shareObject: ExternalConfig,
   preparedSkipList: PreparedSkipList,
   resolveGlob: boolean
-): Record<string, SharedConfig> | null {
+): SharedExternalsConfig | null {
   const libPackageJson = path.join(libPath, 'package.json');
 
   if (!fs.existsSync(libPackageJson)) {
@@ -212,7 +209,7 @@ function readConfiguredSecondaries(
       (exports[key]?.['default'] || exports[key]?.['import'] || typeof exports[key] === 'string')
   );
 
-  const result = {} as Record<string, SharedConfig>;
+  const result = {} as SharedExternalsConfig;
   const discoveredFiles = new Set<string>();
 
   for (const key of keys) {
@@ -338,13 +335,13 @@ function getDefaultEntry(exports: Record<string, Record<string, string>>, key: s
 }
 
 export function shareAll(
-  config: CustomSharedConfig = {},
+  config: ShareAllExternalsOptions,
   opts: {
     skipList?: SkipList;
     projectPath?: string;
-    overrides?: Config;
+    overrides?: ShareExternalsOptions;
   } = {}
-): Config | null {
+): ShareExternalsOptions | null {
   // let workspacePath: string | undefined = undefined;
   const projectPath = inferProjectPath(opts.projectPath);
 
@@ -355,7 +352,7 @@ export function shareAll(
   // }
 
   const versionMaps = getVersionMaps(projectPath, projectPath);
-  const sharedExternals: Config = {};
+  const sharedExternals: ShareExternalsOptions = {};
   const preparedSkipList = prepareSkipList(opts.skipList ?? DEFAULT_SKIP_LIST);
 
   for (const versions of versionMaps) {
@@ -410,7 +407,7 @@ type TransientDependency = {
 };
 
 function findTransientDeps(
-  configuredShareObjects: Config,
+  configuredShareObjects: ShareExternalsOptions,
   projectRoot: string,
   preparedSkipList: PreparedSkipList
 ): TransientDependency[] {
@@ -473,10 +470,10 @@ function _findTransientDeps(
 }
 
 export function share(
-  configuredShareObjects: Config,
+  configuredShareObjects: ShareExternalsOptions,
   projectPath = '',
   skipList = DEFAULT_SKIP_LIST
-): Config {
+): ShareExternalsOptions {
   projectPath = inferProjectPath(projectPath);
   const packagePath = findPackageJson(projectPath);
 
@@ -559,8 +556,8 @@ export function share(
 }
 
 function addSecondaries(
-  secondaries: Record<string, SharedConfig>,
-  result: Record<string, SharedConfig>
+  secondaries: Record<string, ExternalConfig>,
+  result: Record<string, ExternalConfig>
 ) {
   for (const key in secondaries) {
     result[key] = secondaries[key]!;

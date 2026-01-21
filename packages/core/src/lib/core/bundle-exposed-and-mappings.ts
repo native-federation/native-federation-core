@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
-import type { ExposesInfo, SharedInfo } from '@nf-beta/runtime';
-import type { NormalizedFederationConfig } from '../config/federation-config.js';
+import type { ExposesInfo, SharedInfo } from './../domain/federation-info.contract.js';
+import type { NormalizedFederationConfig } from '../config/federation-config.contract.js';
 import { createBuildResultMap, lookupInResultMap } from '../utils/build-result-map.js';
 import { bundle } from '../utils/build-utils.js';
 import { logger } from '../utils/logger.js';

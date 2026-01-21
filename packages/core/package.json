@@ -1,9 +1,8 @@
 {
   "name": "@nf-beta/core",
-  "version": "0.0.5",
+  "version": "0.0.7",
   "type": "module",
   "dependencies": {
-    "@nf-beta/runtime": "^0.0.1",
     "@softarc/sheriff-core": "^0.19.6",
     "chalk": "^5.6.2",
     "fast-glob": "^3.3.3",
@@ -16,10 +15,10 @@
       "import": "./src/index.js",
       "default": "./src/index.js"
     },
-    "./build": {
-      "types": "./src/build.d.ts",
-      "import": "./src/build.js",
-      "default": "./src/build.js"
+    "./config": {
+      "types": "./src/config.d.ts",
+      "import": "./src/config.js",
+      "default": "./src/config.js"
     },
     "./util": {
       "types": "./src/util.d.ts",

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BuildNotificationType } from './model/build-notifications-options';
-import { watchFederationBuildCompletion } from './watch-federation-build';
+import { BuildNotificationType } from '@nf-beta/core';
+import { watchFederationBuildCompletion } from './watch-federation-build.js';
 
 describe('watch-federation-build', () => {
   let fakeReload: ReturnType<typeof vi.fn>;
@@ -21,30 +21,24 @@ describe('watch-federation-build', () => {
     };
     vi.stubGlobal(
       'EventSource',
-      vi.fn(() => eventSourceInstance),
+      vi.fn(() => eventSourceInstance)
     );
   });
 
   describe('watchFederationBuildCompletion', () => {
     it('reloads page when build completion is received', () => {
-      watchFederationBuildCompletion(
-        'http://localhost:4200/build-notifications',
-      );
+      watchFederationBuildCompletion('http://localhost:4200/build-notifications');
 
       eventSourceInstance.onmessage({
         data: JSON.stringify({ type: BuildNotificationType.COMPLETED }),
       });
 
-      expect(mockConsoleLog).toHaveBeenCalledWith(
-        '[Federation] Rebuild completed, reloading...',
-      );
+      expect(mockConsoleLog).toHaveBeenCalledWith('[Federation] Rebuild completed, reloading...');
       expect(fakeReload).toHaveBeenCalled();
     });
 
     it('does not reload page for non-completion messages', () => {
-      watchFederationBuildCompletion(
-        'http://localhost:4200/build-notifications',
-      );
+      watchFederationBuildCompletion('http://localhost:4200/build-notifications');
 
       eventSourceInstance.onmessage({
         data: JSON.stringify({ type: BuildNotificationType.ERROR }),
@@ -54,16 +48,14 @@ describe('watch-federation-build', () => {
     });
 
     it('logs warning on SSE connection error', () => {
-      watchFederationBuildCompletion(
-        'http://localhost:4200/build-notifications',
-      );
+      watchFederationBuildCompletion('http://localhost:4200/build-notifications');
 
       const errorEvent = {};
       eventSourceInstance.onerror(errorEvent);
 
       expect(mockConsoleWarn).toHaveBeenCalledWith(
         '[Federation] SSE connection error:',
-        errorEvent,
+        errorEvent
       );
     });
   });

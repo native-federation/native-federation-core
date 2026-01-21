@@ -1,4 +1,4 @@
-import type { BuildNotificationOptions } from '@nf-beta/runtime';
+import type { BuildNotificationOptions } from '../domain/build-notification-options.contract.js';
 
 export interface FederationOptions {
   workspaceRoot: string;

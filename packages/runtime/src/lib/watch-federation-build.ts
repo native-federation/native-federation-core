@@ -1,4 +1,4 @@
-import { BuildNotificationType } from './model/build-notifications-options.js';
+import { BuildNotificationType } from '@nf-beta/core';
 
 /**
  * Watches for federation build completion events and automatically reloads the page.

@@ -1,4 +1,4 @@
-import type { NormalizedFederationConfig } from '../config/federation-config.js';
+import type { NormalizedFederationConfig } from '../config/federation-config.contract.js';
 import type { FederationOptions } from './federation-options.js';
 import * as path from 'path';
 import * as fs from 'fs';

@@ -1,4 +1,4 @@
-import type { NormalizedFederationConfig } from '../config/federation-config.js';
+import type { NormalizedFederationConfig } from '../config/federation-config.contract.js';
 
 export function getExternals(config: NormalizedFederationConfig) {
   const shared = Object.keys(config.shared);

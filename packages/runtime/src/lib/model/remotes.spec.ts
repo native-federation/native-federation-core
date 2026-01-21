@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { globalCache } from './global-cache';
+import { globalCache } from './global-cache.js';
 import {
   addRemote,
   getRemote,
   getRemoteNameByBaseUrl,
   hasRemote,
   isRemoteInitialized,
-  Remote,
-} from './remotes';
+  type Remote,
+} from './remotes.js';
 
 describe('remotes', () => {
   const fakeRemote: Remote = {

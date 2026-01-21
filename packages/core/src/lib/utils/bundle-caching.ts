@@ -1,8 +1,8 @@
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
-import type { NormalizedSharedConfig } from '../config/federation-config.js';
-import type { SharedInfo } from '@nf-beta/runtime';
+import type { NormalizedExternalConfig } from '../config/external-config.contract.js';
+import type { SharedInfo } from '../domain/federation-info.contract.js';
 import { logger } from '../utils/logger.js';
 
 export const getCachePath = (workspaceRoot: string, project: string) =>
@@ -14,7 +14,7 @@ export const getFilename = (title: string, dev?: boolean) => {
 };
 
 export const getChecksum = (
-  shared: Record<string, NormalizedSharedConfig>,
+  shared: Record<string, NormalizedExternalConfig>,
   dev: '1' | '0'
 ): string => {
   const denseExternals = Object.keys(shared)

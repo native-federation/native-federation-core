@@ -1,11 +1,9 @@
-import type { FederationInfo } from '../model/federation-info';
+import type { FederationInfo } from '@nf-beta/core';
 
 /**
  * Test fixture builder for FederationInfo objects
  */
-export const createFederationInfo = (
-  overrides?: Partial<FederationInfo>,
-): FederationInfo => ({
+export const createFederationInfo = (overrides?: Partial<FederationInfo>): FederationInfo => ({
   name: 'default-host',
   exposes: [],
   shared: [],
@@ -41,7 +39,7 @@ export const createHostInfo = (name = 'host'): FederationInfo => ({
  */
 export const createRemoteInfo = (
   name = 'mfe1',
-  exposes: Array<{ key: string; outFileName: string }> = [],
+  exposes: Array<{ key: string; outFileName: string }> = []
 ): FederationInfo => ({
   name,
   exposes:
@@ -67,9 +65,7 @@ export const createRemoteInfo = (
 /**
  * Creates a minimal remote info without dependencies
  */
-export const createMinimalRemoteInfo = (
-  name = 'minimal-mfe',
-): FederationInfo => ({
+export const createMinimalRemoteInfo = (name = 'minimal-mfe'): FederationInfo => ({
   name,
   exposes: [
     {
@@ -89,8 +85,7 @@ export const TEST_URLS = {
   MFE1_REMOTE_ENTRY: 'http://localhost:3000/mfe1/remoteEntry.json',
   MFE2_BASE: 'http://localhost:4000/mfe2',
   MFE2_REMOTE_ENTRY: 'http://localhost:4000/mfe2/remoteEntry.json',
-  INVALID_URL:
-    'http://invalid-domain-that-does-not-exist.test/remoteEntry.json',
+  INVALID_URL: 'http://invalid-domain-that-does-not-exist.test/remoteEntry.json',
 } as const;
 
 /**
@@ -99,11 +94,8 @@ export const TEST_URLS = {
 export const createRemoteConfig = (
   ...remotes: Array<{ name: string; url: string }>
 ): Record<string, string> => {
-  return remotes.reduce(
-    (acc, { name, url }) => {
-      acc[name] = url;
-      return acc;
-    },
-    {} as Record<string, string>,
-  );
+  return remotes.reduce((acc, { name, url }) => {
+    acc[name] = url;
+    return acc;
+  }, {} as Record<string, string>);
 };

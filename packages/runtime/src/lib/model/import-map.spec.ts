@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeImportMaps, ImportMap } from './import-map';
+import { mergeImportMaps, type ImportMap } from './import-map.js';
 
 describe('import-map', () => {
   const fakeImportMap1: ImportMap = {
@@ -30,24 +30,18 @@ describe('import-map', () => {
     it('merges two import maps correctly', () => {
       const result = mergeImportMaps(fakeImportMap1, fakeImportMap2);
 
-      expect(result.imports['@angular/core']).toBe(
-        'http://localhost:4200/angular-core.js',
-      );
-      expect(result.imports['@angular/common']).toBe(
-        'http://localhost:4201/angular-common.js',
-      );
+      expect(result.imports['@angular/core']).toBe('http://localhost:4200/angular-core.js');
+      expect(result.imports['@angular/common']).toBe('http://localhost:4201/angular-common.js');
       expect(result.imports['lodash']).toBe('http://localhost:4201/lodash.js'); // Second map wins
     });
 
     it('merges scopes from both maps', () => {
       const result = mergeImportMaps(fakeImportMap1, fakeImportMap2);
 
-      expect(result.scopes['http://localhost:4200/']['react']).toBe(
-        'http://localhost:4200/react.js',
+      expect(result.scopes['http://localhost:4200/']!['react']).toBe(
+        'http://localhost:4200/react.js'
       );
-      expect(result.scopes['http://localhost:4201/']['vue']).toBe(
-        'http://localhost:4201/vue.js',
-      );
+      expect(result.scopes['http://localhost:4201/']!['vue']).toBe('http://localhost:4201/vue.js');
     });
 
     it('handles empty import maps', () => {

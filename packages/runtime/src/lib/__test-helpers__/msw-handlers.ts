@@ -1,10 +1,6 @@
 import { delay, http, HttpResponse } from 'msw';
-import type { FederationInfo } from '../model/federation-info';
-import {
-  createHostInfo,
-  createRemoteInfo,
-  TEST_URLS,
-} from './federation-fixtures';
+import type { FederationInfo } from '@nf-beta/core';
+import { createHostInfo, createRemoteInfo, TEST_URLS } from './federation-fixtures.js';
 
 /**
  * MSW request handlers for federation tests
@@ -15,7 +11,7 @@ import {
  */
 export const hostRemoteEntryHandler = (
   info: FederationInfo = createHostInfo(),
-  options?: { delay?: number },
+  options?: { delay?: number }
 ) => {
   return http.get(TEST_URLS.HOST_REMOTE_ENTRY, async () => {
     if (options?.delay) {
@@ -31,7 +27,7 @@ export const hostRemoteEntryHandler = (
 export const remoteEntryHandler = (
   url: string,
   info: FederationInfo,
-  options?: { delay?: number; status?: number },
+  options?: { delay?: number; status?: number }
 ) => {
   return http.get(url, async () => {
     if (options?.delay) {
@@ -95,7 +91,7 @@ export const defaultHandlers = [
   remoteEntryHandler(TEST_URLS.MFE1_REMOTE_ENTRY, createRemoteInfo('mfe1')),
   remoteEntryHandler(
     TEST_URLS.MFE2_REMOTE_ENTRY,
-    createRemoteInfo('mfe2', [{ key: './Button', outFileName: 'Button.js' }]),
+    createRemoteInfo('mfe2', [{ key: './Button', outFileName: 'Button.js' }])
   ),
 ];
 
@@ -127,9 +123,7 @@ export const moduleHandler = (url: string, moduleContent: any) => {
       export default ${JSON.stringify(moduleContent.default || {})};
       ${Object.entries(moduleContent)
         .filter(([key]) => key !== 'default')
-        .map(
-          ([key, value]) => `export const ${key} = ${JSON.stringify(value)};`,
-        )
+        .map(([key, value]) => `export const ${key} = ${JSON.stringify(value)};`)
         .join('\n')}
     `;
 

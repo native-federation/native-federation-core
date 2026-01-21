@@ -1,12 +1,9 @@
 import * as path from 'path';
 import * as fs from 'fs';
-import {
-  type NormalizedFederationConfig,
-  type NormalizedSharedConfig,
-} from '../config/federation-config.js';
+import type { NormalizedFederationConfig } from '../config/federation-config.contract.js';
 import { bundle } from '../utils/build-utils.js';
 import { getPackageInfo, type PackageInfo } from '../utils/package-info.js';
-import { type SharedInfo } from '@nf-beta/runtime';
+import type { SharedInfo } from './../domain/federation-info.contract.js';
 import { type FederationOptions } from './federation-options.js';
 import { logger } from '../utils/logger.js';
 import crypto from 'crypto';
@@ -19,9 +16,10 @@ import {
 } from '../utils/rewrite-chunk-imports.js';
 import { cacheEntry, getChecksum, getFilename } from './../utils/bundle-caching.js';
 import { fileURLToPath } from 'url';
+import type { NormalizedExternalConfig } from '../config/external-config.contract.js';
 
 export async function bundleShared(
-  sharedBundles: Record<string, NormalizedSharedConfig>,
+  sharedBundles: Record<string, NormalizedExternalConfig>,
   config: NormalizedFederationConfig,
   fedOptions: FederationOptions,
   externals: string[],
@@ -183,7 +181,7 @@ function createOutName(
 
 function buildResult(
   packageInfos: PackageInfo[],
-  sharedBundles: Record<string, NormalizedSharedConfig>,
+  sharedBundles: Record<string, NormalizedExternalConfig>,
   outFileNames: string[]
 ) {
   return packageInfos.map(pi => {
@@ -209,7 +207,7 @@ function addChunksToResult(chunks: BuildResult[], result: SharedInfo[]) {
   for (const item of chunks) {
     const fileName = path.basename(item.fileName);
     result.push({
-      singleton: true,
+      singleton: false,
       strictVersion: false,
       // Here, the version does not matter because
       // a) a chunk split off by the bundler does
@@ -219,6 +217,7 @@ function addChunksToResult(chunks: BuildResult[], result: SharedInfo[]) {
       //
       // For the same reason, we don't need to
       // take care of singleton and strictVersion.
+      version: '0.0.0',
       requiredVersion: '0.0.0',
       packageName: deriveInternalName(fileName),
       outFileName: fileName,

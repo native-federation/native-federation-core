@@ -2,7 +2,7 @@ import { getProjectData, type ProjectData } from '@softarc/sheriff-core';
 import path from 'path';
 import fs from 'fs';
 import { cwd } from 'process';
-import type { NormalizedFederationConfig } from '../config/federation-config.js';
+import type { NormalizedFederationConfig } from '../config/federation-config.contract.js';
 import { getPackageInfo, type PackageInfo } from '../utils/package-info.js';
 import { getExternalImports as extractExternalImports } from '../utils/get-external-imports.js';
 import { type MappedPath } from '../utils/mapped-paths.js';

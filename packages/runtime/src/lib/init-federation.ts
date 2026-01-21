@@ -1,6 +1,6 @@
+import type { FederationInfo } from '@nf-beta/core';
 import { getExternalUrl, setExternalUrl } from './model/externals.js';
 import {
-  type FederationInfo,
   type InitFederationOptions,
   type ProcessRemoteInfoOptions,
 } from './model/federation-info.js';

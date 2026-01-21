@@ -14,7 +14,7 @@ export const getImportMapScripts = (): NodeListOf<HTMLScriptElement> => {
  */
 export const clearImportMapScripts = (): void => {
   const scripts = getImportMapScripts();
-  scripts.forEach((script) => script.remove());
+  scripts.forEach(script => script.remove());
 };
 
 /**
@@ -30,7 +30,7 @@ export const getImportMapContent = (): {
   }
 
   try {
-    return JSON.parse(scripts[0].innerHTML);
+    return JSON.parse(scripts[0]?.innerHTML ?? '{}');
   } catch {
     return null;
   }

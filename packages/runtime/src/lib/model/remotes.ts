@@ -1,4 +1,4 @@
-import type { FederationInfo } from './federation-info.js';
+import type { FederationInfo } from '@nf-beta/core';
 import { globalCache } from './global-cache.js';
 
 export type Remote = FederationInfo & {

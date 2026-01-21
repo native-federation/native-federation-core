@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getDirectory, joinPaths } from './path-utils';
+import { getDirectory, joinPaths } from './path-utils.js';
 
 describe('getDirectory', () => {
   it('returns the directory for a simple path', () => {

@@ -1,4 +1,4 @@
-import type { SharedInfo } from './federation-info.js';
+import type { SharedInfo } from '@nf-beta/core';
 import { globalCache } from './global-cache.js';
 
 const externals = globalCache.externals;
