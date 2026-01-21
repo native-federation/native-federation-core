@@ -18,5 +18,10 @@
     "src/**/*.test.ts",
     "src/**/*.spec.ts",
     "src/**/__test-helpers__/**"
+  ],
+  "references": [
+    {
+      "path": "../core/tsconfig.build.json"
+    }
   ]
 }

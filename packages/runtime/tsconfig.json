@@ -8,6 +8,9 @@
   "include": [],
   "references": [
     {
+      "path": "../core"
+    },
+    {
       "path": "./tsconfig.build.json"
     },
     {
