@@ -11,11 +11,7 @@
     "vite.config.mts",
     "vitest.config.ts",
     "vitest.config.mts",
-    "src/**/*.integration.spec.ts",
-    "src/**/*.test.ts",
-    "src/**/*.spec.ts",
-    "src/**/__test-helpers__/**/*.ts",
-    "src/**/*.d.ts"
+    "src/**/*.ts"
   ],
   "exclude": ["dist", "dist/**"]
 }
