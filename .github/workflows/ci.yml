@@ -34,4 +34,4 @@ jobs:
       - name: Derive SHAs for nx affected
         uses: nrwl/nx-set-shas@v4
 
-      - run: pnpm exec nx affected -t lint typecheck build --parallel=3
+      - run: pnpm exec nx affected -t lint typecheck build

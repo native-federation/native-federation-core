@@ -17,10 +17,5 @@
     "src/**/__test-helpers__/**/*.ts",
     "src/**/*.d.ts"
   ],
-  "exclude": ["dist"],
-  "references": [
-    {
-      "path": "./tsconfig.build.json"
-    }
-  ]
+  "exclude": ["dist", "dist/**"]
 }
