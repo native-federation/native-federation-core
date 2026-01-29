@@ -14,8 +14,10 @@
     "src/**/*.integration.spec.ts",
     "src/**/*.test.ts",
     "src/**/*.spec.ts",
+    "src/**/__test-helpers__/**/*.ts",
     "src/**/*.d.ts"
   ],
+  "exclude": ["dist"],
   "references": [
     {
       "path": "./tsconfig.build.json"
