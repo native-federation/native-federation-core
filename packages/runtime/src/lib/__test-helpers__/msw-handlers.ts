@@ -1,5 +1,5 @@
 import { delay, http, HttpResponse } from 'msw';
-import type { FederationInfo } from '@nf-beta/core/domain';
+import type { FederationInfo } from '@softarc/native-federation/domain';
 import { createHostInfo, createRemoteInfo, TEST_URLS } from './federation-fixtures.js';
 
 /**

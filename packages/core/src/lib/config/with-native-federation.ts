@@ -9,7 +9,10 @@ import { type PreparedSkipList } from '../domain/config/skip-list.contract.js';
 
 import { logger } from '../utils/logger.js';
 import { DEFAULT_SERVER_DEPS_LIST } from '../core/default-server-deps-list.js';
-import type { NormalizedSharedExternalsConfig } from '../domain/config/external-config.contract.js';
+import type {
+  NormalizedExternalConfig,
+  NormalizedSharedExternalsConfig,
+} from '../domain/config/external-config.contract.js';
 import type { MappedPath } from '../domain/utils/mapped-path.contract.js';
 
 export function withNativeFederation(config: FederationConfig): NormalizedFederationConfig {
@@ -66,35 +69,30 @@ function normalizeShared(
       platform: 'browser',
     }) as NormalizedSharedExternalsConfig;
   } else {
-    result = Object.keys(shared).reduce(
-      (acc, cur) => ({
+    result = Object.keys(shared).reduce<NormalizedSharedExternalsConfig>((acc, cur) => {
+      const key = cur.replace(/\\/g, '/');
+      const sharedConfig = shared[cur]!;
+      const normalizedConfig: NormalizedExternalConfig = {
+        requiredVersion: sharedConfig.requiredVersion ?? 'auto',
+        singleton: sharedConfig.singleton ?? false,
+        strictVersion: sharedConfig.strictVersion ?? false,
+        version: sharedConfig.version,
+        includeSecondaries: sharedConfig.includeSecondaries,
+        packageInfo: sharedConfig.packageInfo as NormalizedExternalConfig['packageInfo'],
+        platform: sharedConfig.platform ?? getDefaultPlatform(cur),
+        build: sharedConfig.build ?? 'default',
+        ...(sharedConfig.shareScope && { shareScope: sharedConfig.shareScope }),
+      };
+      return {
         ...acc,
-        [cur.replace(/\\/g, '/')]: {
-          requiredVersion: shared[cur]!.requiredVersion ?? 'auto',
-          singleton: shared[cur]!.singleton ?? false,
-          strictVersion: shared[cur]!.strictVersion ?? false,
-          version: shared[cur]!.version,
-          includeSecondaries: shared[cur]!.includeSecondaries,
-          packageInfo: shared[cur]!.packageInfo,
-          platform: shared[cur]!.platform ?? getDefaultPlatform(cur),
-          build: shared[cur]!.build ?? 'default',
-        },
-      }),
-      {}
-    );
-
-    //result = share(result) as Record<string, NormalizedSharedConfig>;
+        [key]: normalizedConfig,
+      };
+    }, {});
   }
 
   result = Object.keys(result)
     .filter(key => !isInSkipList(key, skip))
-    .reduce(
-      (acc, cur) => ({
-        ...acc,
-        [cur]: result[cur],
-      }),
-      {}
-    );
+    .reduce((acc, cur) => ({ ...acc, [cur]: result[cur] }), {});
 
   return result;
 }

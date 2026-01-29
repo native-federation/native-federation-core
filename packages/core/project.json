@@ -1,5 +1,5 @@
 {
-  "name": "@nf-beta/core",
+  "name": "@softarc/native-federation",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "library",
   "sourceRoot": "packages/core/src",
@@ -37,14 +37,13 @@
       "options": {
         "main": "packages/core/src/index.ts",
         "outputPath": "packages/core/dist",
+        "format": ["esm"],
         "additionalEntryPoints": [
           "packages/core/src/config.ts",
           "packages/core/src/domain.ts",
           "packages/core/src/internal.ts"
-
         ],
-        "tsConfig": "packages/core/tsconfig.build.json",
-        "generateExportsField": true
+        "tsConfig": "packages/core/tsconfig.build.json"
       },
       "configurations": {
         "development": {},

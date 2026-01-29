@@ -10,6 +10,7 @@ export type SharedInfo = {
   requiredVersion: string;
   version?: string;
   packageName: string;
+  shareScope?: string;
   outFileName: string;
   dev?: {
     entryPoint: string;

@@ -1,0 +1,37 @@
+{
+  "name": "@softarc/native-federation-node",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "packages/node/src",
+  "tags": ["npm:public"],
+  "targets": {
+    "build": {
+      "executor": "@nx/esbuild:esbuild",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "packages/node/dist",
+        "main": "packages/node/src/index.ts",
+        "tsConfig": "packages/node/tsconfig.lib.json",
+        "format": ["esm"],
+        "bundle": true,
+        "declarationRootDir": "packages/node/src"
+      },
+      "dependsOn": ["^build"],
+      "cache": true,
+      "inputs": ["production", "^production"]
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "packages/node",
+        "command": "vitest run"
+      },
+      "dependsOn": ["^build"]
+    },
+    "nx-release-publish": {
+      "executor": "@nx/js:release-publish",
+      "dependsOn": ["^nx-release-publish"],
+      "options": {}
+    }
+  }
+}

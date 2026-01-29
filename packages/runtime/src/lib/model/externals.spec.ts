@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { getExternalUrl, setExternalUrl } from './externals.js';
-import type { SharedInfo } from '@nf-beta/core/domain';
+import type { SharedInfo } from '@softarc/native-federation/domain';
 import { globalCache } from './global-cache.js';
 
 describe('externals', () => {

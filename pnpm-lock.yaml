@@ -123,6 +123,9 @@ importers:
       chalk:
         specifier: ^5.6.2
         version: 5.6.2
+      esbuild:
+        specifier: ^0.19.2
+        version: 0.19.12
       fast-glob:
         specifier: ^3.3.3
         version: 3.3.3
@@ -132,18 +135,19 @@ importers:
 
   packages/node:
     dependencies:
-      '@nf-beta/core':
-        specifier: ^0.0.10
-        version: 0.0.10(typescript@5.9.3)
-      '@nf-beta/runtime':
-        specifier: ^0.0.2
-        version: 0.0.2
+      '@softarc/native-federation':
+        specifier: 4.0.0-RC1
+        version: 4.0.0-RC1(typescript@5.9.3)
+      '@softarc/native-federation-runtime':
+        specifier: 4.0.0-RC1
+        version: 4.0.0-RC1(typescript@5.9.3)
 
   packages/runtime:
+    dependencies:
+      '@softarc/native-federation':
+        specifier: 4.0.0-RC1
+        version: 4.0.0-RC1(typescript@5.9.3)
     devDependencies:
-      '@nf-beta/core':
-        specifier: ^0.0.9
-        version: 0.0.9(typescript@5.9.3)
       '@types/node':
         specifier: ^22.5.4
         version: 22.19.3
@@ -1187,15 +1191,6 @@ packages:
   '@napi-rs/wasm-runtime@0.2.4':
     resolution: {integrity: sha512-9zESzOO5aDByvhIAsOy9TbpZ0Ur2AJbUI7UT73kcUTS2mxAMHOBaa1st/jAymNoCtvrit99kkzT1FZuXVcgfIQ==}
 
-  '@nf-beta/core@0.0.10':
-    resolution: {integrity: sha512-8wmh0wKvGRK6bHGIbwDFQ6fZkuHUd0HrV56DAdrmuRVah67qTnMebiOtPSjC+V0IqIRUlkk1TWEzLKUfzjX/Iw==}
-
-  '@nf-beta/core@0.0.9':
-    resolution: {integrity: sha512-5YAteYhQPN/3iDgCmtvFXOnicNqeRcBoMbNSViQ8VNcZjvh5as4iYy/ofYweNOGDvAvY0TmWBMXy/dZlZ+KBRw==}
-
-  '@nf-beta/runtime@0.0.2':
-    resolution: {integrity: sha512-MJTxHa1JQWbvZCGxIVryb5ydvSs/lQwa42ZDp//HDoz0X6aKFqS0qwjT0S7O25/uIEawOvXgOjJHX7tFyEPPzg==}
-
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
     engines: {node: '>= 8'}
@@ -1437,6 +1432,12 @@ packages:
   '@sindresorhus/is@4.6.0':
     resolution: {integrity: sha512-t09vSN3MdfsyCHoFcTRCH/iUtG7OJ0CsjzB8cjAmKc/va/kIgeDI/TxsigdncE/4be734m0cvIYwNaV4i2XqAw==}
     engines: {node: '>=10'}
+
+  '@softarc/native-federation-runtime@4.0.0-RC1':
+    resolution: {integrity: sha512-VSRv4hpjJmjjQ/f1GK9R/om+zvTIc2gpbofPXH/f1IyjSk9ZnFpB4qQwp/U5D1P27B5gHaw9NIdndP9M48h88Q==}
+
+  '@softarc/native-federation@4.0.0-RC1':
+    resolution: {integrity: sha512-B69PdMHLF+W5zOQufGDiM0QjSXxyukIch2opoGhgPTCSy0C8kXB4DAK4+baEhqoFSW7IGEtmmM8NuG6CI2YDDQ==}
 
   '@softarc/sheriff-core@0.19.6':
     resolution: {integrity: sha512-KACxHG9sS7kNWgnnBODzdr14kMLMrJVlQKc+tViUP03p2fRwNhESOA49bz51Yn7dro1mbtMmmFjICLmZSJDZZA==}
@@ -5298,26 +5299,6 @@ snapshots:
       '@emnapi/runtime': 1.7.1
       '@tybys/wasm-util': 0.9.0
 
-  '@nf-beta/core@0.0.10(typescript@5.9.3)':
-    dependencies:
-      '@softarc/sheriff-core': 0.19.6(typescript@5.9.3)
-      chalk: 5.6.2
-      fast-glob: 3.3.3
-      json5: 2.2.3
-    transitivePeerDependencies:
-      - typescript
-
-  '@nf-beta/core@0.0.9(typescript@5.9.3)':
-    dependencies:
-      '@softarc/sheriff-core': 0.19.6(typescript@5.9.3)
-      chalk: 5.6.2
-      fast-glob: 3.3.3
-      json5: 2.2.3
-    transitivePeerDependencies:
-      - typescript
-
-  '@nf-beta/runtime@0.0.2': {}
-
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
       '@nodelib/fs.stat': 2.0.5
@@ -5578,6 +5559,22 @@ snapshots:
   '@sinclair/typebox@0.34.41': {}
 
   '@sindresorhus/is@4.6.0': {}
+
+  '@softarc/native-federation-runtime@4.0.0-RC1(typescript@5.9.3)':
+    dependencies:
+      '@softarc/native-federation': 4.0.0-RC1(typescript@5.9.3)
+    transitivePeerDependencies:
+      - typescript
+
+  '@softarc/native-federation@4.0.0-RC1(typescript@5.9.3)':
+    dependencies:
+      '@softarc/sheriff-core': 0.19.6(typescript@5.9.3)
+      chalk: 5.6.2
+      esbuild: 0.19.12
+      fast-glob: 3.3.3
+      json5: 2.2.3
+    transitivePeerDependencies:
+      - typescript
 
   '@softarc/sheriff-core@0.19.6(typescript@5.9.3)':
     dependencies:
@@ -6086,7 +6083,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 2.0.0
-      vitest: 3.2.4(@types/node@20.19.9)(@vitest/browser@3.2.4)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@27.3.0)(msw@2.12.4(@types/node@20.19.9)(typescript@5.9.3))(yaml@2.8.1)
+      vitest: 3.2.4(@types/node@22.19.3)(@vitest/browser@3.2.4)(@vitest/ui@3.2.4)(jiti@2.6.1)(jsdom@27.3.0)(msw@2.12.4(@types/node@22.19.3)(typescript@5.9.3))(yaml@2.8.1)
 
   '@vitest/utils@3.2.4':
     dependencies:

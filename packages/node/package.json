@@ -1,6 +1,6 @@
 {
-  "name": "@nf-beta/node",
-  "version": "0.0.2",
+  "name": "@softarc/native-federation-node",
+  "version": "4.0.0-RC1",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -8,7 +8,6 @@
   "exports": {
     "./package.json": "./package.json",
     ".": {
-      "@nf-beta/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
@@ -38,7 +37,7 @@
     }
   },
   "dependencies": {
-    "@nf-beta/core": "^0.0.10",
-    "@nf-beta/runtime": "^0.0.2"
+    "@softarc/native-federation": "4.0.0-RC1",
+    "@softarc/native-federation-runtime": "4.0.0-RC1"
   }
 }

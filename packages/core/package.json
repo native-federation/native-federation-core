@@ -1,12 +1,14 @@
 {
-  "name": "@nf-beta/core",
-  "version": "0.0.10",
+  "name": "@softarc/native-federation",
+  "version": "4.0.0-RC1",
   "type": "module",
+  "license": "MIT",
   "dependencies": {
     "@softarc/sheriff-core": "^0.19.6",
     "chalk": "^5.6.2",
     "fast-glob": "^3.3.3",
-    "json5": "^2.2.3"
+    "json5": "^2.2.3",
+    "esbuild": "^0.19.2"
   },
   "exports": {
     "./package.json": "./package.json",

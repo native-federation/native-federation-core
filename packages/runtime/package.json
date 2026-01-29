@@ -1,6 +1,6 @@
 {
-  "name": "@nf-beta/runtime",
-  "version": "0.0.4",
+  "name": "@softarc/native-federation-runtime",
+  "version": "4.0.0-RC1",
   "type": "module",
   "license": "MIT",
   "main": "./dist/index.js",
@@ -19,7 +19,7 @@
     "!**/*.tsbuildinfo"
   ],
   "dependencies": {
-    "@nf-beta/core": "^0.0.10"
+    "@softarc/native-federation": "4.0.0-RC1"
   },
   "devDependencies": {
     "@types/node": "^22.5.4",

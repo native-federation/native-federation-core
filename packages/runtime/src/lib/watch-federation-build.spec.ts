@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BuildNotificationType } from '@nf-beta/core/domain';
+import { BuildNotificationType } from '@softarc/native-federation/domain';
 import { watchFederationBuildCompletion } from './watch-federation-build.js';
 
 describe('watch-federation-build', () => {

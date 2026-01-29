@@ -1,4 +1,4 @@
-import { BuildNotificationType } from '@nf-beta/core/domain';
+import { BuildNotificationType } from '@softarc/native-federation/domain';
 
 /**
  * Watches for federation build completion events and automatically reloads the page.
