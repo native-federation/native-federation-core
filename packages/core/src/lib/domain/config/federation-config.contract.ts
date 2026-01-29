@@ -12,6 +12,7 @@ export interface FederationConfig {
   sharedMappings?: Array<string>;
   skip?: SkipList;
   externals?: string[];
+  shareScope?: string;
   features?: {
     mappingVersion?: boolean;
     ignoreUnusedDeps?: boolean;

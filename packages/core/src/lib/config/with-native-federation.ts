@@ -31,6 +31,12 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
     },
   };
 
+  if (config?.shareScope) {
+    Object.values(normalized.shared).forEach(external => {
+      if (!external.shareScope) external.shareScope = config.shareScope;
+    });
+  }
+
   // This is for being backwards compatible
   if (!normalized.features.ignoreUnusedDeps) {
     normalized.shared = filterShared(normalized.shared);
