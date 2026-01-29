@@ -145,6 +145,13 @@ export async function buildForFederation(
     : artefactInfo.mappings;
 
   const sharedInfo = [...sharedPackageInfoCache, ...sharedMappingInfo];
+
+  if (config?.shareScope) {
+    Object.values(sharedInfo).forEach(external => {
+      if (!external.shareScope) external.shareScope = config.shareScope;
+    });
+  }
+
   const buildNotificationsEndpoint =
     fedOptions.buildNotifications?.enable && fedOptions.dev
       ? fedOptions.buildNotifications?.endpoint

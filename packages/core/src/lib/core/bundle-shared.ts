@@ -193,6 +193,7 @@ function buildResult(
       singleton: shared?.singleton,
       strictVersion: shared?.strictVersion,
       version: pi.version,
+      ...(shared?.shareScope && { shareScope: shared.shareScope }),
       // TODO: Decide whether/when we need debug infos
       // dev: !fedOptions.dev
       //   ? undefined

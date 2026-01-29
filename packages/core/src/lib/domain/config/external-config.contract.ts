@@ -6,6 +6,7 @@ export interface ExternalConfig {
   includeSecondaries?: boolean;
   platform?: 'browser' | 'node';
   build?: 'default' | 'separate';
+  shareScope?: string;
   packageInfo?: {
     entryPoint: string;
     version?: string;
@@ -19,6 +20,7 @@ export interface NormalizedExternalConfig {
   requiredVersion: string;
   version?: string;
   includeSecondaries?: boolean;
+  shareScope?: string;
   platform: 'browser' | 'node';
   build: 'default' | 'separate' | 'package';
   packageInfo?: {
