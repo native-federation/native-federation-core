@@ -3,13 +3,13 @@ import * as fs from 'fs';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
 import { bundle } from '../utils/build-utils.js';
 import { getPackageInfo, type PackageInfo } from '../utils/package-info.js';
-import type { SharedInfo } from '../domain/core/federation-info.contract.js';
+import type { ChunkInfo, SharedInfo } from '../domain/core/federation-info.contract.js';
 import { type FederationOptions } from '../domain/core/federation-options.contract.js';
 import { logger } from '../utils/logger.js';
 import crypto from 'crypto';
 import { DEFAULT_EXTERNAL_LIST } from './default-external-list.js';
 import {
-  deriveInternalName,
+  toChunkImport,
   isSourceFile,
   rewriteChunkImports,
 } from '../utils/rewrite-chunk-imports.js';
@@ -24,8 +24,9 @@ export async function bundleShared(
   fedOptions: FederationOptions,
   externals: string[],
   platform: 'browser' | 'node' = 'browser',
+  buildIdx: number,
   cacheOptions: { pathToCache: string; bundleName: string }
-): Promise<Array<SharedInfo>> {
+): Promise<{ externals: SharedInfo[]; chunks?: Record<string, string[]> }> {
   const checksum = getChecksum(sharedBundles, fedOptions.dev ? '1' : '0');
   const folder = fedOptions.packageJson
     ? path.dirname(fedOptions.packageJson)
@@ -41,7 +42,7 @@ export async function bundleShared(
     if (cacheMetadata) {
       logger.debug(`Checksum of ${cacheOptions.bundleName} matched, Skipped artifact bundling`);
       bundleCache.copyFiles(path.join(fedOptions.workspaceRoot, fedOptions.outputPath));
-      return cacheMetadata.externals;
+      return { externals: cacheMetadata.externals, chunks: cacheMetadata.chunks };
     }
   }
 
@@ -144,7 +145,23 @@ export async function bundleShared(
       !result.find(r => r.outFileName === path.basename(br.fileName))
   );
 
-  addChunksToResult(chunks, result);
+  /**
+   * Chunking
+   */
+  let exportedChunks: ChunkInfo | undefined = undefined;
+  if (
+    (typeof fedOptions.chunking === 'boolean' && fedOptions.chunking === false) ||
+    (typeof fedOptions.chunking === 'object' && fedOptions.chunking.enable === false)
+  ) {
+    // Legacy method: Add chunks to "shared" object in remoteEntry.json
+    addChunksToResult(chunks, result);
+  } else {
+    // New method: Add chunks to separate "chunks" object in remoteEntry.json
+    result.forEach(external => {
+      external.buildIdx = buildIdx;
+    });
+    exportedChunks = { [buildIdx]: getChunkFileNames(chunks) };
+  }
 
   bundleCache.persist({
     checksum,
@@ -154,7 +171,7 @@ export async function bundleShared(
 
   bundleCache.copyFiles(path.join(fedOptions.workspaceRoot, fedOptions.outputPath));
 
-  return result;
+  return { externals: result, chunks: exportedChunks };
 }
 
 function rewriteImports(cachedFiles: string[], cachePath: string) {
@@ -204,6 +221,10 @@ function buildResult(
   });
 }
 
+function getChunkFileNames(chunks: NFBuildAdapterResult[]): string[] {
+  return chunks.map(chunk => toChunkImport(path.basename(chunk.fileName)));
+}
+
 function addChunksToResult(chunks: NFBuildAdapterResult[], result: SharedInfo[]) {
   for (const item of chunks) {
     const fileName = path.basename(item.fileName);
@@ -220,7 +241,7 @@ function addChunksToResult(chunks: NFBuildAdapterResult[], result: SharedInfo[])
       // take care of singleton and strictVersion.
       version: '0.0.0',
       requiredVersion: '0.0.0',
-      packageName: deriveInternalName(fileName),
+      packageName: toChunkImport(fileName),
       outFileName: fileName,
       // dev: dev
       //   ? undefined

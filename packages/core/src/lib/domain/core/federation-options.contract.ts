@@ -5,6 +5,7 @@ export interface FederationOptions {
   outputPath: string;
   federationConfig: string;
   cacheExternalArtifacts?: boolean;
+  chunking?: boolean | { enable: boolean; legacy?: boolean };
   tsConfig?: string;
   verbose?: boolean;
   dev?: boolean;

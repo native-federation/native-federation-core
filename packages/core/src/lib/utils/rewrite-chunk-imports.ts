@@ -2,7 +2,7 @@ import * as ts from 'typescript';
 import * as fs from 'fs';
 import * as path from 'path';
 
-export const INTERNAL_SCOPE = '@nf-internal';
+export const CHUNK_PREFIX = '@nf-chunk/';
 
 export function rewriteChunkImports(filePath: string) {
   const sourceCode = fs.readFileSync(filePath, 'utf-8');
@@ -24,7 +24,7 @@ export function rewriteChunkImports(filePath: string) {
       if (moduleSpecifier && ts.isStringLiteral(moduleSpecifier)) {
         const text = moduleSpecifier.text;
         if (text.startsWith('./')) {
-          const newModuleSpecifier = ts.factory.createStringLiteral(deriveInternalName(text));
+          const newModuleSpecifier = ts.factory.createStringLiteral(toChunkImport(text));
 
           if (ts.isImportDeclaration(node)) {
             return ts.factory.updateImportDeclaration(
@@ -54,7 +54,7 @@ export function rewriteChunkImports(filePath: string) {
       if (arg && ts.isStringLiteral(arg)) {
         const text = arg.text;
         if (text.startsWith('./')) {
-          const newArg = ts.factory.createStringLiteral(deriveInternalName(text));
+          const newArg = ts.factory.createStringLiteral(toChunkImport(text));
           return ts.factory.updateCallExpression(node, node.expression, node.typeArguments, [
             newArg,
           ]);
@@ -77,11 +77,11 @@ export function isSourceFile(fileName: string): boolean {
   return !!fileName.match(/.(m|c)?js$/);
 }
 
-export function deriveInternalName(fileName: string): string {
+export function toChunkImport(fileName: string): string {
   if (fileName.startsWith('./')) {
     fileName = fileName.slice(2);
   }
 
   const packageName = fileName.replace(/.(m|c)?js$/, '');
-  return INTERNAL_SCOPE + '/' + packageName;
+  return CHUNK_PREFIX + '/' + packageName;
 }

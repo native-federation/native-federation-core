@@ -20,6 +20,7 @@ export interface NFBuildAdapterOptions {
   esm?: boolean;
   dev?: boolean;
   watch?: boolean;
+  chunks?: boolean;
   kind: BuildKind;
   hash: boolean;
   platform?: 'browser' | 'node';

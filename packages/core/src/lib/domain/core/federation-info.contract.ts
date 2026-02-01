@@ -2,6 +2,7 @@ export interface FederationInfo {
   name: string;
   exposes: ExposesInfo[];
   shared: SharedInfo[];
+  chunks?: Record<string, string[]>;
   buildNotificationsEndpoint?: string;
 }
 export type SharedInfo = {
@@ -11,11 +12,15 @@ export type SharedInfo = {
   version?: string;
   packageName: string;
   shareScope?: string;
+  buildIdx?: number;
   outFileName: string;
   dev?: {
     entryPoint: string;
   };
 };
+
+export type ChunkInfo = Record<number, string[]>;
+
 export interface ExposesInfo {
   key: string;
   outFileName: string;

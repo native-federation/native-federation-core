@@ -2,7 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import type { NormalizedExternalConfig } from '../domain/config/external-config.contract.js';
-import type { SharedInfo } from '../domain/core/federation-info.contract.js';
+import type { ChunkInfo, SharedInfo } from '../domain/core/federation-info.contract.js';
 import { logger } from '../utils/logger.js';
 
 export const getCachePath = (workspaceRoot: string, project: string) =>
@@ -38,6 +38,7 @@ export const cacheEntry = (pathToCache: string, fileName: string) => ({
     | {
         checksum: string;
         externals: SharedInfo[];
+        chunks?: ChunkInfo;
         files: string[];
       }
     | undefined => {
@@ -47,12 +48,18 @@ export const cacheEntry = (pathToCache: string, fileName: string) => ({
     const cachedResult: {
       checksum: string;
       externals: SharedInfo[];
+      chunks?: ChunkInfo;
       files: string[];
     } = JSON.parse(fs.readFileSync(metadataFile, 'utf-8'));
     if (cachedResult.checksum !== checksum) return undefined;
     return cachedResult;
   },
-  persist: (payload: { checksum: string; externals: SharedInfo[]; files: string[] }) => {
+  persist: (payload: {
+    checksum: string;
+    externals: SharedInfo[];
+    chunks?: ChunkInfo;
+    files: string[];
+  }) => {
     fs.writeFileSync(path.join(pathToCache, fileName), JSON.stringify(payload), 'utf-8');
   },
   copyFiles: (fullOutputPath: string) => {
