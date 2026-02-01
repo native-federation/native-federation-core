@@ -78,7 +78,7 @@ export async function buildForFederation(
         fedOptions,
         externals,
         'browser',
-        buildIDX,
+        buildIDX, // 0
         { pathToCache, bundleName: 'browser-shared' }
       );
 
@@ -90,6 +90,7 @@ export async function buildForFederation(
       if (signal?.aborted)
         throw new AbortedError('[buildForFederation] After shared-browser bundle');
     }
+    buildIDX++;
 
     if (Object.keys(sharedServer).length > 0) {
       notifyBundling('browser-shared');
@@ -100,10 +101,11 @@ export async function buildForFederation(
         fedOptions,
         externals,
         'node',
-        buildIDX,
+        buildIDX, // 0 (or 1)
         { pathToCache, bundleName: 'node-shared' }
       );
       logger.measure(start, '[build artifacts] - To bundle all shared node externals');
+
       addToCache(sharedPackageInfoServer);
       buildIDX++;
 
@@ -119,12 +121,12 @@ export async function buildForFederation(
         config,
         fedOptions,
         'browser',
-        buildIDX,
-        pathToCache
+        pathToCache,
+        buildIDX
       );
       logger.measure(start, '[build artifacts] - To bundle all separate browser externals');
       addToCache(separatePackageInfoBrowser);
-
+      buildIDX += Object.keys(separateBrowser).length;
       if (signal?.aborted)
         throw new AbortedError('[buildForFederation] After separate-browser bundle');
     }
@@ -138,9 +140,11 @@ export async function buildForFederation(
         config,
         fedOptions,
         'node',
-        buildIDX,
-        pathToCache
+        pathToCache,
+        buildIDX
       );
+      buildIDX += Object.keys(separateBrowser).length;
+
       logger.measure(start, '[build artifacts] - To bundle all separate node externals');
       addToCache(separatePackageInfoServer);
     }
@@ -209,8 +213,8 @@ async function bundleSeparatePackages(
   config: NormalizedFederationConfig,
   fedOptions: FederationOptions,
   platform: 'node' | 'browser',
-  buildIDX: number,
-  pathToCache: string
+  pathToCache: string,
+  startBuildIDX: number
 ) {
   const groupedByPackage: Record<string, Record<string, NormalizedExternalConfig>> = {};
 
@@ -230,7 +234,7 @@ async function bundleSeparatePackages(
         fedOptions,
         externals.filter(e => !e.startsWith(packageName)),
         platform,
-        buildIDX + 1 + idx,
+        startBuildIDX + idx, // 0 and 1 are reserved for the default builds
         {
           pathToCache,
           bundleName: `${platform}-${normalizePackageName(packageName)}`,
