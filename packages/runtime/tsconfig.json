@@ -1,9 +1,5 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "baseUrl": ".",
-    "forceConsistentCasingInFileNames": true
-  },
   "files": [],
   "include": [],
   "references": [

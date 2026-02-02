@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import type { ChunkInfo, SharedInfo } from '../domain/core/federation-info.contract.js';
 import type { FederationOptions } from '../domain/core/federation-options.contract.js';
-import { toChunkImport } from 'src/config.js';
+import { toChunkImport } from '../domain/core/chunk.js';
 
 export function writeImportMap(
   sharedInfo: { externals: SharedInfo[]; chunks?: ChunkInfo },

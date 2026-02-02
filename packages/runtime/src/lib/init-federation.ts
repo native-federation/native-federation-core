@@ -1,4 +1,4 @@
-import type { FederationInfo } from '@softarc/native-federation/domain';
+import { type FederationInfo, toChunkImport } from '@softarc/native-federation/domain';
 import { getExternalUrl, setExternalUrl } from './model/externals.js';
 import {
   type InitFederationOptions,
@@ -9,7 +9,6 @@ import { addRemote } from './model/remotes.js';
 import { appendImportMap } from './utils/add-import-map.js';
 import { getDirectory, joinPaths } from './utils/path-utils.js';
 import { watchFederationBuildCompletion } from './watch-federation-build.js';
-
 /**
  * Initializes the Native Federation runtime for the host application.
  *
@@ -221,10 +220,10 @@ export async function fetchAndRegisterRemote(
     watchFederationBuildCompletion(baseUrl + remoteInfo.buildNotificationsEndpoint);
   }
 
-  const importMap = createRemoteImportMap(remoteInfo, remoteName, baseUrl);
+  const importMap = createRemoteImportMap(remoteInfo, remoteName!, baseUrl);
 
   // Register this remote in the global registry
-  addRemote(remoteName, { ...remoteInfo, baseUrl });
+  addRemote(remoteName!, { ...remoteInfo, baseUrl });
 
   return importMap;
 }
@@ -316,6 +315,15 @@ function processRemoteImports(remoteInfo: FederationInfo, baseUrl: string): Scop
     scopedImports[shared.packageName] = outFileName;
   }
 
+  if (remoteInfo.chunks) {
+    Object.values(remoteInfo.chunks).forEach(c => {
+      c.forEach(e => {
+        const key: string = toChunkImport(e);
+        scopedImports[key] = joinPaths(baseUrl, e);
+      });
+    });
+  }
+
   scopes[baseUrl + '/'] = scopedImports;
 
   return scopes;
@@ -388,12 +396,20 @@ export async function processHostInfo(
     {}
   ) as Imports;
 
+  if (hostInfo.chunks) {
+    Object.values(hostInfo.chunks).forEach(c => {
+      c.forEach(e => {
+        const key: string = toChunkImport(e);
+        imports[key] = relBundlesPath + e;
+      });
+    });
+  }
+
   // Register external URLs for host's shared dependencies
   // This allows remotes to discover and potentially reuse these versions
   for (const shared of hostInfo.shared) {
     setExternalUrl(shared, relBundlesPath + shared.outFileName);
   }
 
-  // Host doesn't have scopes - its shared deps are at root level
   return { imports, scopes: {} };
 }

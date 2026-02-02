@@ -8,11 +8,8 @@ import { type FederationOptions } from '../domain/core/federation-options.contra
 import { logger } from '../utils/logger.js';
 import crypto from 'crypto';
 import { DEFAULT_EXTERNAL_LIST } from './default-external-list.js';
-import {
-  toChunkImport,
-  isSourceFile,
-  rewriteChunkImports,
-} from '../utils/rewrite-chunk-imports.js';
+import { isSourceFile, rewriteChunkImports } from '../utils/rewrite-chunk-imports.js';
+import { toChunkImport } from '../domain/core/chunk.js';
 import { cacheEntry, getChecksum, getFilename } from './../utils/bundle-caching.js';
 import { fileURLToPath } from 'url';
 import type { NormalizedExternalConfig } from '../domain/config/external-config.contract.js';
@@ -27,6 +24,7 @@ export async function bundleShared(
   buildOptions: { pathToCache: string; bundleName: string; default: boolean }
 ): Promise<{ externals: SharedInfo[]; chunks?: Record<string, string[]> }> {
   const checksum = getChecksum(sharedBundles, fedOptions.dev ? '1' : '0');
+
   const folder = fedOptions.packageJson
     ? path.dirname(fedOptions.packageJson)
     : fedOptions.workspaceRoot;
@@ -222,7 +220,7 @@ function buildResult(
 }
 
 function getChunkFileNames(chunks: NFBuildAdapterResult[]): string[] {
-  return chunks.map(chunk => toChunkImport(path.basename(chunk.fileName)));
+  return chunks.map(chunk => path.basename(chunk.fileName));
 }
 
 function addChunksToResult(chunks: NFBuildAdapterResult[], result: SharedInfo[]) {

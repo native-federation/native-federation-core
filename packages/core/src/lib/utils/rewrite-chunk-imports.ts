@@ -1,8 +1,7 @@
 import * as ts from 'typescript';
 import * as fs from 'fs';
 import * as path from 'path';
-
-export const CHUNK_PREFIX = '@nf-chunk/';
+import { toChunkImport } from '../domain/core/chunk.js';
 
 export function rewriteChunkImports(filePath: string) {
   const sourceCode = fs.readFileSync(filePath, 'utf-8');
@@ -75,13 +74,4 @@ export function rewriteChunkImports(filePath: string) {
 
 export function isSourceFile(fileName: string): boolean {
   return !!fileName.match(/.(m|c)?js$/);
-}
-
-export function toChunkImport(fileName: string): string {
-  if (fileName.startsWith('./')) {
-    fileName = fileName.slice(2);
-  }
-
-  const packageName = fileName.replace(/.(m|c)?js$/, '');
-  return CHUNK_PREFIX + '/' + packageName;
 }

@@ -1,14 +1,15 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "baseUrl": ".",
-    "rootDir": "src",
     "outDir": "dist",
     "tsBuildInfoFile": "dist/tsconfig.lib.tsbuildinfo",
-    "emitDeclarationOnly": true,
     "forceConsistentCasingInFileNames": true,
     "types": ["node"],
-    "allowJs": true
+    "allowJs": true,
+    "paths": {
+      "@softarc/native-federation/domain": ["packages/core/dist/src/domain.d.ts"],
+      "@softarc/native-federation/internal": ["packages/core/dist/src/internal.d.ts"]
+    }
   },
   "include": ["src/**/*.ts", "src/**/*.js"],
   "exclude": [
@@ -25,12 +26,5 @@
     "src/**/*.test.jsx",
     "src/**/*.spec.jsx"
   ],
-  "references": [
-    {
-      "path": "../runtime/tsconfig.build.json"
-    },
-    {
-      "path": "../core/tsconfig.build.json"
-    }
-  ]
+  "references": [ ]
 }

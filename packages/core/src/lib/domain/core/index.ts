@@ -17,3 +17,4 @@ export type {
   NFBuildAdapterResult,
 } from './build-adapter.contract.js';
 export type { BuildParams } from './build-params.contract.js';
+export { CHUNK_PREFIX, toChunkImport } from './chunk.js';

@@ -1,11 +1,13 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "baseUrl": ".",
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "composite": true,
+    "declaration": true
   },
   "files": [],
   "include": [],
+
   "references": [
     {
       "path": "./tsconfig.build.json"

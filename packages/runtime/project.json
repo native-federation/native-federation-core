@@ -11,10 +11,13 @@
       "options": {
         "outputPath": "packages/runtime/dist",
         "main": "packages/runtime/src/index.ts",
+
         "tsConfig": "packages/runtime/tsconfig.build.json",
         "format": ["esm"],
         "bundle": true,
-        "declarationRootDir": "packages/runtime/src"
+        "declaration": true,
+        "declarationRootDir": "packages/runtime/src",
+        "external": ["@softarc/native-federation/*"]
       },
       "dependsOn": ["^build"],
       "cache": true,
@@ -42,7 +45,7 @@
           "externalDependencies": ["typescript"]
         }
       ],
-      "dependsOn": ["^typecheck"]
+      "dependsOn": ["^build"]
     },
     "build-deps": {
       "executor": "nx:noop",
@@ -76,5 +79,6 @@
       }
     }
   },
-  "tags": ["npm:public", "org:softarc", "scope:nf"]
+  "tags": ["npm:public", "org:softarc", "scope:nf"],
+  "implicitDependencies": ["@softarc/native-federation"]
 }

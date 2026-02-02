@@ -1,16 +1,21 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "baseUrl": ".",
-    "rootDir": "src",
     "outDir": "dist",
+    "rootDir": ".",
     "tsBuildInfoFile": "dist/tsconfig.lib.tsbuildinfo",
     "declaration": true,
     "emitDeclarationOnly": true,
     "lib": ["es2022", "dom"],
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "paths": {
+      "@softarc/native-federation/domain": ["packages/core/dist/src/domain.d.ts"],
+      "@softarc/native-federation/internal": ["packages/core/dist/src/internal.d.ts"]
+    }
   },
-  "include": ["src/**/*.ts"],
+  "include": [
+    "src/**/*.ts"
+  ],
   "exclude": [
     "vite.config.ts",
     "vitest.config.mts",
@@ -20,8 +25,6 @@
     "src/**/__test-helpers__/**"
   ],
   "references": [
-    {
-      "path": "../core/tsconfig.build.json"
-    }
+    { "path": "../core" } 
   ]
 }

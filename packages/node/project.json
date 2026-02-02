@@ -11,7 +11,7 @@
       "options": {
         "outputPath": "packages/node/dist",
         "main": "packages/node/src/index.ts",
-        "tsConfig": "packages/node/tsconfig.lib.json",
+        "tsConfig": "packages/node/tsconfig.build.json",
         "format": ["esm"],
         "bundle": true,
         "declarationRootDir": "packages/node/src"
@@ -33,5 +33,6 @@
       "dependsOn": ["^nx-release-publish"],
       "options": {}
     }
-  }
+  },
+  "implicitDependencies": ["@softarc/native-federation", "@softarc/native-federation-runtime"]
 }

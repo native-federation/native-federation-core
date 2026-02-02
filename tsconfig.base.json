@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
-    "composite": true,
-    "declarationMap": true,
+    "rootDir": ".",
+    "baseUrl": ".",
+    "declaration": false,
     "importHelpers": true,
-    "isolatedModules": true,
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "noEmitOnError": true,
@@ -15,6 +15,6 @@
     "noUnusedParameters": true,
     "noUncheckedIndexedAccess": true,
     "strict": true,
-    "target": "esnext"
+    "target": "esnext",
   }
 }

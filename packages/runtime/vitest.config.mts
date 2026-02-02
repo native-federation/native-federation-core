@@ -1,7 +1,13 @@
+import { resolve } from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 const testPatterns = ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'];
 const integrationTestPatterns = ['src/**/*.integration.spec.ts'];
+
+const sharedAlias = {
+  '@softarc/native-federation/domain': resolve(__dirname, '../core/dist/src/domain.js'),
+  '@softarc/native-federation/internal': resolve(__dirname, '../core/dist/src/internal.js'),
+};
 
 export default defineConfig({
   test: {
@@ -25,6 +31,10 @@ export default defineConfig({
         },
       },
       {
+        resolve: {
+          alias: sharedAlias,
+        },
+
         test: {
           name: 'integration',
           include: integrationTestPatterns,

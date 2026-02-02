@@ -1,7 +1,6 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "./tsconfig.build.json",
   "compilerOptions": {
-    "baseUrl": ".",
     "outDir": "./out-tsc/vitest",
     "types": ["vitest/globals", "vitest/importMeta", "vite/client", "node", "vitest"],
     "forceConsistentCasingInFileNames": true
@@ -22,8 +21,5 @@
     "src/**/*.d.ts"
   ],
   "references": [
-    {
-      "path": "./tsconfig.build.json"
-    }
   ]
 }
