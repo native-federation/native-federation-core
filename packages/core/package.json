@@ -1,6 +1,6 @@
 {
   "name": "@softarc/native-federation",
-  "version": "4.0.0-RC1",
+  "version": "4.0.0-RC2",
   "type": "module",
   "license": "MIT",
   "dependencies": {
