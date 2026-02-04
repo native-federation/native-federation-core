@@ -2,7 +2,7 @@ export type {
   SharedInfo,
   FederationInfo,
   ExposesInfo,
-  ArtefactInfo,
+  ArtifactInfo,
   ChunkInfo,
 } from './federation-info.contract.js';
 export {

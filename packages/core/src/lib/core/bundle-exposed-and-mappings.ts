@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import type {
-  ArtefactInfo,
+  ArtifactInfo,
   ExposesInfo,
   SharedInfo,
 } from '../domain/core/federation-info.contract.js';
@@ -20,7 +20,7 @@ export async function bundleExposedAndMappings(
   fedOptions: FederationOptions,
   externals: string[],
   signal?: AbortSignal
-): Promise<ArtefactInfo> {
+): Promise<ArtifactInfo> {
   if (signal?.aborted) {
     throw new AbortedError('[bundle-exposed-and-mappings] Aborted before bundling');
   }
@@ -40,7 +40,7 @@ export async function bundleExposedAndMappings(
 
   const hash = !fedOptions.dev;
 
-  logger.info('Building federation artefacts');
+  logger.info('Building federation artifacts');
 
   let result;
   try {
@@ -62,7 +62,7 @@ export async function bundleExposedAndMappings(
     }
   } catch (error) {
     if (!(error instanceof AbortedError)) {
-      logger.error('Error building federation artefacts');
+      logger.error('Error building federation artifacts');
     }
     throw error;
   }

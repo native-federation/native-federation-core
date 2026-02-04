@@ -29,7 +29,7 @@ export interface ExposesInfo {
   };
 }
 
-export interface ArtefactInfo {
+export interface ArtifactInfo {
   mappings: SharedInfo[];
   exposes: ExposesInfo[];
 }

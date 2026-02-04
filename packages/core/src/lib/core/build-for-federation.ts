@@ -1,5 +1,5 @@
 import type {
-  ArtefactInfo,
+  ArtifactInfo,
   ChunkInfo,
   FederationInfo,
   SharedInfo,
@@ -36,18 +36,18 @@ export async function buildForFederation(
 ): Promise<FederationInfo> {
   const signal = buildParams.signal;
 
-  let artefactInfo: ArtefactInfo | undefined;
+  let artifactInfo: ArtifactInfo | undefined;
 
   if (!buildParams.skipMappingsAndExposed) {
     const start = process.hrtime();
-    artefactInfo = await bundleExposedAndMappings(config, fedOptions, externals, signal);
+    artifactInfo = await bundleExposedAndMappings(config, fedOptions, externals, signal);
     logger.measure(start, '[build artifacts] - To bundle all mappings and exposed.');
 
     if (signal?.aborted)
       throw new AbortedError('[buildForFederation] After exposed-and-mappings bundle');
   }
 
-  const exposedInfo = !artefactInfo ? describeExposed(config, fedOptions) : artefactInfo.exposes;
+  const exposedInfo = !artifactInfo ? describeExposed(config, fedOptions) : artifactInfo.exposes;
 
   const normalizedCacheFolder = normalizePackageName(config.name);
   if (normalizedCacheFolder.length < 1) {
@@ -142,9 +142,9 @@ export async function buildForFederation(
     if (signal?.aborted) throw new AbortedError('[buildForFederation] After separate-node bundle');
   }
 
-  const sharedMappingInfo = !artefactInfo
+  const sharedMappingInfo = !artifactInfo
     ? describeSharedMappings(config, fedOptions)
-    : artefactInfo.mappings;
+    : artifactInfo.mappings;
 
   const sharedExternals = [...sharedCache.externals, ...sharedMappingInfo];
 
