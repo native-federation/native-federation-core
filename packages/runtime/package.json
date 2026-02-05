@@ -1,6 +1,6 @@
 {
   "name": "@softarc/native-federation-runtime",
-  "version": "4.0.0-RC2",
+  "version": "4.0.0-RC3",
   "type": "module",
   "license": "MIT",
   "main": "./index.js",
@@ -16,8 +16,13 @@
   },
   "files": [
     "lib",
+    "index.d.ts",
+    "index.js",
     "!**/*.tsbuildinfo"
   ],
+  "dependencies": {
+    "@softarc/native-federation": "4.0.0-RC3"
+  },
   "devDependencies": {
     "@types/node": "^22.5.4",
     "vitest": "^3.0.0",
