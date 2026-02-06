@@ -8,7 +8,11 @@ export type { MappedPath } from './lib/domain/utils/mapped-path.contract.js';
 export { RebuildQueue } from './lib/utils/rebuild-queue.js';
 
 export { AbortedError } from './lib/utils/errors.js';
-export { createBuildResultMap, lookupInResultMap } from './lib/utils/build-result-map.js';
+export {
+  createBuildResultMap,
+  lookupInResultMap,
+  popFromResultMap,
+} from './lib/utils/build-result-map.js';
 export { writeImportMap } from './lib/core/write-import-map.js';
 
 export type {

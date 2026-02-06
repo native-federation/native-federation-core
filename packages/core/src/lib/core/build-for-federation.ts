@@ -167,6 +167,9 @@ export async function buildForFederation(
   if (sharedCache.chunks) {
     federationInfo.chunks = sharedCache.chunks;
   }
+  if (artifactInfo?.chunks) {
+    federationInfo.chunks = { ...(federationInfo.chunks ?? {}), ...artifactInfo?.chunks };
+  }
 
   writeFederationInfo(federationInfo, fedOptions);
   writeImportMap(sharedCache, fedOptions);
