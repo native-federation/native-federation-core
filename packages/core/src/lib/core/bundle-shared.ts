@@ -138,7 +138,6 @@ export async function bundleShared(
 
   const result = buildResult(packageInfos, sharedBundles, outFileNames);
 
-  // TODO: Decide whether/when to add .map files
   const chunks = bundleResult.filter(
     br =>
       !br.fileName.endsWith('.map') &&

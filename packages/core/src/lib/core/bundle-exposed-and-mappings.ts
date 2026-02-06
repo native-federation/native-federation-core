@@ -114,6 +114,11 @@ export async function bundleExposedAndMappings(
     entryFiles.push(distEntryFile);
   }
 
+  // Remove .map files
+  Object.keys(resultMap)
+    .filter(f => f.endsWith('.map'))
+    .forEach(f => popFromResultMap(resultMap, f));
+
   // Process remaining chunks and lazy loaded internal modules
   let exportedChunks: ChunkInfo | undefined = undefined;
   if (typeof fedOptions.chunks === 'object' && fedOptions.chunks.dense === true) {
