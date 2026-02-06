@@ -3,17 +3,19 @@ import path from 'path';
 
 import type {
   ArtifactInfo,
+  ChunkInfo,
   ExposesInfo,
   SharedInfo,
 } from '../domain/core/federation-info.contract.js';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
-import { createBuildResultMap, lookupInResultMap } from '../utils/build-result-map.js';
+import { createBuildResultMap, popFromResultMap } from '../utils/build-result-map.js';
 import { bundle } from '../utils/build-utils.js';
 import { logger } from '../utils/logger.js';
 import { normalize } from '../utils/normalize.js';
 import { type FederationOptions } from '../domain/core/federation-options.contract.js';
 import { AbortedError } from '../utils/errors.js';
 import type { EntryPoint } from './../domain/core/build-adapter.contract.js';
+import { rewriteChunkImports } from '../utils/rewrite-chunk-imports.js';
 
 export async function bundleExposedAndMappings(
   config: NormalizedFederationConfig,
@@ -53,6 +55,9 @@ export async function bundleExposedAndMappings(
       watch: fedOptions.watch,
       mappedPaths: config.sharedMappings,
       kind: 'mapping-or-exposed',
+      chunks:
+        (typeof fedOptions.chunks === 'boolean' && fedOptions.chunks) ||
+        (typeof fedOptions.chunks === 'object' && !!fedOptions.chunks.enable),
       hash,
       optimizedMappings: config.features.ignoreUnusedDeps,
       signal,
@@ -70,11 +75,14 @@ export async function bundleExposedAndMappings(
   const resultMap = createBuildResultMap(result, hash);
 
   const sharedResult: Array<SharedInfo> = [];
+  const entryFiles: string[] = [];
 
+  // Pick shared-mappings
   for (const item of shared) {
+    const distEntryFile = popFromResultMap(resultMap, item.outName);
     sharedResult.push({
       packageName: item.key!,
-      outFileName: lookupInResultMap(resultMap, item.outName),
+      outFileName: path.basename(distEntryFile),
       requiredVersion: '',
       singleton: true,
       strictVersion: false,
@@ -85,23 +93,37 @@ export async function bundleExposedAndMappings(
             entryPoint: normalize(path.normalize(item.fileName)),
           },
     });
+    entryFiles.push(distEntryFile);
   }
 
   const exposedResult: Array<ExposesInfo> = [];
 
+  // Pick exposed-modules
   for (const item of exposes) {
+    const distEntryFile = popFromResultMap(resultMap, item.outName);
+
     exposedResult.push({
       key: item.key!,
-      outFileName: lookupInResultMap(resultMap, item.outName),
+      outFileName: path.basename(distEntryFile),
       dev: !fedOptions.dev
         ? undefined
         : {
             entryPoint: normalize(path.join(fedOptions.workspaceRoot, item.fileName!)),
           },
     });
+    entryFiles.push(distEntryFile);
   }
 
-  return { mappings: sharedResult, exposes: exposedResult };
+  // Process remaining chunks and lazy loaded internal modules
+  let exportedChunks: ChunkInfo | undefined = undefined;
+  if (typeof fedOptions.chunks === 'object' && fedOptions.chunks.dense === true) {
+    for (const entryFile of entryFiles) rewriteChunkImports(entryFile);
+    exportedChunks = {
+      ['mapping-or-exposed']: Object.values(resultMap).map(chunk => path.basename(chunk)),
+    };
+  }
+
+  return { mappings: sharedResult, exposes: exposedResult, chunks: exportedChunks };
 }
 
 export function describeExposed(
