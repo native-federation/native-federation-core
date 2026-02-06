@@ -20,6 +20,7 @@ import { AbortedError } from '../utils/errors.js';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
 import type { NormalizedExternalConfig } from '../domain/config/external-config.contract.js';
 import type { BuildParams } from '../domain/core/build-params.contract.js';
+import { resolveProjectName } from '../utils/config-utils.js';
 
 export const defaultBuildParams: BuildParams = {
   skipMappingsAndExposed: false,
@@ -49,14 +50,7 @@ export async function buildForFederation(
 
   const exposedInfo = !artifactInfo ? describeExposed(config, fedOptions) : artifactInfo.exposes;
 
-  const normalizedCacheFolder = normalizePackageName(config.name);
-  if (normalizedCacheFolder.length < 1) {
-    logger.warn(
-      "Project name in 'federation.config.js' is empty, defaulting to 'shell' cache folder (could collide with other projects in the workspace)."
-    );
-  }
-  const cacheProjectFolder = normalizedCacheFolder.length < 1 ? 'shell' : normalizedCacheFolder;
-
+  const cacheProjectFolder = resolveProjectName(config);
   const pathToCache = getCachePath(fedOptions.workspaceRoot, cacheProjectFolder);
 
   if (!buildParams.skipShared && sharedCache.externals.length > 0) {
