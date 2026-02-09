@@ -32,4 +32,5 @@ export interface ExposesInfo {
 export interface ArtifactInfo {
   mappings: SharedInfo[];
   exposes: ExposesInfo[];
+  chunks?: ChunkInfo;
 }
