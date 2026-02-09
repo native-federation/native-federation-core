@@ -7,6 +7,7 @@ import { getPackageInfo, type PackageInfo } from '../utils/package-info.js';
 import { getExternalImports as extractExternalImports } from '../utils/get-external-imports.js';
 import { type MappedPath } from '../domain/utils/mapped-path.contract.js';
 import { normalizePackageName } from '../utils/normalize.js';
+import { resolveProjectName } from '../utils/config-utils.js';
 
 export function removeUnusedDeps(
   config: NormalizedFederationConfig,
@@ -21,7 +22,8 @@ export function removeUnusedDeps(
   const usedPackageNames = usedDeps.usedPackageNames;
   const usedMappings = usedDeps.usedMappings;
 
-  const usedPackageNamesWithTransient = addTransientDeps(usedPackageNames, workspaceRoot);
+  const projectName = resolveProjectName(config);
+  const usedPackageNamesWithTransient = addTransientDeps(usedPackageNames, workspaceRoot, projectName);
   const filteredShared = filterShared(config, usedPackageNamesWithTransient);
 
   return {
@@ -73,7 +75,7 @@ function findUsedDeps(
   return { usedPackageNames, usedMappings };
 }
 
-function addTransientDeps(packages: Set<string>, workspaceRoot: string) {
+function addTransientDeps(packages: Set<string>, workspaceRoot: string, projectName: string) {
   const packagesAndPeers = new Set<string>([...packages]);
   const discovered = new Set<string>(packagesAndPeers);
   const stack = [...packagesAndPeers];
@@ -91,7 +93,7 @@ function addTransientDeps(packages: Set<string>, workspaceRoot: string) {
       continue;
     }
 
-    const peerDeps = getExternalImports(pInfo, workspaceRoot);
+    const peerDeps = getExternalImports(pInfo, workspaceRoot, projectName);
 
     for (const peerDep of peerDeps) {
       if (!discovered.has(peerDep)) {
@@ -104,12 +106,13 @@ function addTransientDeps(packages: Set<string>, workspaceRoot: string) {
   return packagesAndPeers;
 }
 
-function getExternalImports(pInfo: PackageInfo, workspaceRoot: string) {
+function getExternalImports(pInfo: PackageInfo, workspaceRoot: string, projectName: string) {
   const encodedPackageName = normalizePackageName(pInfo.packageName);
   const cacheFileName = `${encodedPackageName}-${pInfo.version}.deps.json`;
   const cachePath = path.join(
     workspaceRoot,
-    'node_modules/.cache/native-federation/_externals-metadata'
+    'node_modules/.cache/native-federation/_externals-metadata',
+    projectName
   );
   const cacheFilePath = path.join(cachePath, cacheFileName);
 
