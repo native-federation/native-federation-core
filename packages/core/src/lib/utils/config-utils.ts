@@ -1,6 +1,6 @@
-import { NormalizedFederationConfig } from '../config/federation-config';
-import { logger } from './logger';
-import { normalizePackageName } from './normalize';
+import { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
+import { logger } from './logger.js';
+import { normalizePackageName } from './normalize.js';
 
 export function resolveProjectName(config: NormalizedFederationConfig): string {
   const normalizedProjectName = normalizePackageName(config.name);
