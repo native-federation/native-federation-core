@@ -1,6 +1,6 @@
 {
   "name": "@softarc/native-federation-node",
-  "version": "4.0.0-RC3",
+  "version": "4.0.0-RC4",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -37,6 +37,6 @@
     }
   },
   "dependencies": {
-    "@softarc/native-federation-runtime": "4.0.0-RC3"
+    "@softarc/native-federation-runtime": "4.0.0-RC4"
   }
 }
