@@ -8,12 +8,15 @@ export function writeImportMap(
   sharedInfo: { externals: SharedInfo[]; chunks?: ChunkInfo },
   fedOption: FederationOptions
 ) {
-  const imports = sharedInfo.externals.reduce((acc, cur) => {
-    return {
-      ...acc,
-      [cur.packageName]: cur.outFileName,
-    };
-  }, {} as Record<string, string>);
+  const imports = sharedInfo.externals.reduce(
+    (acc, cur) => {
+      return {
+        ...acc,
+        [cur.packageName]: cur.outFileName,
+      };
+    },
+    {} as Record<string, string>
+  );
   if (sharedInfo.chunks) {
     Object.values(sharedInfo.chunks).forEach(c => {
       c.forEach(e => {

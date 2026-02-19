@@ -39,10 +39,10 @@ export function getShared(options = defaultShareOptions) {
   const allKeys = [...externals.keys()];
   const keys = allKeys
     .filter(
-      (k) =>
+      k =>
         !k.startsWith('/@id/') &&
         !k.startsWith('@angular-architects/module-federation') &&
-        !k.endsWith('@'),
+        !k.endsWith('@')
     )
     .sort();
 

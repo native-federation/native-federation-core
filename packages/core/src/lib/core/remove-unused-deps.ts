@@ -23,7 +23,11 @@ export function removeUnusedDeps(
   const usedMappings = usedDeps.usedMappings;
 
   const projectName = resolveProjectName(config);
-  const usedPackageNamesWithTransient = addTransientDeps(usedPackageNames, workspaceRoot, projectName);
+  const usedPackageNamesWithTransient = addTransientDeps(
+    usedPackageNames,
+    workspaceRoot,
+    projectName
+  );
   const filteredShared = filterShared(config, usedPackageNamesWithTransient);
 
   return {

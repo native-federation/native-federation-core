@@ -9,10 +9,8 @@ export const logger = {
   error: (msg: any) => console.error(chalk.bgRed.ansi256(15)(' ERRR '), msg),
   notice: (msg: any) => console.log(chalk.bgYellowBright.black(' NOTE '), msg),
   info: (msg: any) => console.log(chalk.bgGreen.ansi256(15)(' INFO '), msg),
-  verbose: (msg: any) =>
-    verbose && console.log(chalk.bgGreen.ansi256(15)(' DBG! '), msg),
-  debug: (msg: any) =>
-    verbose && console.log(chalk.bgGreen.ansi256(15)(' DBG! '), msg),
+  verbose: (msg: any) => verbose && console.log(chalk.bgGreen.ansi256(15)(' DBG! '), msg),
+  debug: (msg: any) => verbose && console.log(chalk.bgGreen.ansi256(15)(' DBG! '), msg),
   measure: (start: [number, number], milestone: string) => {
     if (!verbose) return;
 
@@ -26,10 +24,7 @@ export const logger = {
       .toString()
       .padStart(2, '0')}:${msFormatted.padStart(7, '0')}ms`;
 
-    console.log(
-      chalk.bgGreen.ansi256(15)(' DBG! '),
-      `${timeStr} - ${milestone}`,
-    );
+    console.log(chalk.bgGreen.ansi256(15)(' DBG! '), `${timeStr} - ${milestone}`);
   },
 };
 

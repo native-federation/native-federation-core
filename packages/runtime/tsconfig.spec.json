@@ -1,7 +1,14 @@
 {
   "extends": "./tsconfig.build.json",
   "compilerOptions": {
-    "types": ["vitest/globals", "vitest/importMeta", "vite/client", "node", "vitest", "@types/trusted-types"],
+    "types": [
+      "vitest/globals",
+      "vitest/importMeta",
+      "vite/client",
+      "node",
+      "vitest",
+      "@types/trusted-types"
+    ],
     "forceConsistentCasingInFileNames": true
   },
   "include": [
