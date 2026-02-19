@@ -94,8 +94,11 @@ export const TEST_URLS = {
 export const createRemoteConfig = (
   ...remotes: Array<{ name: string; url: string }>
 ): Record<string, string> => {
-  return remotes.reduce((acc, { name, url }) => {
-    acc[name] = url;
-    return acc;
-  }, {} as Record<string, string>);
+  return remotes.reduce(
+    (acc, { name, url }) => {
+      acc[name] = url;
+      return acc;
+    },
+    {} as Record<string, string>
+  );
 };

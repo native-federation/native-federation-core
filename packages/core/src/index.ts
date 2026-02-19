@@ -1,6 +1,6 @@
 export { setBuildAdapter } from './lib/core/build-adapter.js';
 
-export { buildForFederation } from './lib/core/build-for-federation.js';
+export { buildForFederation, rebuildForFederation } from './lib/core/build-for-federation.js';
 export { bundleExposedAndMappings } from './lib/core/bundle-exposed-and-mappings.js';
 export { getExternals } from './lib/core/get-externals.js';
 export { loadFederationConfig } from './lib/core/load-federation-config.js';

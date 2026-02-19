@@ -13,9 +13,7 @@
       "@softarc/native-federation/internal": ["packages/core/dist/src/internal.d.ts"]
     }
   },
-  "include": [
-    "src/**/*.ts"
-  ],
+  "include": ["src/**/*.ts"],
   "exclude": [
     "vite.config.ts",
     "vitest.config.mts",
@@ -24,7 +22,5 @@
     "src/**/*.spec.ts",
     "src/**/__test-helpers__/**"
   ],
-  "references": [
-    { "path": "../core" } 
-  ]
+  "references": [{ "path": "../core" }]
 }

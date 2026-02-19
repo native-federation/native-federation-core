@@ -16,8 +16,7 @@ export function resolveSpecifier(importMap, specifier, parentURL) {
   } else {
     currentBaseURL = baseURL;
   }
-  const normalizedSpecifier =
-    parseURLLikeSpecifier(specifier, currentBaseURL) || specifier;
+  const normalizedSpecifier = parseURLLikeSpecifier(specifier, currentBaseURL) || specifier;
   for (const scopePrefix in importMap.scopes) {
     if (
       scopePrefix === currentBaseURL ||
@@ -25,16 +24,13 @@ export function resolveSpecifier(importMap, specifier, parentURL) {
     ) {
       const scopeImportsMatch = resolveImportsMatch(
         normalizedSpecifier,
-        importMap.scopes[scopePrefix],
+        importMap.scopes[scopePrefix]
       );
       if (scopeImportsMatch) {
         return scopeImportsMatch;
       }
     } else {
-      const topLevelImportsMatch = resolveImportsMatch(
-        normalizedSpecifier,
-        importMap.imports,
-      );
+      const topLevelImportsMatch = resolveImportsMatch(normalizedSpecifier, importMap.imports);
       if (topLevelImportsMatch) {
         return topLevelImportsMatch;
       }
@@ -51,26 +47,19 @@ function resolveImportsMatch(normalizedSpecifier, specifierMap) {
 
     if (specifierKey === normalizedSpecifier) {
       if (resolutionResult === null) {
-        throw TypeError(
-          `The import map resolution of ${specifierKey} failed due to a null entry`,
-        );
+        throw TypeError(`The import map resolution of ${specifierKey} failed due to a null entry`);
       }
       return resolutionResult;
-    } else if (
-      specifierKey.endsWith('/') &&
-      normalizedSpecifier.startsWith(specifierKey)
-    ) {
+    } else if (specifierKey.endsWith('/') && normalizedSpecifier.startsWith(specifierKey)) {
       if (resolutionResult === null) {
-        throw TypeError(
-          `The import map resolution of ${specifierKey} failed due to a null entry`,
-        );
+        throw TypeError(`The import map resolution of ${specifierKey} failed due to a null entry`);
       }
       const afterPrefix = normalizedSpecifier.slice(specifierKey.length);
       try {
         return new URL(afterPrefix, resolutionResult).href;
       } catch {
         throw TypeError(
-          `The import map resolution of ${specifierKey} failed due to URL parse failure`,
+          `The import map resolution of ${specifierKey} failed due to URL parse failure`
         );
       }
     }
@@ -97,10 +86,7 @@ export function resolveAndComposeImportMap(parsed) {
     }
 
     // Step 4.2
-    sortedAndNormalizedImports = sortAndNormalizeSpecifierMap(
-      parsed.imports,
-      baseURL,
-    );
+    sortedAndNormalizedImports = sortAndNormalizeSpecifierMap(parsed.imports, baseURL);
   }
 
   // Step 5
@@ -118,14 +104,12 @@ export function resolveAndComposeImportMap(parsed) {
   }
 
   // Step 7
-  const invalidKeys = Object.keys(parsed).filter(
-    (key) => key !== 'imports' && key !== 'scopes',
-  );
+  const invalidKeys = Object.keys(parsed).filter(key => key !== 'imports' && key !== 'scopes');
   if (invalidKeys.length > 0) {
     console.warn(
       `Invalid top-level key${
         invalidKeys.length > 0 ? 's' : ''
-      } in import map - ${invalidKeys.join(', ')}`,
+      } in import map - ${invalidKeys.join(', ')}`
     );
   }
 
@@ -150,16 +134,14 @@ function sortAndNormalizeSpecifierMap(map, baseURL) {
 
     const addressURL = parseURLLikeSpecifier(value, baseURL);
     if (addressURL === null) {
-      console.warn(
-        `Invalid URL address for import map specifier '${specifierKey}'`,
-      );
+      console.warn(`Invalid URL address for import map specifier '${specifierKey}'`);
       normalized[normalizedSpecifierKey] = null;
       continue;
     }
 
     if (specifierKey.endsWith('/') && !addressURL.endsWith('/')) {
       console.warn(
-        `Invalid URL address for import map specifier '${specifierKey}' - since the specifier ends in slash, so must the address`,
+        `Invalid URL address for import map specifier '${specifierKey}' - since the specifier ends in slash, so must the address`
       );
       normalized[normalizedSpecifierKey] = null;
       continue;
@@ -184,9 +166,7 @@ function normalizeSpecifierKey(key) {
 // https://wicg.github.io/import-maps/#parse-a-url-like-import-specifier
 function parseURLLikeSpecifier(specifier, baseURL) {
   const useBaseUrlAsParent =
-    specifier.startsWith('/') ||
-    specifier.startsWith('./') ||
-    specifier.startsWith('../');
+    specifier.startsWith('/') || specifier.startsWith('./') || specifier.startsWith('../');
 
   try {
     return new URL(specifier, useBaseUrlAsParent ? baseURL : undefined).href;
@@ -202,25 +182,18 @@ function sortAndNormalizeScopes(map, baseURL) {
   for (const scopePrefix in map) {
     const potentialSpecifierMap = map[scopePrefix];
     if (!isPlainObject(potentialSpecifierMap)) {
-      throw TypeError(
-        `The value of scope ${scopePrefix} must be a JSON object`,
-      );
+      throw TypeError(`The value of scope ${scopePrefix} must be a JSON object`);
     }
 
     let scopePrefixURL;
     try {
       scopePrefixURL = new URL(scopePrefix, baseURL).href;
     } catch {
-      console.warn(
-        `Scope prefix URL '${scopePrefix}' was not parseable in import map`,
-      );
+      console.warn(`Scope prefix URL '${scopePrefix}' was not parseable in import map`);
       continue;
     }
 
-    normalized[scopePrefixURL] = sortAndNormalizeSpecifierMap(
-      potentialSpecifierMap,
-      baseURL,
-    );
+    normalized[scopePrefixURL] = sortAndNormalizeSpecifierMap(potentialSpecifierMap, baseURL);
   }
 
   return normalized;
@@ -278,9 +251,7 @@ async function getImportMapPromise() {
   try {
     json = await JSON.parse(str);
   } catch (err) {
-    throw Error(
-      `Import map at ${importMapPath} contains invalid json: ${err.message}`,
-    );
+    throw Error(`Import map at ${importMapPath} contains invalid json: ${err.message}`);
   }
 
   return resolveAndComposeImportMap(json);
@@ -289,7 +260,7 @@ async function getImportMapPromise() {
 globalThis.nodeLoader = globalThis.nodeLoader || {};
 
 globalThis.nodeLoader.setImportMapPromise = function setImportMapPromise(promise) {
-  importMapPromise = promise.then((map) => {
+  importMapPromise = promise.then(map => {
     return resolveAndComposeImportMap(map);
   });
 };

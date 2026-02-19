@@ -1,7 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
-import { bundle } from '../utils/build-utils.js';
 import { getPackageInfo, type PackageInfo } from '../utils/package-info.js';
 import type { ChunkInfo, SharedInfo } from '../domain/core/federation-info.contract.js';
 import { type FederationOptions } from '../domain/core/federation-options.contract.js';
@@ -14,6 +13,7 @@ import { cacheEntry, getChecksum, getFilename } from './../utils/bundle-caching.
 import { fileURLToPath } from 'url';
 import type { NormalizedExternalConfig } from '../domain/config/external-config.contract.js';
 import type { EntryPoint, NFBuildAdapterResult } from '../domain/core/build-adapter.contract.js';
+import { getBuildAdapter } from './build-adapter.js';
 
 export async function bundleShared(
   sharedBundles: Record<string, NormalizedExternalConfig>,
@@ -88,14 +88,15 @@ export async function bundleShared(
   let bundleResult: NFBuildAdapterResult[] | null = null;
 
   try {
-    bundleResult = await bundle({
+    await getBuildAdapter().setup({
       entryPoints,
       tsConfigPath: fedOptions.tsConfig,
       external: [...additionalExternals, ...externals],
       outdir: buildOptions.pathToCache,
       mappedPaths: config.sharedMappings,
       dev: fedOptions.dev,
-      kind: 'shared-package',
+      bundleName: buildOptions.bundleName,
+      isNodeModules: true,
       hash: false,
       chunks:
         (typeof fedOptions.chunks === 'boolean' && fedOptions.chunks) ||
@@ -103,6 +104,10 @@ export async function bundleShared(
       platform,
       optimizedMappings: config.features.ignoreUnusedDeps,
     });
+
+    bundleResult = await getBuildAdapter().build(buildOptions.bundleName);
+
+    await getBuildAdapter().dispose(buildOptions.bundleName);
 
     const cachedFiles = bundleResult.map(br => path.basename(br.fileName));
     rewriteImports(cachedFiles, buildOptions.pathToCache);

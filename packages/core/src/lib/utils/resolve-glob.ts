@@ -1,10 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-export function resolveGlobSync(
-  pattern: string,
-  baseDir = process.cwd(),
-): string[] {
+export function resolveGlobSync(pattern: string, baseDir = process.cwd()): string[] {
   if (pattern.startsWith('./')) {
     pattern = pattern.substring(2);
   }
@@ -23,16 +20,12 @@ export function resolveGlobSync(
 
     if (segment === '*') {
       entries
-        .filter((entry) => entry.isDirectory())
-        .forEach((entry) =>
-          search(path.join(dir, entry.name), segmentIndex + 1),
-        );
+        .filter(entry => entry.isDirectory())
+        .forEach(entry => search(path.join(dir, entry.name), segmentIndex + 1));
     } else {
       entries
-        .filter((entry) => entry.name === segment)
-        .forEach((entry) =>
-          search(path.join(dir, entry.name), segmentIndex + 1),
-        );
+        .filter(entry => entry.name === segment)
+        .forEach(entry => search(path.join(dir, entry.name), segmentIndex + 1));
     }
   }
 

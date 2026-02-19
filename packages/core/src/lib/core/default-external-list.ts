@@ -27,7 +27,4 @@ const NODE_PACKAGES = [
   'zlib',
 ];
 
-export const DEFAULT_EXTERNAL_LIST = NODE_PACKAGES.flatMap((p) => [
-  p,
-  'node:' + p,
-]);
+export const DEFAULT_EXTERNAL_LIST = NODE_PACKAGES.flatMap(p => [p, 'node:' + p]);

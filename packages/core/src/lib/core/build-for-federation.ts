@@ -1,5 +1,4 @@
 import type {
-  ArtifactInfo,
   ChunkInfo,
   FederationInfo,
   SharedInfo,
@@ -19,13 +18,7 @@ import { normalizePackageName } from '../utils/normalize.js';
 import { AbortedError } from '../utils/errors.js';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
 import type { NormalizedExternalConfig } from '../domain/config/external-config.contract.js';
-import type { BuildParams } from '../domain/core/build-params.contract.js';
 import { resolveProjectName } from '../utils/config-utils.js';
-
-export const defaultBuildParams: BuildParams = {
-  skipMappingsAndExposed: false,
-  skipShared: false,
-};
 
 const sharedCache: { externals: SharedInfo[]; chunks?: ChunkInfo } = { externals: [] };
 
@@ -33,31 +26,36 @@ export async function buildForFederation(
   config: NormalizedFederationConfig,
   fedOptions: FederationOptions,
   externals: string[],
-  buildParams = defaultBuildParams
+  signal?: AbortSignal
 ): Promise<FederationInfo> {
-  const signal = buildParams.signal;
-
-  let artifactInfo: ArtifactInfo | undefined;
-
-  if (!buildParams.skipMappingsAndExposed) {
-    const start = process.hrtime();
-    artifactInfo = await bundleExposedAndMappings(config, fedOptions, externals, signal);
-    logger.measure(start, '[build artifacts] - To bundle all mappings and exposed.');
-
-    if (signal?.aborted)
-      throw new AbortedError('[buildForFederation] After exposed-and-mappings bundle');
-  }
-
-  const exposedInfo = !artifactInfo ? describeExposed(config, fedOptions) : artifactInfo.exposes;
-
+  // 1. Caching
   const cacheProjectFolder = resolveProjectName(config);
   const pathToCache = getCachePath(fedOptions.workspaceRoot, cacheProjectFolder);
 
-  if (!buildParams.skipShared && sharedCache.externals.length > 0) {
+  const start = process.hrtime();
+
+  // 2. Shared mappings and exposed modules
+  const artifactInfo = await bundleExposedAndMappings(
+    config,
+    fedOptions,
+    externals,
+    pathToCache,
+    undefined,
+    signal
+  );
+  logger.measure(start, '[build artifacts] - To bundle all mappings and exposed.');
+
+  if (signal?.aborted)
+    throw new AbortedError('[buildForFederation] After exposed-and-mappings bundle');
+
+  const exposedInfo = !artifactInfo ? describeExposed(config, fedOptions) : artifactInfo.exposes;
+
+  // 3. Externals
+  if (sharedCache.externals.length > 0) {
     logger.info('Checksum matched, re-using cached externals.');
   }
 
-  if (!buildParams.skipShared && sharedCache.externals.length === 0) {
+  if (sharedCache.externals.length === 0) {
     const { sharedBrowser, sharedServer, separateBrowser, separateServer } = splitShared(
       config.shared
     );
@@ -161,6 +159,67 @@ export async function buildForFederation(
   if (sharedCache.chunks) {
     federationInfo.chunks = sharedCache.chunks;
   }
+  if (artifactInfo?.chunks) {
+    federationInfo.chunks = { ...(federationInfo.chunks ?? {}), ...artifactInfo?.chunks };
+  }
+
+  writeFederationInfo(federationInfo, fedOptions);
+  writeImportMap(sharedCache, fedOptions);
+
+  return federationInfo;
+}
+
+export async function rebuildForFederation(
+  config: NormalizedFederationConfig,
+  fedOptions: FederationOptions,
+  externals: string[],
+  modifiedFiles: string[],
+  signal?: AbortSignal
+): Promise<FederationInfo> {
+  // 1. Caching
+  const cacheProjectFolder = resolveProjectName(config);
+  const pathToCache = getCachePath(fedOptions.workspaceRoot, cacheProjectFolder);
+
+  const start = process.hrtime();
+
+  // 2. Shared mappings and exposed modules
+  const artifactInfo = await bundleExposedAndMappings(
+    config,
+    fedOptions,
+    externals,
+    pathToCache,
+    modifiedFiles,
+    signal
+  );
+  logger.measure(start, '[build artifacts] - To re-bundle all mappings and exposed.');
+
+  if (signal?.aborted)
+    throw new AbortedError('[buildForFederation] After exposed-and-mappings bundle');
+
+  const exposedInfo = !artifactInfo ? describeExposed(config, fedOptions) : artifactInfo.exposes;
+
+  const sharedMappingInfo = !artifactInfo
+    ? describeSharedMappings(config, fedOptions)
+    : artifactInfo.mappings;
+
+  const sharedExternals = [...sharedCache.externals, ...sharedMappingInfo];
+
+  const buildNotificationsEndpoint =
+    fedOptions.buildNotifications?.enable && fedOptions.dev
+      ? fedOptions.buildNotifications?.endpoint
+      : undefined;
+
+  const federationInfo: FederationInfo = {
+    name: config.name,
+    shared: sharedExternals,
+    exposes: exposedInfo,
+    buildNotificationsEndpoint,
+  };
+
+  if (sharedCache.chunks) {
+    federationInfo.chunks = sharedCache.chunks;
+  }
+
   if (artifactInfo?.chunks) {
     federationInfo.chunks = { ...(federationInfo.chunks ?? {}), ...artifactInfo?.chunks };
   }

@@ -76,34 +76,28 @@ function watchFederationBuildCompletion(endpoint) {
 }
 
 // libs/native-federation-runtime/src/lib/init-federation.ts
-async function processRemoteInfos(
-  remotes,
-  options = { throwIfRemoteNotFound: false },
-) {
-  const processRemoteInfoPromises = Object.keys(remotes).map(
-    async (remoteName) => {
-      try {
-        let url2 = remotes[remoteName];
-        if (options.cacheTag) {
-          const addAppend = remotes[remoteName].includes('?') ? '&' : '?';
-          url2 += `${addAppend}t=${options.cacheTag}`;
-        }
-        return await processRemoteInfo(url2, remoteName);
-      } catch (e) {
-        const error = `Error loading remote entry for ${remoteName} from file ${remotes[remoteName]}`;
-        if (options.throwIfRemoteNotFound) {
-          throw new Error(error);
-        }
-        console.error(error);
-        return null;
+async function processRemoteInfos(remotes, options = { throwIfRemoteNotFound: false }) {
+  const processRemoteInfoPromises = Object.keys(remotes).map(async remoteName => {
+    try {
+      let url2 = remotes[remoteName];
+      if (options.cacheTag) {
+        const addAppend = remotes[remoteName].includes('?') ? '&' : '?';
+        url2 += `${addAppend}t=${options.cacheTag}`;
       }
-    },
-  );
+      return await processRemoteInfo(url2, remoteName);
+    } catch (e) {
+      const error = `Error loading remote entry for ${remoteName} from file ${remotes[remoteName]}`;
+      if (options.throwIfRemoteNotFound) {
+        throw new Error(error);
+      }
+      console.error(error);
+      return null;
+    }
+  });
   const remoteImportMaps = await Promise.all(processRemoteInfoPromises);
   const importMap = remoteImportMaps.reduce(
-    (acc, remoteImportMap) =>
-      remoteImportMap ? mergeImportMaps(acc, remoteImportMap) : acc,
-    { imports: {}, scopes: {} },
+    (acc, remoteImportMap) => (remoteImportMap ? mergeImportMaps(acc, remoteImportMap) : acc),
+    { imports: {}, scopes: {} }
   );
   return importMap;
 }
@@ -114,9 +108,7 @@ async function processRemoteInfo(federationInfoUrl, remoteName) {
     remoteName = remoteInfo.name;
   }
   if (remoteInfo.buildNotificationsEndpoint) {
-    watchFederationBuildCompletion(
-      baseUrl + remoteInfo.buildNotificationsEndpoint,
-    );
+    watchFederationBuildCompletion(baseUrl + remoteInfo.buildNotificationsEndpoint);
   }
   const importMap = createRemoteImportMap(remoteInfo, remoteName, baseUrl);
   addRemote(remoteName, { ...remoteInfo, baseUrl });
@@ -128,15 +120,14 @@ function createRemoteImportMap(remoteInfo, remoteName, baseUrl) {
   return { imports, scopes };
 }
 async function loadFederationInfo(url2) {
-  const info = await fetch(url2).then((r) => r.json());
+  const info = await fetch(url2).then(r => r.json());
   return info;
 }
 function processRemoteImports(remoteInfo, baseUrl) {
   const scopes = {};
   const scopedImports = {};
   for (const shared of remoteInfo.shared) {
-    const outFileName =
-      getExternalUrl(shared) ?? joinPaths(baseUrl, shared.outFileName);
+    const outFileName = getExternalUrl(shared) ?? joinPaths(baseUrl, shared.outFileName);
     setExternalUrl(shared, outFileName);
     scopedImports[shared.packageName] = outFileName;
   }
@@ -158,7 +149,7 @@ async function processHostInfo(hostInfo, relBundlesPath = './') {
       ...acc,
       [cur.packageName]: relBundlesPath + cur.outFileName,
     }),
-    {},
+    {}
   );
   for (const shared of hostInfo.shared) {
     setExternalUrl(shared, relBundlesPath + shared.outFileName);
@@ -181,10 +172,7 @@ function resolveAndComposeImportMap(parsed) {
     if (!isPlainObject(parsed.imports)) {
       throw Error(`Invalid import map - "imports" property must be an object`);
     }
-    sortedAndNormalizedImports = sortAndNormalizeSpecifierMap(
-      parsed.imports,
-      baseURL,
-    );
+    sortedAndNormalizedImports = sortAndNormalizeSpecifierMap(parsed.imports, baseURL);
   }
   let sortedAndNormalizedScopes = {};
   if (Object.prototype.hasOwnProperty.call(parsed, 'scopes')) {
@@ -193,12 +181,10 @@ function resolveAndComposeImportMap(parsed) {
     }
     sortedAndNormalizedScopes = sortAndNormalizeScopes(parsed.scopes, baseURL);
   }
-  const invalidKeys = Object.keys(parsed).filter(
-    (key) => key !== 'imports' && key !== 'scopes',
-  );
+  const invalidKeys = Object.keys(parsed).filter(key => key !== 'imports' && key !== 'scopes');
   if (invalidKeys.length > 0) {
     console.warn(
-      `Invalid top-level key${invalidKeys.length > 0 ? 's' : ''} in import map - ${invalidKeys.join(', ')}`,
+      `Invalid top-level key${invalidKeys.length > 0 ? 's' : ''} in import map - ${invalidKeys.join(', ')}`
     );
   }
   return {
@@ -210,24 +196,19 @@ function sortAndNormalizeSpecifierMap(map, baseURL2) {
   const normalized = {};
   for (let specifierKey in map) {
     const value = map[specifierKey];
-    const normalizedSpecifierKey = normalizeSpecifierKey(
-      specifierKey,
-      baseURL2,
-    );
+    const normalizedSpecifierKey = normalizeSpecifierKey(specifierKey, baseURL2);
     if (normalizedSpecifierKey === null) {
       continue;
     }
     let addressURL = parseURLLikeSpecifier(value, baseURL2);
     if (addressURL === null) {
-      console.warn(
-        `Invalid URL address for import map specifier '${specifierKey}'`,
-      );
+      console.warn(`Invalid URL address for import map specifier '${specifierKey}'`);
       normalized[normalizedSpecifierKey] = null;
       continue;
     }
     if (specifierKey.endsWith('/') && !addressURL.endsWith('/')) {
       console.warn(
-        `Invalid URL address for import map specifier '${specifierKey}' - since the specifier ends in slash, so must the address`,
+        `Invalid URL address for import map specifier '${specifierKey}' - since the specifier ends in slash, so must the address`
       );
       normalized[normalizedSpecifierKey] = null;
       continue;
@@ -245,9 +226,7 @@ function normalizeSpecifierKey(key) {
 }
 function parseURLLikeSpecifier(specifier, baseURL2) {
   const useBaseUrlAsParent =
-    specifier.startsWith('/') ||
-    specifier.startsWith('./') ||
-    specifier.startsWith('../');
+    specifier.startsWith('/') || specifier.startsWith('./') || specifier.startsWith('../');
   try {
     return new URL(specifier, useBaseUrlAsParent ? baseURL2 : void 0).href;
   } catch {
@@ -259,23 +238,16 @@ function sortAndNormalizeScopes(map, baseURL2) {
   for (let scopePrefix in map) {
     const potentialSpecifierMap = map[scopePrefix];
     if (!isPlainObject(potentialSpecifierMap)) {
-      throw TypeError(
-        `The value of scope ${scopePrefix} must be a JSON object`,
-      );
+      throw TypeError(`The value of scope ${scopePrefix} must be a JSON object`);
     }
     let scopePrefixURL;
     try {
       scopePrefixURL = new URL(scopePrefix, baseURL2).href;
     } catch {
-      console.warn(
-        `Scope prefix URL '${scopePrefix}' was not parseable in import map`,
-      );
+      console.warn(`Scope prefix URL '${scopePrefix}' was not parseable in import map`);
       continue;
     }
-    normalized[scopePrefixURL] = sortAndNormalizeSpecifierMap(
-      potentialSpecifierMap,
-      baseURL2,
-    );
+    normalized[scopePrefixURL] = sortAndNormalizeSpecifierMap(potentialSpecifierMap, baseURL2);
   }
   return normalized;
 }
@@ -296,15 +268,13 @@ async function getImportMapPromise() {
   try {
     json = await JSON.parse(str);
   } catch (err) {
-    throw Error(
-      `Import map at ${importMapPath} contains invalid json: ${err.message}`,
-    );
+    throw Error(`Import map at ${importMapPath} contains invalid json: ${err.message}`);
   }
   return resolveAndComposeImportMap(json);
 }
 global.nodeLoader = global.nodeLoader || {};
 global.nodeLoader.setImportMapPromise = function setImportMapPromise(promise) {
-  importMapPromise = promise.then((map) => {
+  importMapPromise = promise.then(map => {
     return resolveAndComposeImportMap(map);
   });
 };
@@ -356,11 +326,7 @@ async function loadFsFederationInfo(relBundlePath) {
   return manifest;
 }
 async function writeImportMap(map) {
-  await fs2.writeFile(
-    IMPORT_MAP_FILE_NAME,
-    JSON.stringify(map, null, 2),
-    'utf-8',
-  );
+  await fs2.writeFile(IMPORT_MAP_FILE_NAME, JSON.stringify(map, null, 2), 'utf-8');
 }
 async function writeResolver() {
   const buffer = Buffer.from(resolver, 'base64');
@@ -411,8 +377,7 @@ function applyDefaultArgs(args2) {
   }
   args2.entry = args2.entry || defaultArgs.entry;
   args2.relBundlePath = args2.relBundlePath || defaultArgs.relBundlePath;
-  args2.remotesOrManifestUrl =
-    args2.remotesOrManifestUrl || defaultArgs.remotesOrManifestUrl;
+  args2.remotesOrManifestUrl = args2.remotesOrManifestUrl || defaultArgs.remotesOrManifestUrl;
   if (!fs3.existsSync(args2.remotesOrManifestUrl)) {
     args2.remotesOrManifestUrl = void 0;
   }
@@ -430,9 +395,7 @@ function exitWithUsage(defaultArgs2) {
 var args = parseFStartArgs();
 (async () => {
   await initNodeFederation({
-    ...(args.remotesOrManifestUrl
-      ? { remotesOrManifestUrl: args.remotesOrManifestUrl }
-      : {}),
+    ...(args.remotesOrManifestUrl ? { remotesOrManifestUrl: args.remotesOrManifestUrl } : {}),
     relBundlePath: args.relBundlePath,
   });
   await import(args.entry);
