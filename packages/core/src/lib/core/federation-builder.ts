@@ -2,7 +2,7 @@ import type { FederationInfo } from '../domain/core/federation-info.contract.js'
 import { getConfigContext, usePackageJson, useWorkspace } from '../config/configuration-context.js';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
 import { setBuildAdapter } from './build-adapter.js';
-import { buildForFederation, defaultBuildParams } from './build-for-federation.js';
+import { buildForFederation } from './build-for-federation.js';
 import { type FederationOptions } from '../domain/core/federation-options.contract.js';
 import { getExternals } from './get-externals.js';
 import { loadFederationConfig } from './load-federation-config.js';
@@ -28,8 +28,8 @@ async function init(params: BuildHelperParams): Promise<void> {
   externals = getExternals(config);
 }
 
-async function build(buildParams = defaultBuildParams): Promise<void> {
-  fedInfo = await buildForFederation(config, fedOptions, externals, buildParams);
+async function build(signal?: AbortSignal): Promise<void> {
+  fedInfo = await buildForFederation(config, fedOptions, externals, signal);
 }
 
 export const federationBuilder = {
