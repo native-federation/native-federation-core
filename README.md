@@ -351,7 +351,7 @@ If you don't want to share (all of) them, put their names into the skip array (s
 
 ### Versions for internal Shared Libraries  (Internal Publishable Libraries also shared across Remotes)
 
-If you want to share Libraries within a Monorepo and also as built libs with a version, activate the feature flag mappingVersion in your `federation.config.js` to use the corresponding versions from buildable libs.
+If you want to share libraries within a monorepo and also distribute them as built libraries with a version, enable the `mappingVersion` feature flag in your `federation.config.js`. This ensures that the corresponding versions from your buildable libraries are used.
 
 ```json
 module.exports = withNativeFederation({
@@ -365,7 +365,7 @@ module.exports = withNativeFederation({
   },
 ```
 
-This results in `remoteEntry.json` entries with a version entry that matches the `package.json` data of the corresponding local buildable Library
+This configuration generates `remoteEntry.json` entries that include a version field matching the `package.json` version of the corresponding local buildable library.
 
 ### Configuring Remotes
 
