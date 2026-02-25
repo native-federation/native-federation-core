@@ -349,6 +349,24 @@ Paths mapped in your `tsconfig.json` are shared by default too. While they are p
 
 If you don't want to share (all of) them, put their names into the skip array (see above).
 
+### Versions for internal Shared Libraries  (Internal Publishable Libraries also shared across Remotes)
+
+If you want to share Libraries within a Monorepo and also as built libs with a version, activate the feature flag mappingVersion in your `federation.config.js` to use the corresponding versions from buildable libs.
+
+```json
+module.exports = withNativeFederation({
+  [...]
+  sharedMappings: [
+    // your shared libs
+  ],
+  features: {
+    [...]
+    mappingVersion: true,
+  },
+```
+
+This results in `remoteEntry.json` entries with a version entry that matches the `package.json` data of the corresponding local buildable Library
+
 ### Configuring Remotes
 
 When configuring a remote, you can expose files that can be loaded into the shell at runtime:
