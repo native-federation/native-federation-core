@@ -9,18 +9,19 @@ import type {
 } from '../domain/core/federation-info.contract.js';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
 import { createBuildResultMap, popFromResultMap } from '../utils/build-result-map.js';
-import { bundle } from '../utils/build-utils.js';
 import { logger } from '../utils/logger.js';
 import { normalize } from '../utils/normalize.js';
-import { type FederationOptions } from '../domain/core/federation-options.contract.js';
+import { type NormalizedFederationOptions } from '../domain/core/federation-options.contract.js';
 import { AbortedError } from '../utils/errors.js';
 import type { EntryPoint } from './../domain/core/build-adapter.contract.js';
 import { rewriteChunkImports } from '../utils/rewrite-chunk-imports.js';
+import { getBuildAdapter } from './build-adapter.js';
 
 export async function bundleExposedAndMappings(
   config: NormalizedFederationConfig,
-  fedOptions: FederationOptions,
+  fedOptions: NormalizedFederationOptions,
   externals: string[],
+  modifiedFiles?: string[],
   signal?: AbortSignal
 ): Promise<ArtifactInfo> {
   if (signal?.aborted) {
@@ -46,22 +47,31 @@ export async function bundleExposedAndMappings(
 
   let result;
   try {
-    result = await bundle({
-      entryPoints,
-      outdir: fedOptions.outputPath,
-      tsConfigPath: fedOptions.tsConfig,
-      external: externals,
-      dev: !!fedOptions.dev,
-      watch: fedOptions.watch,
-      mappedPaths: config.sharedMappings,
-      kind: 'mapping-or-exposed',
-      chunks:
-        (typeof fedOptions.chunks === 'boolean' && fedOptions.chunks) ||
-        (typeof fedOptions.chunks === 'object' && !!fedOptions.chunks.enable),
-      hash,
-      optimizedMappings: config.features.ignoreUnusedDeps,
+    if (!modifiedFiles) {
+      await getBuildAdapter().setup({
+        entryPoints,
+        outdir: fedOptions.outputPath,
+        tsConfigPath: fedOptions.tsConfig,
+        external: externals,
+        dev: !!fedOptions.dev,
+        watch: fedOptions.watch,
+        mappedPaths: config.sharedMappings,
+        bundleName: 'mapping-or-exposed',
+        chunks:
+          (typeof fedOptions.chunks === 'boolean' && fedOptions.chunks) ||
+          (typeof fedOptions.chunks === 'object' && !!fedOptions.chunks.enable),
+        hash,
+        optimizedMappings: config.features.ignoreUnusedDeps,
+        isNodeModules: false,
+        cache: fedOptions.federationCache,
+      });
+    }
+
+    result = await getBuildAdapter().build('mapping-or-exposed', {
       signal,
+      files: modifiedFiles,
     });
+
     if (signal?.aborted) {
       throw new AbortedError('[bundle-exposed-and-mappings] Aborted after bundle');
     }
@@ -133,7 +143,7 @@ export async function bundleExposedAndMappings(
 
 export function describeExposed(
   config: NormalizedFederationConfig,
-  options: FederationOptions
+  options: NormalizedFederationOptions
 ): Array<ExposesInfo> {
   const result: Array<ExposesInfo> = [];
 
@@ -158,7 +168,7 @@ export function describeExposed(
 
 export function describeSharedMappings(
   config: NormalizedFederationConfig,
-  fedOptions: FederationOptions
+  fedOptions: NormalizedFederationOptions
 ): Array<SharedInfo> {
   const result: Array<SharedInfo> = [];
 

@@ -1,8 +1,19 @@
 import type { MappedPath } from '../utils/mapped-path.contract.js';
+import type { FederationCache } from './federation-cache.contract.js';
 
-export type NFBuildAdapter = (options: NFBuildAdapterOptions) => Promise<NFBuildAdapterResult[]>;
+export interface NFBuildAdapter {
+  setup(options: NFBuildAdapterOptions): Promise<void>;
 
-export type BuildKind = 'shared-package' | 'shared-mapping' | 'exposed' | 'mapping-or-exposed';
+  build(
+    name: string,
+    opts?: {
+      files?: string[];
+      signal?: AbortSignal;
+    }
+  ): Promise<NFBuildAdapterResult[]>;
+
+  dispose(name?: string): Promise<void>;
+}
 
 export interface EntryPoint {
   fileName: string;
@@ -10,22 +21,21 @@ export interface EntryPoint {
   key?: string;
 }
 
-export interface NFBuildAdapterOptions {
+export interface NFBuildAdapterOptions<TBundlerCache = unknown> {
   entryPoints: EntryPoint[];
   tsConfigPath?: string;
-  external: Array<string>;
+  external: string[];
   outdir: string;
   mappedPaths: MappedPath[];
-  packageName?: string;
-  esm?: boolean;
+  bundleName: string;
+  isNodeModules: boolean;
   dev?: boolean;
   watch?: boolean;
   chunks?: boolean;
-  kind: BuildKind;
   hash: boolean;
   platform?: 'browser' | 'node';
   optimizedMappings?: boolean;
-  signal?: AbortSignal;
+  cache: FederationCache<TBundlerCache>;
 }
 
 export interface NFBuildAdapterResult {

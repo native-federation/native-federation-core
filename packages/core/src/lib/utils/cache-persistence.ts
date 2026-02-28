@@ -3,10 +3,10 @@ import fs from 'fs';
 import crypto from 'crypto';
 import type { NormalizedExternalConfig } from '../domain/config/external-config.contract.js';
 import type { ChunkInfo, SharedInfo } from '../domain/core/federation-info.contract.js';
-import { logger } from '../utils/logger.js';
+import { logger } from './logger.js';
 
-export const getCachePath = (workspaceRoot: string, project: string) =>
-  path.join(workspaceRoot, 'node_modules/.cache/native-federation', project);
+export const getDefaultCachePath = (workspaceRoot: string) =>
+  path.join(workspaceRoot, 'node_modules/.cache/native-federation');
 
 export const getFilename = (title: string, dev?: boolean) => {
   const devSuffix = dev ? '-dev' : '';
