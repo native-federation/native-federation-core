@@ -1,4 +1,5 @@
 import type { BuildNotificationOptions } from './build-notification-options.contract.js';
+import type { FederationCache } from './federation-cache.contract.js';
 
 export interface FederationOptions {
   workspaceRoot: string;
@@ -13,4 +14,8 @@ export interface FederationOptions {
   packageJson?: string;
   entryPoint?: string;
   buildNotifications?: BuildNotificationOptions;
+}
+
+export interface NormalizedFederationOptions<TBundlerCache = unknown> extends FederationOptions {
+  federationCache: FederationCache<TBundlerCache>;
 }

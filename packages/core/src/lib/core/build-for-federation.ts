@@ -9,28 +9,29 @@ import {
   describeSharedMappings,
 } from './bundle-exposed-and-mappings.js';
 import { bundleShared } from './bundle-shared.js';
-import type { FederationOptions } from '../domain/core/federation-options.contract.js';
+import type { NormalizedFederationOptions } from '../domain/core/federation-options.contract.js';
 import { writeFederationInfo } from './write-federation-info.js';
 import { writeImportMap } from './write-import-map.js';
 import { logger } from '../utils/logger.js';
-import { getCachePath } from './../utils/bundle-caching.js';
 import { normalizePackageName } from '../utils/normalize.js';
 import { AbortedError } from '../utils/errors.js';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
 import type { NormalizedExternalConfig } from '../domain/config/external-config.contract.js';
 import { resolveProjectName } from '../utils/config-utils.js';
-
-const sharedCache: { externals: SharedInfo[]; chunks?: ChunkInfo } = { externals: [] };
+import { addExternalsToCache } from './federation-cache.js';
+import path from 'path';
 
 export async function buildForFederation(
   config: NormalizedFederationConfig,
-  fedOptions: FederationOptions,
+  fedOptions: NormalizedFederationOptions,
   externals: string[],
   signal?: AbortSignal
 ): Promise<FederationInfo> {
   // 1. Caching
-  const cacheProjectFolder = resolveProjectName(config);
-  const pathToCache = getCachePath(fedOptions.workspaceRoot, cacheProjectFolder);
+  fedOptions.federationCache.cachePath = path.join(
+    fedOptions.federationCache.cachePath,
+    resolveProjectName(config)
+  );
 
   const start = process.hrtime();
 
@@ -39,7 +40,6 @@ export async function buildForFederation(
     config,
     fedOptions,
     externals,
-    pathToCache,
     undefined,
     signal
   );
@@ -51,11 +51,11 @@ export async function buildForFederation(
   const exposedInfo = !artifactInfo ? describeExposed(config, fedOptions) : artifactInfo.exposes;
 
   // 3. Externals
-  if (sharedCache.externals.length > 0) {
+  if (fedOptions.federationCache.externals.length > 0) {
     logger.info('Checksum matched, re-using cached externals.');
   }
 
-  if (sharedCache.externals.length === 0) {
+  if (fedOptions.federationCache.externals.length === 0) {
     const { sharedBrowser, sharedServer, separateBrowser, separateServer } = splitShared(
       config.shared
     );
@@ -68,13 +68,12 @@ export async function buildForFederation(
         config,
         fedOptions,
         externals,
-        'browser',
-        { pathToCache, bundleName: 'browser-shared' }
+        { platform: 'browser', bundleName: 'browser-shared' }
       );
 
       logger.measure(start, '[build artifacts] - To bundle all shared browser externals');
 
-      addToCache(sharedPackageInfoBrowser);
+      addExternalsToCache(fedOptions.federationCache, sharedPackageInfoBrowser);
 
       if (signal?.aborted)
         throw new AbortedError('[buildForFederation] After shared-browser bundle');
@@ -88,12 +87,11 @@ export async function buildForFederation(
         config,
         fedOptions,
         externals,
-        'node',
-        { pathToCache, bundleName: 'node-shared' }
+        { platform: 'node', bundleName: 'node-shared' }
       );
       logger.measure(start, '[build artifacts] - To bundle all shared node externals');
 
-      addToCache(sharedPackageInfoServer);
+      addExternalsToCache(fedOptions.federationCache, sharedPackageInfoServer);
 
       if (signal?.aborted) throw new AbortedError('[buildForFederation] After shared-node bundle');
     }
@@ -106,11 +104,10 @@ export async function buildForFederation(
         externals,
         config,
         fedOptions,
-        'browser',
-        pathToCache
+        { platform: 'browser' }
       );
       logger.measure(start, '[build artifacts] - To bundle all separate browser externals');
-      addToCache(separatePackageInfoBrowser);
+      addExternalsToCache(fedOptions.federationCache, separatePackageInfoBrowser);
       if (signal?.aborted)
         throw new AbortedError('[buildForFederation] After separate-browser bundle');
     }
@@ -123,12 +120,11 @@ export async function buildForFederation(
         externals,
         config,
         fedOptions,
-        'node',
-        pathToCache
+        { platform: 'node' }
       );
 
       logger.measure(start, '[build artifacts] - To bundle all separate node externals');
-      addToCache(separatePackageInfoServer);
+      addExternalsToCache(fedOptions.federationCache, separatePackageInfoServer);
     }
 
     if (signal?.aborted) throw new AbortedError('[buildForFederation] After separate-node bundle');
@@ -138,7 +134,7 @@ export async function buildForFederation(
     ? describeSharedMappings(config, fedOptions)
     : artifactInfo.mappings;
 
-  const sharedExternals = [...sharedCache.externals, ...sharedMappingInfo];
+  const sharedExternals = [...fedOptions.federationCache.externals, ...sharedMappingInfo];
 
   if (config?.shareScope) {
     Object.values(sharedExternals).forEach(external => {
@@ -156,86 +152,17 @@ export async function buildForFederation(
     exposes: exposedInfo,
     buildNotificationsEndpoint,
   };
-  if (sharedCache.chunks) {
-    federationInfo.chunks = sharedCache.chunks;
+  if (fedOptions.federationCache.chunks) {
+    federationInfo.chunks = fedOptions.federationCache.chunks;
   }
   if (artifactInfo?.chunks) {
     federationInfo.chunks = { ...(federationInfo.chunks ?? {}), ...artifactInfo?.chunks };
   }
 
   writeFederationInfo(federationInfo, fedOptions);
-  writeImportMap(sharedCache, fedOptions);
+  writeImportMap(fedOptions.federationCache, fedOptions);
 
   return federationInfo;
-}
-
-export async function rebuildForFederation(
-  config: NormalizedFederationConfig,
-  fedOptions: FederationOptions,
-  externals: string[],
-  modifiedFiles: string[],
-  signal?: AbortSignal
-): Promise<FederationInfo> {
-  // 1. Caching
-  const cacheProjectFolder = resolveProjectName(config);
-  const pathToCache = getCachePath(fedOptions.workspaceRoot, cacheProjectFolder);
-
-  const start = process.hrtime();
-
-  // 2. Shared mappings and exposed modules
-  const artifactInfo = await bundleExposedAndMappings(
-    config,
-    fedOptions,
-    externals,
-    pathToCache,
-    modifiedFiles,
-    signal
-  );
-  logger.measure(start, '[build artifacts] - To re-bundle all mappings and exposed.');
-
-  if (signal?.aborted)
-    throw new AbortedError('[buildForFederation] After exposed-and-mappings bundle');
-
-  const exposedInfo = !artifactInfo ? describeExposed(config, fedOptions) : artifactInfo.exposes;
-
-  const sharedMappingInfo = !artifactInfo
-    ? describeSharedMappings(config, fedOptions)
-    : artifactInfo.mappings;
-
-  const sharedExternals = [...sharedCache.externals, ...sharedMappingInfo];
-
-  const buildNotificationsEndpoint =
-    fedOptions.buildNotifications?.enable && fedOptions.dev
-      ? fedOptions.buildNotifications?.endpoint
-      : undefined;
-
-  const federationInfo: FederationInfo = {
-    name: config.name,
-    shared: sharedExternals,
-    exposes: exposedInfo,
-    buildNotificationsEndpoint,
-  };
-
-  if (sharedCache.chunks) {
-    federationInfo.chunks = sharedCache.chunks;
-  }
-
-  if (artifactInfo?.chunks) {
-    federationInfo.chunks = { ...(federationInfo.chunks ?? {}), ...artifactInfo?.chunks };
-  }
-
-  writeFederationInfo(federationInfo, fedOptions);
-  writeImportMap(sharedCache, fedOptions);
-
-  return federationInfo;
-}
-
-function addToCache({ externals, chunks }: { externals: SharedInfo[]; chunks?: ChunkInfo }) {
-  sharedCache.externals.push(...externals);
-  if (chunks) {
-    if (!sharedCache.chunks) sharedCache.chunks = {};
-    sharedCache.chunks = { ...sharedCache.chunks, ...chunks };
-  }
 }
 
 type SplitSharedResult = {
@@ -257,9 +184,8 @@ async function bundleSeparatePackages(
   separateBrowser: Record<string, NormalizedExternalConfig>,
   externals: string[],
   config: NormalizedFederationConfig,
-  fedOptions: FederationOptions,
-  platform: 'node' | 'browser',
-  pathToCache: string
+  fedOptions: NormalizedFederationOptions,
+  buildOptions: { platform: 'browser' | 'node' }
 ) {
   const groupedByPackage: Record<string, Record<string, NormalizedExternalConfig>> = {};
 
@@ -278,8 +204,10 @@ async function bundleSeparatePackages(
         config,
         fedOptions,
         externals.filter(e => !e.startsWith(packageName)),
-        platform,
-        { pathToCache, bundleName: `${platform}-${normalizePackageName(packageName)}` }
+        {
+          platform: buildOptions.platform,
+          bundleName: `${buildOptions.platform}-${normalizePackageName(packageName)}`,
+        }
       );
     }
   );

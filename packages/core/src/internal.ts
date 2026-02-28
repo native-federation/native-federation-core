@@ -20,3 +20,4 @@ export type {
   NormalizedSharedExternalsConfig,
 } from './lib/domain/config/external-config.contract.js';
 export type { NormalizedFederationConfig } from './lib/domain/config/federation-config.contract.js';
+export { getDefaultCachePath, getChecksum } from './lib/utils/cache-persistence.js';

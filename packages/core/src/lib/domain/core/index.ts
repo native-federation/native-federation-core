@@ -9,7 +9,7 @@ export {
   type BuildNotificationOptions,
   BuildNotificationType,
 } from './build-notification-options.contract.js';
-export type { FederationOptions } from './federation-options.contract.js';
+export type { FederationOptions, NormalizedFederationOptions } from './federation-options.contract.js';
 export type {
   EntryPoint,
   NFBuildAdapterOptions,
@@ -17,3 +17,4 @@ export type {
   NFBuildAdapterResult,
 } from './build-adapter.contract.js';
 export { CHUNK_PREFIX, toChunkImport } from './chunk.js';
+export type { FederationCache } from './federation-cache.contract.js';

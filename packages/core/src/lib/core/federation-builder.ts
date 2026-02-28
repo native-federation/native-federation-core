@@ -3,10 +3,14 @@ import { getConfigContext, usePackageJson, useWorkspace } from '../config/config
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
 import { setBuildAdapter } from './build-adapter.js';
 import { buildForFederation } from './build-for-federation.js';
-import { type FederationOptions } from '../domain/core/federation-options.contract.js';
+import {
+  type FederationOptions,
+  type NormalizedFederationOptions,
+} from '../domain/core/federation-options.contract.js';
 import { getExternals } from './get-externals.js';
 import { loadFederationConfig } from './load-federation-config.js';
 import type { NFBuildAdapter } from '../domain/core/build-adapter.contract.js';
+import { normalizeFederationOptions } from './normalize-federation-options.js';
 
 export interface BuildHelperParams {
   options: FederationOptions;
@@ -15,12 +19,12 @@ export interface BuildHelperParams {
 
 let externals: string[] = [];
 let config: NormalizedFederationConfig;
-let fedOptions: FederationOptions;
+let fedOptions: NormalizedFederationOptions;
 let fedInfo: FederationInfo;
 
 async function init(params: BuildHelperParams): Promise<void> {
   setBuildAdapter(params.adapter);
-  fedOptions = params.options;
+  fedOptions = normalizeFederationOptions(params.options);
   useWorkspace(params.options.workspaceRoot);
   usePackageJson(params.options.packageJson);
   config = await loadFederationConfig(fedOptions);

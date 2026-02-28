@@ -3,13 +3,13 @@ import * as fs from 'fs';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
 import { getPackageInfo, type PackageInfo } from '../utils/package-info.js';
 import type { ChunkInfo, SharedInfo } from '../domain/core/federation-info.contract.js';
-import { type FederationOptions } from '../domain/core/federation-options.contract.js';
+import { type NormalizedFederationOptions } from '../domain/core/federation-options.contract.js';
 import { logger } from '../utils/logger.js';
 import crypto from 'crypto';
 import { DEFAULT_EXTERNAL_LIST } from './default-external-list.js';
 import { isSourceFile, rewriteChunkImports } from '../utils/rewrite-chunk-imports.js';
 import { toChunkImport } from '../domain/core/chunk.js';
-import { cacheEntry, getChecksum, getFilename } from './../utils/bundle-caching.js';
+import { cacheEntry, getChecksum, getFilename } from '../utils/cache-persistence.js';
 import { fileURLToPath } from 'url';
 import type { NormalizedExternalConfig } from '../domain/config/external-config.contract.js';
 import type { EntryPoint, NFBuildAdapterResult } from '../domain/core/build-adapter.contract.js';
@@ -18,10 +18,9 @@ import { getBuildAdapter } from './build-adapter.js';
 export async function bundleShared(
   sharedBundles: Record<string, NormalizedExternalConfig>,
   config: NormalizedFederationConfig,
-  fedOptions: FederationOptions,
+  fedOptions: NormalizedFederationOptions,
   externals: string[],
-  platform: 'browser' | 'node' = 'browser',
-  buildOptions: { pathToCache: string; bundleName: string }
+  buildOptions: { platform: 'browser' | 'node'; bundleName: string }
 ): Promise<{ externals: SharedInfo[]; chunks?: Record<string, string[]> }> {
   const checksum = getChecksum(sharedBundles, fedOptions.dev ? '1' : '0');
 
@@ -30,7 +29,7 @@ export async function bundleShared(
     : fedOptions.workspaceRoot;
 
   const bundleCache = cacheEntry(
-    buildOptions.pathToCache,
+    fedOptions.federationCache.cachePath,
     getFilename(buildOptions.bundleName, fedOptions.dev)
   );
 
@@ -76,12 +75,13 @@ export async function bundleShared(
 
   const expectedResults = allEntryPoints.map(ep => path.join(fullOutputPath, ep.outName));
   const entryPoints = allEntryPoints.filter(
-    ep => !fs.existsSync(path.join(buildOptions.pathToCache, ep.outName))
+    ep => !fs.existsSync(path.join(fedOptions.federationCache.cachePath, ep.outName))
   );
 
   // If we build for the browser and don't remote unused deps from the shared config,
   // we need to exclude typical node libs to avoid compilation issues
-  const useDefaultExternalList = platform === 'browser' && !config.features.ignoreUnusedDeps;
+  const useDefaultExternalList =
+    buildOptions.platform === 'browser' && !config.features.ignoreUnusedDeps;
 
   const additionalExternals = useDefaultExternalList ? DEFAULT_EXTERNAL_LIST : [];
 
@@ -92,7 +92,7 @@ export async function bundleShared(
       entryPoints,
       tsConfigPath: fedOptions.tsConfig,
       external: [...additionalExternals, ...externals],
-      outdir: buildOptions.pathToCache,
+      outdir: fedOptions.federationCache.cachePath,
       mappedPaths: config.sharedMappings,
       dev: fedOptions.dev,
       bundleName: buildOptions.bundleName,
@@ -101,8 +101,9 @@ export async function bundleShared(
       chunks:
         (typeof fedOptions.chunks === 'boolean' && fedOptions.chunks) ||
         (typeof fedOptions.chunks === 'object' && !!fedOptions.chunks.enable),
-      platform,
+      platform: buildOptions.platform,
       optimizedMappings: config.features.ignoreUnusedDeps,
+      cache: fedOptions.federationCache,
     });
 
     bundleResult = await getBuildAdapter().build(buildOptions.bundleName);
@@ -110,7 +111,7 @@ export async function bundleShared(
     await getBuildAdapter().dispose(buildOptions.bundleName);
 
     const cachedFiles = bundleResult.map(br => path.basename(br.fileName));
-    rewriteImports(cachedFiles, buildOptions.pathToCache);
+    rewriteImports(cachedFiles, fedOptions.federationCache.cachePath);
   } catch (e) {
     logger.error('Error bundling shared npm package ');
     if (e instanceof Error) {
@@ -185,7 +186,7 @@ function rewriteImports(cachedFiles: string[], cachePath: string) {
 function createOutName(
   pi: PackageInfo,
   configState: string,
-  fedOptions: FederationOptions,
+  fedOptions: NormalizedFederationOptions,
   encName: string
 ) {
   const hashBase = pi.version + '_' + pi.entryPoint + '_' + configState;

@@ -11,7 +11,7 @@ import type { NormalizedFederationConfig } from '../domain/config/federation-con
 import { createBuildResultMap, popFromResultMap } from '../utils/build-result-map.js';
 import { logger } from '../utils/logger.js';
 import { normalize } from '../utils/normalize.js';
-import { type FederationOptions } from '../domain/core/federation-options.contract.js';
+import { type NormalizedFederationOptions } from '../domain/core/federation-options.contract.js';
 import { AbortedError } from '../utils/errors.js';
 import type { EntryPoint } from './../domain/core/build-adapter.contract.js';
 import { rewriteChunkImports } from '../utils/rewrite-chunk-imports.js';
@@ -19,9 +19,8 @@ import { getBuildAdapter } from './build-adapter.js';
 
 export async function bundleExposedAndMappings(
   config: NormalizedFederationConfig,
-  fedOptions: FederationOptions,
+  fedOptions: NormalizedFederationOptions,
   externals: string[],
-  cachePath: string,
   modifiedFiles?: string[],
   signal?: AbortSignal
 ): Promise<ArtifactInfo> {
@@ -64,7 +63,7 @@ export async function bundleExposedAndMappings(
         hash,
         optimizedMappings: config.features.ignoreUnusedDeps,
         isNodeModules: false,
-        cachePath,
+        cache: fedOptions.federationCache,
       });
     }
 
@@ -144,7 +143,7 @@ export async function bundleExposedAndMappings(
 
 export function describeExposed(
   config: NormalizedFederationConfig,
-  options: FederationOptions
+  options: NormalizedFederationOptions
 ): Array<ExposesInfo> {
   const result: Array<ExposesInfo> = [];
 
@@ -169,7 +168,7 @@ export function describeExposed(
 
 export function describeSharedMappings(
   config: NormalizedFederationConfig,
-  fedOptions: FederationOptions
+  fedOptions: NormalizedFederationOptions
 ): Array<SharedInfo> {
   const result: Array<SharedInfo> = [];
 
