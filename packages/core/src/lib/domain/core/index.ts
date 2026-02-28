@@ -9,7 +9,10 @@ export {
   type BuildNotificationOptions,
   BuildNotificationType,
 } from './build-notification-options.contract.js';
-export type { FederationOptions, NormalizedFederationOptions } from './federation-options.contract.js';
+export type {
+  FederationOptions,
+  NormalizedFederationOptions,
+} from './federation-options.contract.js';
 export type {
   EntryPoint,
   NFBuildAdapterOptions,

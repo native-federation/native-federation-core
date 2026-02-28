@@ -9,13 +9,13 @@
   "private": true,
   "devDependencies": {
     "@eslint/js": "^9.39.1",
-    "@nx/esbuild": "22.0.3",
-    "@nx/js": "22.0.3",
-    "@nx/vite": "22.0.3",
-    "@nx/web": "22.0.3",
+    "@nx/esbuild": "~22.5.0",
+    "@nx/js": "~22.5.0",
+    "@nx/vite": "~22.5.0",
+    "@nx/web": "~22.5.0",
     "@playwright/test": "^1.56.1",
-    "@swc-node/register": "~1.9.1",
-    "@swc/core": "~1.5.7",
+    "@swc-node/register": "~1.11.1",
+    "@swc/core": "~1.15.17",
     "@swc/helpers": "~0.5.11",
     "@types/node": "~24.10.0",
     "@typescript-eslint/eslint-plugin": "^8.46.4",
@@ -29,9 +29,9 @@
     "eslint-plugin-prettier": "^5.5.4",
     "globals": "^17.3.0",
     "jiti": "^2.6.1",
-    "jsdom": "^27.3.0",
+    "jsdom": "^28.1.0",
     "msw": "^2.12.3",
-    "nx": "22.0.3",
+    "nx": "~22.5.0",
     "prettier": "^3.8.1",
     "tslib": "^2.3.0",
     "typescript": "~5.9.2",
@@ -42,7 +42,7 @@
   },
   "pnpm": {
     "overrides": {
-      "qs": "^6.14.1"
+      "minimatch": "~10.2.3"
     }
   },
   "workspaces": [

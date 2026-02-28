@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { defineConfig } from 'vitest/config';
+import { playwright } from '@vitest/browser-playwright';
 
 const testPatterns = ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'];
 const integrationTestPatterns = ['src/**/*.integration.spec.ts'];
@@ -40,7 +41,7 @@ export default defineConfig({
           include: integrationTestPatterns,
           browser: {
             enabled: true,
-            provider: 'playwright',
+            provider: playwright(),
             headless: process.env.CI === 'true',
             instances: [
               {
