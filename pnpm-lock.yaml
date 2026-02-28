@@ -139,14 +139,14 @@ importers:
   packages/node:
     dependencies:
       '@softarc/native-federation-runtime':
-        specifier: 4.0.0-RC5
-        version: 4.0.0-RC5(typescript@5.9.3)
+        specifier: 4.0.0-RC6
+        version: 4.0.0-RC6(typescript@5.9.3)
 
   packages/runtime:
     dependencies:
       '@softarc/native-federation':
-        specifier: 4.0.0-RC5
-        version: 4.0.0-RC5(typescript@5.9.3)
+        specifier: 4.0.0-RC6
+        version: 4.0.0-RC6(typescript@5.9.3)
     devDependencies:
       '@types/node':
         specifier: ~24.10.0
@@ -1455,11 +1455,11 @@ packages:
     resolution: {integrity: sha512-t09vSN3MdfsyCHoFcTRCH/iUtG7OJ0CsjzB8cjAmKc/va/kIgeDI/TxsigdncE/4be734m0cvIYwNaV4i2XqAw==}
     engines: {node: '>=10'}
 
-  '@softarc/native-federation-runtime@4.0.0-RC5':
-    resolution: {integrity: sha512-p3kk7+zegECTExpw7ocFfWGYyIgtYSeZ2kiOR5PqUxVb1+G8zHNg8UxIsmiycXn4U7dxCDhesDp7/XJEQ107VA==}
+  '@softarc/native-federation-runtime@4.0.0-RC6':
+    resolution: {integrity: sha512-NwV7x2QCxYiCqkHmqV1SBdppyYm1szUf62Lywy9SI0EernqWszbtDNiyoqh6XuWmx/LMUcuVMr3/vG0WKBjdKA==}
 
-  '@softarc/native-federation@4.0.0-RC5':
-    resolution: {integrity: sha512-pEIqrYuzoWKJaCp7YsZaWTAgDLLBlUf0+y3ThJvYYbJ4Q0iNWrj/nHIKM9s8rW7mOpHITdchpXHxnaXxj7rKuw==}
+  '@softarc/native-federation@4.0.0-RC6':
+    resolution: {integrity: sha512-JVitS9pPkDVdI6t6XhhbtkEFNHw4UvjTiVokTNMvHxA/O+IbSBf/+/HwgX34x2lphC5q3O0jzzlu4+HFPKLxug==}
 
   '@softarc/sheriff-core@0.19.6':
     resolution: {integrity: sha512-KACxHG9sS7kNWgnnBODzdr14kMLMrJVlQKc+tViUP03p2fRwNhESOA49bz51Yn7dro1mbtMmmFjICLmZSJDZZA==}
@@ -5457,13 +5457,13 @@ snapshots:
 
   '@sindresorhus/is@4.6.0': {}
 
-  '@softarc/native-federation-runtime@4.0.0-RC5(typescript@5.9.3)':
+  '@softarc/native-federation-runtime@4.0.0-RC6(typescript@5.9.3)':
     dependencies:
-      '@softarc/native-federation': 4.0.0-RC5(typescript@5.9.3)
+      '@softarc/native-federation': 4.0.0-RC6(typescript@5.9.3)
     transitivePeerDependencies:
       - typescript
 
-  '@softarc/native-federation@4.0.0-RC5(typescript@5.9.3)':
+  '@softarc/native-federation@4.0.0-RC6(typescript@5.9.3)':
     dependencies:
       '@softarc/sheriff-core': 0.19.6(typescript@5.9.3)
       chalk: 5.6.2
