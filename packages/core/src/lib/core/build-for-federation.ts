@@ -27,30 +27,16 @@ export async function buildForFederation(
   externals: string[],
   signal?: AbortSignal
 ): Promise<FederationInfo> {
-  // 1. Caching
+  // 1. Setup
   fedOptions.federationCache.cachePath = path.join(
     fedOptions.federationCache.cachePath,
     resolveProjectName(config)
   );
+  logger.info('Building federation artifacts');
 
   const start = process.hrtime();
 
-  // 2. Shared mappings and exposed modules
-  const artifactInfo = await bundleExposedAndMappings(
-    config,
-    fedOptions,
-    externals,
-    undefined,
-    signal
-  );
-  logger.measure(start, '[build artifacts] - To bundle all mappings and exposed.');
-
-  if (signal?.aborted)
-    throw new AbortedError('[buildForFederation] After exposed-and-mappings bundle');
-
-  const exposedInfo = !artifactInfo ? describeExposed(config, fedOptions) : artifactInfo.exposes;
-
-  // 3. Externals
+  // 2. Externals
   if (fedOptions.federationCache.externals.length > 0) {
     logger.info('Checksum matched, re-using cached externals.');
   }
@@ -129,6 +115,21 @@ export async function buildForFederation(
 
     if (signal?.aborted) throw new AbortedError('[buildForFederation] After separate-node bundle');
   }
+
+  // 2. Shared mappings and exposed modules
+  const artifactInfo = await bundleExposedAndMappings(
+    config,
+    fedOptions,
+    externals,
+    undefined,
+    signal
+  );
+  logger.measure(start, '[build artifacts] - To bundle all mappings and exposed.');
+
+  if (signal?.aborted)
+    throw new AbortedError('[buildForFederation] After exposed-and-mappings bundle');
+
+  const exposedInfo = !artifactInfo ? describeExposed(config, fedOptions) : artifactInfo.exposes;
 
   const sharedMappingInfo = !artifactInfo
     ? describeSharedMappings(config, fedOptions)

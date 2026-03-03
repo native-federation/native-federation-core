@@ -9,7 +9,9 @@ export class RebuildQueue {
   private activeBuilds: Map<number, BuildControl> = new Map();
   private buildCounter = 0;
 
-  async enqueue(rebuildFn: (signal: AbortSignal) => Promise<void>): Promise<void> {
+  async track(
+    rebuildFn: (signal: AbortSignal) => Promise<{ success: boolean; cancelled?: boolean }>
+  ): Promise<{ success: boolean; cancelled?: boolean }> {
     const buildId = ++this.buildCounter;
 
     const pendingCancellations = Array.from(this.activeBuilds.values()).map(buildInfo => {
@@ -39,12 +41,14 @@ export class RebuildQueue {
     };
     this.activeBuilds.set(buildId, control);
 
+    let status = { success: false };
     try {
-      await rebuildFn(control.controller.signal);
+      status = await rebuildFn(control.controller.signal);
     } finally {
       control.buildFinished.resolve();
       this.activeBuilds.delete(buildId);
     }
+    return status;
   }
 
   dispose(): void {

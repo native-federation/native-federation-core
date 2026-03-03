@@ -43,8 +43,6 @@ export async function bundleExposedAndMappings(
 
   const hash = !fedOptions.dev;
 
-  logger.info('Building federation artifacts');
-
   let result;
   try {
     if (!modifiedFiles) {
