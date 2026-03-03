@@ -34,8 +34,6 @@ export async function buildForFederation(
   );
   logger.info('Building federation artifacts');
 
-  const start = process.hrtime();
-
   // 2. Externals
   if (fedOptions.federationCache.externals.length > 0) {
     logger.info('Checksum matched, re-using cached externals.');
@@ -117,6 +115,8 @@ export async function buildForFederation(
   }
 
   // 2. Shared mappings and exposed modules
+  const start = process.hrtime();
+
   const artifactInfo = await bundleExposedAndMappings(
     config,
     fedOptions,

@@ -5,13 +5,18 @@ interface BuildControl {
   buildFinished: { resolve: () => void; promise: Promise<void> };
 }
 
+export type TrackResult<T = never> =
+  | { type: 'completed'; result: { success: boolean; cancelled?: boolean } }
+  | { type: 'interrupted'; value: T };
+
 export class RebuildQueue {
   private activeBuilds: Map<number, BuildControl> = new Map();
   private buildCounter = 0;
 
-  async track(
-    rebuildFn: (signal: AbortSignal) => Promise<{ success: boolean; cancelled?: boolean }>
-  ): Promise<{ success: boolean; cancelled?: boolean }> {
+  async track<T = never>(
+    rebuildFn: (signal: AbortSignal) => Promise<{ success: boolean; cancelled?: boolean }>,
+    interruptPromise?: Promise<T>
+  ): Promise<TrackResult<T>> {
     const buildId = ++this.buildCounter;
 
     const pendingCancellations = Array.from(this.activeBuilds.values()).map(buildInfo => {
@@ -41,14 +46,37 @@ export class RebuildQueue {
     };
     this.activeBuilds.set(buildId, control);
 
-    let status = { success: false };
+    const buildPromise = rebuildFn(control.controller.signal)
+      .then(result => ({ type: 'completed' as const, result }))
+      .catch(error => ({ type: 'completed' as const, result: { success: false, error } }));
+
+    let trackResult: TrackResult<T>;
+
     try {
-      status = await rebuildFn(control.controller.signal);
+      if (interruptPromise) {
+        const interruptRacer = interruptPromise.then(value => ({
+          type: 'interrupted' as const,
+          value,
+        }));
+
+        const raceResult = await Promise.race([buildPromise, interruptRacer]);
+
+        if (raceResult.type === 'interrupted') {
+          control.controller.abort();
+          await buildPromise;
+          trackResult = raceResult;
+        } else {
+          trackResult = raceResult;
+        }
+      } else {
+        trackResult = await buildPromise;
+      }
     } finally {
       control.buildFinished.resolve();
       this.activeBuilds.delete(buildId);
     }
-    return status;
+
+    return trackResult;
   }
 
   dispose(): void {
