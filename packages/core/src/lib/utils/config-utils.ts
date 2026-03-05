@@ -1,4 +1,4 @@
-import { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
+import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
 import { logger } from './logger.js';
 import { normalizePackageName } from './normalize.js';
 

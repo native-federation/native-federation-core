@@ -27,6 +27,7 @@ export async function buildForFederation(
   externals: string[],
   signal?: AbortSignal
 ): Promise<FederationInfo> {
+  
   // 1. Setup
   fedOptions.federationCache.cachePath = path.join(
     fedOptions.federationCache.cachePath,

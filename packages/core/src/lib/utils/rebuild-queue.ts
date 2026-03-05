@@ -19,28 +19,25 @@ export class RebuildQueue {
   ): Promise<TrackResult<T>> {
     const buildId = ++this.buildCounter;
 
-    const pendingCancellations = Array.from(this.activeBuilds.values()).map(buildInfo => {
-      buildInfo.controller.abort();
-      return buildInfo.buildFinished.promise;
+    const pendingCancellations = Array.from(this.activeBuilds.values()).map(buildControl => {
+      buildControl.controller.abort();
+      return buildControl.buildFinished.promise;
     });
 
     if (pendingCancellations.length > 0) {
       logger.info(`Aborting ${pendingCancellations.length} bundling task(s)..`);
-    }
-
-    if (pendingCancellations.length > 0) {
       await Promise.all(pendingCancellations);
     }
 
-    let buildFinished: () => void;
+    let resolveCompletion: () => void;
     const completionPromise = new Promise<void>(resolve => {
-      buildFinished = resolve;
+      resolveCompletion = resolve;
     });
 
     const control: BuildControl = {
       controller: new AbortController(),
       buildFinished: {
-        resolve: buildFinished!,
+        resolve: resolveCompletion!,
         promise: completionPromise,
       },
     };
@@ -54,12 +51,12 @@ export class RebuildQueue {
 
     try {
       if (interruptPromise) {
-        const interruptRacer = interruptPromise.then(value => ({
+        const interruptResult = interruptPromise.then(value => ({
           type: 'interrupted' as const,
           value,
         }));
 
-        const raceResult = await Promise.race([buildPromise, interruptRacer]);
+        const raceResult = await Promise.race([buildPromise, interruptResult]);
 
         if (raceResult.type === 'interrupted') {
           control.controller.abort();
@@ -80,8 +77,8 @@ export class RebuildQueue {
   }
 
   dispose(): void {
-    for (const [_, buildInfo] of this.activeBuilds) {
-      buildInfo.controller.abort();
+    for (const buildControl of this.activeBuilds.values()) {
+      buildControl.controller.abort();
     }
     this.activeBuilds.clear();
   }
