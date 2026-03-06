@@ -5,7 +5,7 @@ export * from './lib/utils/errors.js';
 export { logger, setLogLevel } from './lib/utils/logger.js';
 
 export type { MappedPath } from './lib/domain/utils/mapped-path.contract.js';
-export { RebuildQueue } from './lib/utils/rebuild-queue.js';
+export { RebuildQueue, type TrackResult } from './lib/utils/rebuild-queue.js';
 
 export { AbortedError } from './lib/utils/errors.js';
 export {
