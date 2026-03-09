@@ -158,7 +158,9 @@ export async function bundleShared(
     result.forEach(external => {
       external.bundle = buildOptions.bundleName;
     });
-    exportedChunks = { [buildOptions.bundleName]: getChunkFileNames(chunks) };
+    if (chunks.length > 0) {
+      exportedChunks = { [buildOptions.bundleName]: getChunkFileNames(chunks) };
+    }
   } else {
     addChunksToResult(chunks, result);
   }
