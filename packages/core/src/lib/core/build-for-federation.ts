@@ -27,7 +27,6 @@ export async function buildForFederation(
   externals: string[],
   signal?: AbortSignal
 ): Promise<FederationInfo> {
-  
   // 1. Setup
   fedOptions.federationCache.cachePath = path.join(
     fedOptions.federationCache.cachePath,
@@ -65,7 +64,7 @@ export async function buildForFederation(
     }
 
     if (Object.keys(sharedServer).length > 0) {
-      notifyBundling('browser-shared');
+      notifyBundling('server-shared');
       const start = process.hrtime();
       const sharedPackageInfoServer = await bundleShared(
         sharedServer,
@@ -82,7 +81,7 @@ export async function buildForFederation(
     }
 
     if (Object.keys(separateBrowser).length > 0) {
-      notifyBundling('browser-shared');
+      notifyBundling('browser-separate');
       const start = process.hrtime();
       const separatePackageInfoBrowser = await bundleSeparatePackages(
         separateBrowser,
@@ -98,7 +97,7 @@ export async function buildForFederation(
     }
 
     if (Object.keys(separateServer).length > 0) {
-      notifyBundling('browser-shared');
+      notifyBundling('server-separate');
       const start = process.hrtime();
       const separatePackageInfoServer = await bundleSeparatePackages(
         separateServer,
@@ -228,7 +227,7 @@ async function bundleSeparatePackages(
 }
 
 function notifyBundling(platform: string) {
-  logger.info('Preparing shared npm packages for the platform ' + platform);
+  logger.info(`Preparing shared npm packages with bundle type "${platform}"`);
   logger.notice('This only needs to be done once, as results are cached');
   logger.notice("Skip packages you don't want to share in your federation config");
 }

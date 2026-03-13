@@ -158,7 +158,9 @@ export async function bundleShared(
     result.forEach(external => {
       external.bundle = buildOptions.bundleName;
     });
-    exportedChunks = { [buildOptions.bundleName]: getChunkFileNames(chunks) };
+    if (chunks.length > 0) {
+      exportedChunks = { [buildOptions.bundleName]: getChunkFileNames(chunks) };
+    }
   } else {
     addChunksToResult(chunks, result);
   }
@@ -167,6 +169,7 @@ export async function bundleShared(
     checksum,
     externals: result,
     files: bundleResult.map(r => r.fileName.split(path.sep).pop() ?? r.fileName),
+    chunks: exportedChunks,
   });
 
   bundleCache.copyFiles(path.join(fedOptions.workspaceRoot, fedOptions.outputPath));
