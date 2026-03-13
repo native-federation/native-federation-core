@@ -149,9 +149,9 @@ The `shareAll` helper shares all your dependencies defined in your `package.json
 ```typescript
 // shell/federation.config.js
 
-const { withNativeFederation, shareAll } = require('@softarc/native-federation/build');
+import {withNativeFederation, shareAll} from '@softarc/native-federation/config';
 
-module.exports = withNativeFederation({
+export default withNativeFederation({
   name: 'host',
 
   shared: {
@@ -174,9 +174,9 @@ This might come in handy in an mono repo scenario and when doing some experiment
 ```typescript
 // shell/federation.config.js
 
-const { withNativeFederation, shareAll } = require('@softarc/native-federation/build');
+import {withNativeFederation, shareAll} from '@softarc/native-federation/config';
 
-module.exports = withNativeFederation({
+export default withNativeFederation({
   name: 'host',
 
   shared: {
@@ -318,7 +318,9 @@ The API for configuring and using Native Federation is very similar to the one p
 The `shareAll`-helper used here shares all dependencies found in your `package.json`. Hence, they only need to be loaded once (instead of once per remote and host). If you don't want to share all of them, you can opt-out of sharing by using the `skip` option:
 
 ```typescript
-module.exports = withNativeFederation({
+import {withNativeFederation, shareAll} from '@softarc/native-federation/config';
+
+export default withNativeFederation({
   [...]
 
   // Don't share my-lib
@@ -327,7 +329,7 @@ module.exports = withNativeFederation({
   ]
 
   [...]
-}
+})
 ```
 
 ### Sharing Mapped Paths (Monorepo-internal Libraries)
@@ -353,10 +355,10 @@ If you don't want to share (all of) them, put their names into the skip array (s
 
 When configuring a remote, you can expose files that can be loaded into the shell at runtime:
 
-```javascript
-const { withNativeFederation, shareAll } = require('@softarc/native-federation/build');
+```javascript 
+import {withNativeFederation, shareAll} from '@softarc/native-federation/config';
 
-module.exports = withNativeFederation({
+export default withNativeFederation({
   name: 'mfe1',
 
   exposes: {
