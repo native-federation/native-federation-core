@@ -2,6 +2,7 @@ import type { NormalizedFederationConfig } from '../domain/config/federation-con
 import type { FederationOptions } from '../domain/core/federation-options.contract.js';
 import * as path from 'path';
 import * as fs from 'fs';
+import { pathToFileURL } from 'url';
 import { removeUnusedDeps } from './remove-unused-deps.js';
 
 export async function loadFederationConfig(
@@ -13,7 +14,8 @@ export async function loadFederationConfig(
     throw new Error('Expected ' + fullConfigPath);
   }
 
-  const config = (await import(fullConfigPath))?.default as NormalizedFederationConfig;
+  const config: NormalizedFederationConfig = (await import(pathToFileURL(fullConfigPath).href))
+    ?.default;
 
   if (config.features.ignoreUnusedDeps && !fedOptions.entryPoint) {
     throw new Error(
@@ -22,8 +24,6 @@ export async function loadFederationConfig(
   }
 
   if (config.features.ignoreUnusedDeps) {
-    // const entryPoint = path.join(fedOptions.workspaceRoot, fedOptions.entryPoint ?? '');
-
     return removeUnusedDeps(config, fedOptions.entryPoint ?? '', fedOptions.workspaceRoot);
   }
 
