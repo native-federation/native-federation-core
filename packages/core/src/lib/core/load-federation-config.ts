@@ -17,13 +17,15 @@ export async function loadFederationConfig(
   const config: NormalizedFederationConfig = (await import(pathToFileURL(fullConfigPath).href))
     ?.default;
 
-  if (config.features.ignoreUnusedDeps && !fedOptions.entryPoint) {
+  const shouldRemoveUnusedDeps = config.features.ignoreUnusedDeps !== false;
+
+  if (shouldRemoveUnusedDeps && !fedOptions.entryPoint) {
     throw new Error(
-      `The feature ignoreUnusedDeps needs the application's entry point. Please set it in your federation options!`
+      `The feature ignoreUnusedDeps needs the application's entry point. Please set it in your federation options or disable this feature explicitly in your federation.config.js.`
     );
   }
 
-  if (config.features.ignoreUnusedDeps) {
+  if (shouldRemoveUnusedDeps) {
     return removeUnusedDeps(config, fedOptions.entryPoint ?? '', fedOptions.workspaceRoot);
   }
 

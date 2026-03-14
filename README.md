@@ -268,7 +268,7 @@ shared: share({
 })
 ```
 
-Since v21 it's also possible to resolve Glob exports by enabling the `globResolve` property:
+By default, all entrypoints of a package are considered, you can disable expensive glob resolves using the `globResolve` property:
 
 ```typescript
 shared: share({
@@ -282,7 +282,7 @@ shared: share({
 })
 ```
 
-This is disabled by default since it will create a bundle of every valid exported file it finds, **Only use this feature in combination with `ignoreUnusedDeps` flag**. If you want to specifically skip certain parts of the glob export, you can also use the wildcard in the skip section:
+This is enabled by default but might not always desirable since it will create a bundle of every valid exported file it finds, **Therefore it is recommended not to disable the `ignoreUnusedDeps` feature**. If you want to specifically skip certain parts of the glob export, you can also use the wildcard in the skip section:
 
 ```typescript
 shared: share({
@@ -296,7 +296,7 @@ shared: share({
 })
 ```
 
-Finally, it's also possible to break out of the "removeUnusedDep" for a specific external if desired, for example when sharing a whole suite of external modules. This can be handy when you want to avoid the chance of cross-version secondary entrypoints being used by the different micro frontends. E.g. mfe1 uses @angular/core v20.1.0 and mfe2 uses @angular/core/rxjs-interop v20.0.8, then you might want to use consistent use of v20.1.0 so rxjs-interop should be exported by mfe1. The "keepAll" prop allows you to enforce this:
+Finally, it's also possible to break out of the "removeUnusedDep" feature for specific externals if desired, for example when sharing a whole suite of interconnected external dependencies like @angular/core. This can be handy when you want to avoid the chance of cross-version secondary entrypoints being used by the different micro frontends. E.g. mfe1 uses @angular/core v20.1.0 and mfe2 uses @angular/core/rxjs-interop v20.0.8, then you might want to use consistent use of v20.1.0 so rxjs-interop should be exported by mfe1. The "keepAll" prop allows you to enforce this:
 
 ```typescript
 shared: share({
