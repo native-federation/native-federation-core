@@ -2,6 +2,9 @@
 
 Native Federation is a "browser-native" implementation of the successful mental model behind wepback Module Federation for building Micro Frontends and plugin-based solutions. It can be **used with any framework and build tool** for implementing **Micro Frontends** and plugin-based architectures.
 
+> [!WARNING]
+> This is our v4 version which is currently in beta and contains breaking changes. For the v3 (stable) version, check out the [module-federation-plugin repository](https://github.com/angular-architects/module-federation-plugin/tree/main/libs/native-federation-core).
+
 ## Features
 
 - ✅ Mental Model of Module Federation
@@ -26,7 +29,7 @@ Also, other higher level abstractions on top of this core library are possible.
 
 ## About the Mental Model
 
-The underlying mental model allows for runtime integration: Loading a part of a separately built and deployed application into your's. This is needed for Micro Frontend architectures but also for plugin-based solutions.
+The underlying mental model allows for runtime integration: Loading a part of a separately built and deployed application into your host. This is needed for Micro Frontend architectures but also for plugin-based solutions.
 
 For this, the mental model introduces several concepts:
 
@@ -49,12 +52,9 @@ For this, the mental model introduces several concepts:
 Big thanks to:
 
 - [Zack Jackson](https://twitter.com/ScriptedAlchemy) for originally coming up with the great idea of Module Federation and its successful mental model
-- [Tobias Koppers](https://twitter.com/wSokra) for helping to make Module Federation a first class citizen of webpack
 - [Florian Rappl](https://twitter.com/FlorianRappl) for an good discussion about these topics during a speakers dinner in Nuremberg
-- [The Nx Team](https://twitter.com/NxDevTools), esp. [Colum Ferry](https://twitter.com/FerryColum), who seamlessly integrated webpack Module Federation into Nx and hence helped to spread the word about it (Nx + Module Federation === ❤️)
 - [Michael Egger-Zikes](https://twitter.com/MikeZks) for contributing to our Module Federation efforts and brining in valuable feedback
 - The Angular CLI-Team, esp. [Alan Agius](https://twitter.com/AlanAgius4) and [Charles Lyding](https://twitter.com/charleslyding), for working on the experimental esbuild builder for Angular
-- [Giorgio Boa](https://twitter.com/giorgio_boa) for implementing the awesome vite plugin for module federation.
 
 ## Using this Library
 
@@ -64,17 +64,18 @@ Big thanks to:
 npm i @softarc/native-federation
 ```
 
-As Native Federation is tooling agnostic, we need an adapter to make it work with specific build tools. The package `@softarc/native-federation-esbuild` contains a simple adapter that uses esbuild:
+As Native Federation is tooling agnostic, we need an adapter to make it work with specific build tools. The package `@softarc/native-federation-esbuild` contains a simple adapter that uses esbuild.
 
 ```
 npm i @softarc/native-federation-esbuild
 ```
 
-In some situations, this builder also delegates to rollup. This is necessary b/c esbuild does not provide all features we need (yet). We hope to minimize the usage of rollup in the future.
-
-You can also provide your own adapter by providing a function aligning with the `BuildAdapter` type.
+You can also provide your own adapter by providing a function aligning with the `NFBuildAdapter` [[src](https://github.com/native-federation/native-federation-core/blob/main/packages/core/src/lib/core/build-adapter.ts)] type.
 
 ### Augment your Build Process
+
+> [!WARNING]
+> The esbuild adapter is currently under construction, check the progress here: https://github.com/native-federation/esbuild-adapter
 
 Just call three helper methods provided by our `federationBuilder` in your build process to adjust it for Native Federation.
 
@@ -83,7 +84,7 @@ import * as esbuild from 'esbuild';
 import * as path from 'path';
 import * as fs from 'fs';
 import { esBuildAdapter } from '@softarc/native-federation-esbuild';
-import { federationBuilder } from '@softarc/native-federation/build';
+import { federationBuilder } from '@softarc/native-federation';
 
 
 const projectName = 'shell';
@@ -91,7 +92,7 @@ const tsConfig = 'tsconfig.json';
 const outputPath = `dist/${projectName}`;
 
 /*
-  *  Step 1: Initialize Native Federation
+ *  Step 1: Initialize Native Federation
 */
 await federationBuilder.init({
     options: {
@@ -103,9 +104,9 @@ await federationBuilder.init({
     },
 
     /*
-        * As this core lib is tooling-agnostic, you
-        * need a simple adapter for your bundler.
-        * It's just a matter of one function.
+      * As this core lib is tooling-agnostic, you
+      * need a simple adapter for your bundler.
+      * It's just a matter of one function.
     */
     adapter: esBuildAdapter
 });
@@ -266,8 +267,6 @@ shared: share({
     [...]
 })
 ```
-
-### includeSecondaries
 
 Since v21 it's also possible to resolve Glob exports by enabling the `globResolve` property:
 

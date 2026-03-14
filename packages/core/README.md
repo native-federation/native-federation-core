@@ -149,7 +149,7 @@ The `shareAll` helper shares all your dependencies defined in your `package.json
 ```typescript
 // shell/federation.config.js
 
-import {withNativeFederation, shareAll} from '@softarc/native-federation/config';
+import { withNativeFederation, shareAll } from '@softarc/native-federation/config';
 
 export default withNativeFederation({
   name: 'host',
@@ -174,7 +174,7 @@ This might come in handy in an mono repo scenario and when doing some experiment
 ```typescript
 // shell/federation.config.js
 
-import {withNativeFederation, shareAll} from '@softarc/native-federation/config';
+import { withNativeFederation, shareAll } from '@softarc/native-federation/config';
 
 export default withNativeFederation({
   name: 'host',
@@ -355,8 +355,8 @@ If you don't want to share (all of) them, put their names into the skip array (s
 
 When configuring a remote, you can expose files that can be loaded into the shell at runtime:
 
-```javascript 
-import {withNativeFederation, shareAll} from '@softarc/native-federation/config';
+```javascript
+import { withNativeFederation, shareAll } from '@softarc/native-federation/config';
 
 export default withNativeFederation({
   name: 'mfe1',
