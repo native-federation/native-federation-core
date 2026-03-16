@@ -10,6 +10,7 @@ import {
 import { getExternals } from './get-externals.js';
 import { normalizeFederationOptions } from './normalize-options.js';
 import type { NFBuildAdapter } from '../domain/core/build-adapter.contract.js';
+import { rebuildForFederation } from './rebuild-for-federation.js';
 
 export interface BuildHelperParams {
   options: FederationOptions;
@@ -35,8 +36,18 @@ async function init(params: BuildHelperParams): Promise<void> {
   externals = getExternals(config);
 }
 
-async function build(signal?: AbortSignal): Promise<void> {
-  fedInfo = await buildForFederation(config, options, externals, signal);
+async function build(opts: { modifiedFiles?: string[]; signal?: AbortSignal } = {}): Promise<void> {
+  if (!fedInfo) {
+    fedInfo = await buildForFederation(config, options, externals, opts.signal);
+  } else {
+    fedInfo = await rebuildForFederation(
+      config,
+      options,
+      externals,
+      opts.modifiedFiles ?? [],
+      opts.signal
+    );
+  }
 }
 
 async function close(): Promise<void> {
