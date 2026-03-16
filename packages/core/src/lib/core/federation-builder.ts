@@ -8,9 +8,8 @@ import {
   type NormalizedFederationOptions,
 } from '../domain/core/federation-options.contract.js';
 import { getExternals } from './get-externals.js';
-import { loadFederationConfig } from './load-federation-config.js';
+import { normalizeFederationOptions } from './normalize-options.js';
 import type { NFBuildAdapter } from '../domain/core/build-adapter.contract.js';
-import { normalizeFederationOptions } from './normalize-federation-options.js';
 
 export interface BuildHelperParams {
   options: FederationOptions;
@@ -19,21 +18,25 @@ export interface BuildHelperParams {
 
 let externals: string[] = [];
 let config: NormalizedFederationConfig;
-let fedOptions: NormalizedFederationOptions;
+let options: NormalizedFederationOptions;
 let fedInfo: FederationInfo;
 
 async function init(params: BuildHelperParams): Promise<void> {
   setBuildAdapter(params.adapter);
-  fedOptions = normalizeFederationOptions(params.options);
   useWorkspace(params.options.workspaceRoot);
   usePackageJson(params.options.packageJson);
-  config = await loadFederationConfig(fedOptions);
   params.options.workspaceRoot = getConfigContext().workspaceRoot ?? params.options.workspaceRoot;
+
+  const normalized = await normalizeFederationOptions(params.options);
+
+  options = normalized.options;
+  config = normalized.config;
+
   externals = getExternals(config);
 }
 
 async function build(signal?: AbortSignal): Promise<void> {
-  fedInfo = await buildForFederation(config, fedOptions, externals, signal);
+  fedInfo = await buildForFederation(config, options, externals, signal);
 }
 
 async function close(): Promise<void> {
