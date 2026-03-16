@@ -1,28 +1,16 @@
 import type { PreparedSkipList, SkipFn, SkipList } from '../domain/config/skip-list.contract.js';
 
 export const DEFAULT_SKIP_LIST: SkipList = [
-  '@softarc/native-federation-runtime',
   '@softarc/native-federation',
   '@softarc/native-federation-core',
   '@softarc/native-federation-node',
   '@softarc/native-federation-esbuild',
-  '@angular-architects/native-federation',
-  '@angular-architects/native-federation-runtime',
+  '@softarc/native-federation-runtime',
+  '@softarc/native-federation-orchestrator',
+  'vanilla-native-federation',
   'es-module-shims',
-  'zone.js',
   'tslib/',
-  '@angular/localize',
-  '@angular/localize/init',
-  '@angular/localize/tools',
-  // '@angular/platform-server',
-  // '@angular/platform-server/init',
-  // '@angular/ssr',
-  /\/schematics(\/|$)/,
-  /^@nx\/angular/,
-  pkg => pkg.startsWith('@angular/') && !!pkg.match(/\/testing(\/|$)/),
   pkg => pkg.startsWith('@types/'),
-  'express',
-  // (pkg) => pkg.startsWith('@angular/common/locales'),
 ];
 
 export function prepareSkipList(skipList: SkipList): PreparedSkipList {

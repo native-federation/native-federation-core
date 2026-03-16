@@ -9,6 +9,7 @@ export interface FederationConfig {
   name?: string;
   exposes?: Record<string, string>;
   shared?: SharedExternalsConfig;
+  platform?: 'browser' | 'node';
   sharedMappings?: Array<string>;
   skip?: SkipList;
   externals?: string[];

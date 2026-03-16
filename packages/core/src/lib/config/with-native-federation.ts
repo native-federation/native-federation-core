@@ -8,7 +8,6 @@ import { isInSkipList, prepareSkipList } from './default-skip-list.js';
 import { type PreparedSkipList } from '../domain/config/skip-list.contract.js';
 
 import { logger } from '../utils/logger.js';
-import { DEFAULT_SERVER_DEPS_LIST } from '../core/default-server-deps-list.js';
 import type {
   NormalizedExternalConfig,
   NormalizedSharedExternalsConfig,
@@ -32,26 +31,7 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
     ...(config.shareScope && { shareScope: config.shareScope }),
   };
 
-  // This is for being backwards compatible
-  if (!normalized.features.ignoreUnusedDeps) {
-    normalized.shared = filterShared(normalized.shared);
-  }
-
   return normalized;
-}
-
-function filterShared(shared: NormalizedSharedExternalsConfig): NormalizedSharedExternalsConfig {
-  const keys = Object.keys(shared).filter(k => !k.startsWith('@angular/common/locales'));
-
-  const filtered = keys.reduce(
-    (acc, curr) => ({
-      ...acc,
-      [curr]: shared[curr],
-    }),
-    {}
-  );
-
-  return filtered;
 }
 
 function normalizeShared(
@@ -80,7 +60,7 @@ function normalizeShared(
         version: sharedConfig.version,
         includeSecondaries: sharedConfig.includeSecondaries,
         packageInfo: sharedConfig.packageInfo as NormalizedExternalConfig['packageInfo'],
-        platform: sharedConfig.platform ?? getDefaultPlatform(cur),
+        platform: sharedConfig.platform ?? config.platform ?? 'browser',
         build: sharedConfig.build ?? 'default',
         ...(sharedConfig.shareScope && { shareScope: sharedConfig.shareScope }),
       };
@@ -116,12 +96,4 @@ function normalizeSharedMappings(
   }
 
   return result;
-}
-
-function getDefaultPlatform(cur: string): 'browser' | 'node' {
-  if (DEFAULT_SERVER_DEPS_LIST.find(e => cur.startsWith(e))) {
-    return 'node';
-  } else {
-    return 'browser';
-  }
 }

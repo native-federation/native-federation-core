@@ -1,7 +1,7 @@
 import type { FederationInfo } from '../domain/core/federation-info.contract.js';
 import { getConfigContext, usePackageJson, useWorkspace } from '../config/configuration-context.js';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
-import { setBuildAdapter } from './build-adapter.js';
+import { getBuildAdapter, setBuildAdapter } from './build-adapter.js';
 import { buildForFederation } from './build-for-federation.js';
 import {
   type FederationOptions,
@@ -36,9 +36,14 @@ async function build(signal?: AbortSignal): Promise<void> {
   fedInfo = await buildForFederation(config, fedOptions, externals, signal);
 }
 
+async function close(): Promise<void> {
+  return getBuildAdapter().dispose();
+}
+
 export const federationBuilder = {
   init,
   build,
+  close,
   get federationInfo() {
     return fedInfo;
   },
