@@ -1,13 +1,21 @@
 import type { MappedPath } from '../utils/mapped-path.contract.js';
 import type { FederationCache } from './federation-cache.contract.js';
 
+export interface NFBuildAdapterContext<TBundlerContext = unknown> {
+  ctx: TBundlerContext;
+  outdir: string;
+  dev: boolean;
+  name: string;
+  isExposedOrMapping: boolean;
+}
+
 export interface NFBuildAdapter {
-  setup(options: NFBuildAdapterOptions): Promise<void>;
+  setup(name: string, options: NFBuildAdapterOptions): Promise<void>;
 
   build(
     name: string,
     opts?: {
-      files?: string[];
+      modifiedFiles?: string[];
       signal?: AbortSignal;
     }
   ): Promise<NFBuildAdapterResult[]>;
@@ -27,8 +35,7 @@ export interface NFBuildAdapterOptions<TBundlerCache = unknown> {
   external: string[];
   outdir: string;
   mappedPaths: MappedPath[];
-  bundleName: string;
-  isNodeModules: boolean;
+  isMappingOrExposed: boolean;
   dev?: boolean;
   watch?: boolean;
   chunks?: boolean;

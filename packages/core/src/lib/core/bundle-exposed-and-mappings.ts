@@ -46,7 +46,7 @@ export async function bundleExposedAndMappings(
   let result;
   try {
     if (!modifiedFiles) {
-      await getBuildAdapter().setup({
+      await getBuildAdapter().setup('mapping-or-exposed', {
         entryPoints,
         outdir: fedOptions.outputPath,
         tsConfigPath: fedOptions.tsConfig,
@@ -54,20 +54,19 @@ export async function bundleExposedAndMappings(
         dev: !!fedOptions.dev,
         watch: fedOptions.watch,
         mappedPaths: config.sharedMappings,
-        bundleName: 'mapping-or-exposed',
         chunks:
           (typeof fedOptions.chunks === 'boolean' && fedOptions.chunks) ||
           (typeof fedOptions.chunks === 'object' && !!fedOptions.chunks.enable),
         hash,
         optimizedMappings: config.features.ignoreUnusedDeps,
-        isNodeModules: false,
+        isMappingOrExposed: false,
         cache: fedOptions.federationCache,
       });
     }
 
     result = await getBuildAdapter().build('mapping-or-exposed', {
       signal,
-      files: modifiedFiles,
+      modifiedFiles,
     });
 
     if (signal?.aborted) {
