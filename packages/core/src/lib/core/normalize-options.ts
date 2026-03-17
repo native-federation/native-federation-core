@@ -51,7 +51,7 @@ export async function normalizeFederationOptions<TBundlerCache = undefined>(
 
   const normalizedOptions: NormalizedFederationOptions<TBundlerCache> = {
     ...options,
-    entryPoints: options.entryPoints ?? Object.keys(config.exposes ?? {}),
+    entryPoints: options.entryPoints ?? Object.values(config.exposes ?? {}),
     federationCache,
   };
 

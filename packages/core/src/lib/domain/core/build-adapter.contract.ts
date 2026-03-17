@@ -6,7 +6,7 @@ export interface NFBuildAdapterContext<TBundlerContext = unknown> {
   outdir: string;
   dev: boolean;
   name: string;
-  isExposedOrMapping: boolean;
+  isMappingOrExposed: boolean;
 }
 
 export interface NFBuildAdapter {

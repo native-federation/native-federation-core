@@ -133,14 +133,14 @@ function getSecondaries(
 ): SharedExternalsConfig | null {
   let exclude: string[] = [];
 
-  let resolveGlob = true;
+  let resolveGlob = false;
   if (typeof includeSecondaries === 'object') {
     if (Array.isArray(includeSecondaries.skip)) {
       exclude = includeSecondaries.skip;
     } else if (typeof includeSecondaries.skip === 'string') {
       exclude = [includeSecondaries.skip];
     }
-    resolveGlob = includeSecondaries?.resolveGlob !== false;
+    resolveGlob = !!includeSecondaries.resolveGlob;
   }
 
   // const libPath = path.join(path.dirname(packagePath), 'node_modules', key);
