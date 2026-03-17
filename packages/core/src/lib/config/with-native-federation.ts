@@ -7,7 +7,6 @@ import type {
 import { isInSkipList, prepareSkipList } from './default-skip-list.js';
 import { type PreparedSkipList } from '../domain/config/skip-list.contract.js';
 
-import { logger } from '../utils/logger.js';
 import { DEFAULT_SERVER_DEPS_LIST } from '../core/default-server-deps-list.js';
 import type {
   NormalizedExternalConfig,
@@ -100,7 +99,7 @@ function normalizeShared(
 
 function normalizeSharedMappings(
   config: FederationConfig,
-  skip: PreparedSkipList
+  skipList: PreparedSkipList
 ): Array<MappedPath> {
   const rootTsConfigPath = findRootTsConfigJson();
 
@@ -109,13 +108,7 @@ function normalizeSharedMappings(
     sharedMappings: config.sharedMappings,
   });
 
-  const result = paths.filter(p => !isInSkipList(p.key, skip) && !p.key.includes('*'));
-
-  if (paths.find(p => p.key.includes('*'))) {
-    logger.warn('Sharing mapped paths with wildcards (*) not supported');
-  }
-
-  return result;
+  return paths.filter(p => !isInSkipList(p.key, skipList));
 }
 
 function getDefaultPlatform(cur: string): 'browser' | 'node' {

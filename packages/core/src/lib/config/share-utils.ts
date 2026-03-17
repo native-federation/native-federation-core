@@ -7,7 +7,7 @@ import { findDepPackageJson, getVersionMaps, type VersionMap } from '../utils/pa
 import { getConfigContext } from './configuration-context.js';
 import { logger } from '../utils/logger.js';
 
-import { resolveWildcardKeys } from '../utils/resolve-wildcard-keys.js';
+import { resolvePackageJsonExportsWildcard } from '../utils/resolve-wildcard-keys.js';
 import type {
   ExternalConfig,
   IncludeSecondariesOptions,
@@ -275,7 +275,7 @@ function resolveGlobSecondaries(
   let items: Array<string | KeyValuePair> = [];
   if (key.includes('*')) {
     if (!resolveGlob) return items;
-    const expanded = resolveWildcardKeys(key, entry, libPath);
+    const expanded = resolvePackageJsonExportsWildcard(key, entry, libPath);
     items = expanded
       .map(e => ({
         key: path.join(parent, e.key),

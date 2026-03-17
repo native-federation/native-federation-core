@@ -2,6 +2,8 @@ import * as path from 'path';
 import * as fs from 'fs';
 import JSON5 from 'json5';
 import type { MappedPath } from '../domain/utils/mapped-path.contract.js';
+import { logger } from './logger.js';
+import { resolveTsConfigWildcard } from './resolve-wildcard-keys.js';
 
 export interface GetMappedPathsOptions {
   rootTsConfigPath: string;
@@ -23,11 +25,11 @@ export function getMappedPaths({
   if (!rootPath) {
     rootPath = path.normalize(path.dirname(rootTsConfigPath));
   }
-  const shareAll = !sharedMappings;
-
+  const shareAllMappings = !sharedMappings;
   if (!sharedMappings) {
     sharedMappings = [];
   }
+  const globSharedMappings = sharedMappings.filter(m => m.endsWith('*')).map(m => m.slice(0, -1));
 
   const tsConfig = JSON5.parse(fs.readFileSync(rootTsConfigPath, { encoding: 'utf-8' }));
 
@@ -38,14 +40,30 @@ export function getMappedPaths({
   }
 
   for (const key in mappings) {
-    const libPath = path.normalize(path.join(rootPath, mappings[key][0]));
-
-    if (sharedMappings.includes(key) || shareAll) {
-      result.push({
-        key,
-        path: libPath,
-      });
+    if (mappings[key].length > 1) {
+      logger.warn(
+        '[shared-mapping][' +
+          key +
+          '] A mapping path with more than 1 entryPoint is currently not supported, falling back to the first path.'
+      );
     }
+    const libPaths = key.includes('*')
+      ? resolveTsConfigWildcard(key, mappings[key][0], rootPath).map(({ key, value }) => ({
+          key,
+          path: path.normalize(path.join(rootPath, value)),
+        }))
+      : [{ key, path: path.normalize(path.join(rootPath, mappings[key][0])) }];
+
+    libPaths
+      .filter(
+        mapping =>
+          shareAllMappings ||
+          sharedMappings.includes(mapping.key) ||
+          globSharedMappings.some(m => mapping.key.startsWith(m))
+      )
+      .forEach(mapping => {
+        result.push(mapping);
+      });
   }
 
   return result;
