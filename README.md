@@ -349,24 +349,52 @@ Paths mapped in your `tsconfig.json` are shared by default too. While they are p
 
 If you don't want to share (all of) them, put their names into the skip array (see above).
 
-### Versions for internal Shared Libraries (Internal Publishable Libraries also shared across Remotes)
+### Detemining which internal libraries are shared
+
+In Nx/monorepo setups, Native Federation shares all libraries from your `tsconfig` path mappings by default.
+
+If you only want to share selected mapped paths, you can use `sharedMappings` in your `federation.config.js`:
+
+```js
+module.exports = withNativeFederation({
+  shared: {
+    ...shareAll({
+      singleton: true,
+      strictVersion: true,
+      requiredVersion: 'auto',
+    }),
+  },
+  sharedMappings: ['@my-org/auth-lib', '@my-org/ui/*'],
+});
+```
+
+Notes:
+
+- `sharedMappings` is optional. If you omit it, all mapped paths are shared.
+- You can use wildcard suffixes (for example, `@my-org/ui/*`) to include multiple mapped paths.
+- `skip` still applies and can be used to exclude mapped paths even if they were selected via `sharedMappings`.
+- Mapped paths are read from the workspace root tsconfig file: `tsconfig.base.json` if present, otherwise `tsconfig.json`.
+- The workspace root is detected by searching upward from the current working directory until a `package.json` is found.
 
 If you want to share libraries within a monorepo and also distribute them as built libraries with a version, enable the `mappingVersion` feature flag in your `federation.config.js`. This ensures that the corresponding versions from your buildable libraries are used.
 
-```javascript
-export default withNativeFederation({
-  // [...]
-  sharedMappings: [
-    // your shared libs
-  ],
+```js
+module.exports = withNativeFederation({
+  shared: {
+    ...shareAll({
+      singleton: true,
+      strictVersion: true,
+      requiredVersion: 'auto',
+    }),
+  },
+  sharedMappings: ['@my-org/auth-lib', '@my-org/ui/*'],
   features: {
-    // [...]
     mappingVersion: true,
   },
 });
 ```
 
-This configuration generates `remoteEntry.json` entries that include a version field matching the `package.json` version of the corresponding local buildable library.
+If enabled, Native Federation tries to read the version from the mapped library's nearest `package.json`. By default this feature is set to `false`.
 
 ### Configuring Remotes
 
