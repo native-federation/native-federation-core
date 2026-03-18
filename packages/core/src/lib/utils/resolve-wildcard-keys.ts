@@ -1,7 +1,12 @@
 import fg from 'fast-glob';
 import * as fs from 'fs';
 import * as path from 'path';
-import { type KeyValuePair } from '../domain/utils/keyvaluepair.contract.js';
+import { logger } from './logger.js';
+
+export type KeyValuePair = {
+  key: string;
+  value: string;
+};
 
 // TypeScript's module resolution for directories checks these in order
 // @see https://www.typescriptlang.org/docs/handbook/modules/theory.html#module-resolution
@@ -28,12 +33,12 @@ const TS_INDEX_FILES = [
  * For discovery, we find all directories at the wildcard position that TypeScript
  * would recognize as valid modules (directories with index files or package.json).
  *
- * @see https://www.typescriptlang.org/tsconfig/#paths
+// @see https://www.typescriptlang.org/docs/handbook/modules/theory.html#module-resolution
  */
 export function resolveTsConfigWildcard(
   keyPattern: string,
   valuePattern: string,
-  cwd: string,
+  cwd: string
 ): KeyValuePair[] {
   const normalizedPattern = valuePattern.replace(/^\.?\/+/, '');
 
@@ -67,6 +72,7 @@ export function resolveTsConfigWildcard(
     }
 
     if (!stats.isDirectory()) {
+      // Skipping individual files, we only process modules
       continue;
     }
 
@@ -80,18 +86,23 @@ export function resolveTsConfigWildcard(
       continue;
     }
 
+    const key = keyPattern.replace('*', entry);
+
     if (fullPathStats.isDirectory()) {
-      const indexFile = TS_INDEX_FILES.find((indexFile) =>
-        fs.existsSync(path.join(fullPath, indexFile)),
+      const indexFile = TS_INDEX_FILES.find(indexFile =>
+        fs.existsSync(path.join(fullPath, indexFile))
       );
 
-      if (!indexFile) continue;
+      if (!indexFile) {
+        logger.warn(
+          `[shared-mappings] Internal lib '${key}' does not contain an entryPoint (barrel file).`
+        );
+        continue;
+      }
       modulePath = path.join(modulePath, indexFile);
     } else if (!fullPathStats.isFile()) {
       continue;
     }
-
-    const key = keyPattern.replace('*', entry);
 
     keys.push({
       key,
@@ -115,7 +126,7 @@ export function resolveTsConfigWildcard(
 export function resolvePackageJsonExportsWildcard(
   keyPattern: string,
   valuePattern: string,
-  cwd: string,
+  cwd: string
 ): KeyValuePair[] {
   const normalizedPattern = valuePattern.replace(/^\.?\/+/, '');
 
