@@ -12,10 +12,11 @@ export interface FederationOptions {
   dev?: boolean;
   watch?: boolean;
   packageJson?: string;
-  entryPoint?: string;
+  entryPoints?: string[];
   buildNotifications?: BuildNotificationOptions;
 }
 
 export interface NormalizedFederationOptions<TBundlerCache = unknown> extends FederationOptions {
   federationCache: FederationCache<TBundlerCache>;
+  entryPoints: string[];
 }

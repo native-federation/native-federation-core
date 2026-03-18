@@ -88,15 +88,14 @@ export async function bundleShared(
   let bundleResult: NFBuildAdapterResult[] | null = null;
 
   try {
-    await getBuildAdapter().setup({
+    await getBuildAdapter().setup(buildOptions.bundleName, {
       entryPoints,
       tsConfigPath: fedOptions.tsConfig,
       external: [...additionalExternals, ...externals],
       outdir: fedOptions.federationCache.cachePath,
       mappedPaths: config.sharedMappings,
       dev: fedOptions.dev,
-      bundleName: buildOptions.bundleName,
-      isNodeModules: true,
+      isMappingOrExposed: false,
       hash: false,
       chunks:
         (typeof fedOptions.chunks === 'boolean' && fedOptions.chunks) ||

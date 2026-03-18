@@ -19,8 +19,6 @@ import type { KeyValuePair } from '../domain/utils/keyvaluepair.contract.js';
 
 let inferVersion = false;
 
-export const DEFAULT_SECONDARIES_SKIP_LIST = ['@angular/router/upgrade', '@angular/common/upgrade'];
-
 export function findRootTsConfigJson(): string {
   const packageJson = findPackageJson(cwd());
   const projectRoot = path.dirname(packageJson);
@@ -73,10 +71,6 @@ function lookupVersionInMap(key: string, versions: VersionMap): string | null {
     key = parts[0] + '/' + parts[1];
   } else {
     key = parts[0]!;
-  }
-
-  if (key.toLowerCase() === '@angular-architects/module-federation-runtime') {
-    key = '@angular-architects/module-federation';
   }
 
   if (!versions[key]) {
@@ -137,16 +131,16 @@ function getSecondaries(
   shareObject: ExternalConfig,
   preparedSkipList: PreparedSkipList
 ): SharedExternalsConfig | null {
-  let exclude = [...DEFAULT_SECONDARIES_SKIP_LIST];
+  let exclude: string[] = [];
 
-  let resolveGlob = true;
+  let resolveGlob = false;
   if (typeof includeSecondaries === 'object') {
     if (Array.isArray(includeSecondaries.skip)) {
       exclude = includeSecondaries.skip;
     } else if (typeof includeSecondaries.skip === 'string') {
       exclude = [includeSecondaries.skip];
     }
-    resolveGlob = includeSecondaries?.resolveGlob !== false;
+    resolveGlob = !!includeSecondaries.resolveGlob;
   }
 
   // const libPath = path.join(path.dirname(packagePath), 'node_modules', key);
@@ -349,11 +343,11 @@ export function shareAll(
 
   const versionMaps = getVersionMaps(projectPath, projectPath);
   const sharedExternals: ShareExternalsOptions = {};
-  const preparedSkipList = prepareSkipList(opts.skipList ?? DEFAULT_SKIP_LIST);
+  const skipList = opts.skipList ?? DEFAULT_SKIP_LIST;
 
   for (const versions of versionMaps) {
     for (const key in versions) {
-      if (isInSkipList(key, preparedSkipList)) {
+      if (isInSkipList(key, prepareSkipList(skipList))) {
         continue;
       }
       if (!!opts.overrides && Object.keys(opts.overrides).some(o => key.startsWith(o))) {
@@ -370,10 +364,8 @@ export function shareAll(
   }
 
   return {
-    ...share(sharedExternals, opts.projectPath, opts.skipList ?? DEFAULT_SKIP_LIST),
-    ...(!opts.overrides
-      ? {}
-      : share(opts.overrides, opts.projectPath, opts.skipList ?? DEFAULT_SKIP_LIST)),
+    ...share(sharedExternals, opts.projectPath, skipList),
+    ...(!opts.overrides ? {} : share(opts.overrides, opts.projectPath, skipList)),
   };
 }
 
