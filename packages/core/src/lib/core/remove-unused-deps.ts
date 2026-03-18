@@ -11,12 +11,18 @@ import { resolveProjectName } from '../utils/config-utils.js';
 
 export function removeUnusedDeps(
   config: NormalizedFederationConfig,
-  main: string,
+  entryPoints: string[],
   workspaceRoot: string
 ): NormalizedFederationConfig {
-  const fileInfos = getProjectData(main, cwd(), {
-    includeExternalLibraries: true,
-  });
+  const fileInfos = entryPoints.reduce(
+    (acc, entryPoint) => ({
+      ...acc,
+      ...getProjectData(entryPoint, cwd(), {
+        includeExternalLibraries: true,
+      }),
+    }),
+    {} as ProjectData
+  );
 
   const usedDeps = findUsedDeps(fileInfos, workspaceRoot, config);
   const usedPackageNames = usedDeps.usedPackageNames;

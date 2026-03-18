@@ -1,16 +1,16 @@
 import type { FederationInfo } from '../domain/core/federation-info.contract.js';
 import { getConfigContext, usePackageJson, useWorkspace } from '../config/configuration-context.js';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
-import { setBuildAdapter } from './build-adapter.js';
+import { getBuildAdapter, setBuildAdapter } from './build-adapter.js';
 import { buildForFederation } from './build-for-federation.js';
 import {
   type FederationOptions,
   type NormalizedFederationOptions,
 } from '../domain/core/federation-options.contract.js';
 import { getExternals } from './get-externals.js';
-import { loadFederationConfig } from './load-federation-config.js';
+import { normalizeFederationOptions } from './normalize-options.js';
 import type { NFBuildAdapter } from '../domain/core/build-adapter.contract.js';
-import { normalizeFederationOptions } from './normalize-federation-options.js';
+import { rebuildForFederation } from './rebuild-for-federation.js';
 
 export interface BuildHelperParams {
   options: FederationOptions;
@@ -19,26 +19,45 @@ export interface BuildHelperParams {
 
 let externals: string[] = [];
 let config: NormalizedFederationConfig;
-let fedOptions: NormalizedFederationOptions;
+let options: NormalizedFederationOptions;
 let fedInfo: FederationInfo;
 
 async function init(params: BuildHelperParams): Promise<void> {
   setBuildAdapter(params.adapter);
-  fedOptions = normalizeFederationOptions(params.options);
   useWorkspace(params.options.workspaceRoot);
   usePackageJson(params.options.packageJson);
-  config = await loadFederationConfig(fedOptions);
   params.options.workspaceRoot = getConfigContext().workspaceRoot ?? params.options.workspaceRoot;
+
+  const normalized = await normalizeFederationOptions(params.options);
+
+  options = normalized.options;
+  config = normalized.config;
+
   externals = getExternals(config);
 }
 
-async function build(signal?: AbortSignal): Promise<void> {
-  fedInfo = await buildForFederation(config, fedOptions, externals, signal);
+async function build(opts: { modifiedFiles?: string[]; signal?: AbortSignal } = {}): Promise<void> {
+  if (!fedInfo) {
+    fedInfo = await buildForFederation(config, options, externals, opts.signal);
+  } else {
+    fedInfo = await rebuildForFederation(
+      config,
+      options,
+      externals,
+      opts.modifiedFiles ?? [],
+      opts.signal
+    );
+  }
+}
+
+async function close(): Promise<void> {
+  return getBuildAdapter().dispose();
 }
 
 export const federationBuilder = {
   init,
   build,
+  close,
   get federationInfo() {
     return fedInfo;
   },

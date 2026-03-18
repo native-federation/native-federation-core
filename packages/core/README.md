@@ -20,6 +20,8 @@ While this core library can be used with any framework and build tool, there is 
 
 > Please find the [Angular-based version here](https://www.npmjs.com/package/@angular-architects/native-federation).
 
+> Please find the [ESbuild-based version here](https://www.npmjs.com/package/@softarc/native-federation-esbuild).
+
 > Please find the [vite plugin here](https://www.npmjs.com/package/@gioboa/vite-module-federation).
 
 Also, other higher level abstractions on top of this core library are possible.
