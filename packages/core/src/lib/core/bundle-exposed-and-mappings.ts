@@ -28,12 +28,15 @@ export async function bundleExposedAndMappings(
     throw new AbortedError('[bundle-exposed-and-mappings] Aborted before bundling');
   }
 
-  const shared: EntryPoint[] = config.sharedMappings.map(sm => {
-    const entryPoint = sm.path;
-    const tmp = sm.key.replace(/[^A-Za-z0-9]/g, '_');
-    const outFilePath = tmp + '.js';
-    return { fileName: entryPoint, outName: outFilePath, key: sm.key };
-  });
+  const shared: EntryPoint[] = Object.entries(config.sharedMappings).map(
+    ([entryPoint, mappedImport]) => {
+      return {
+        fileName: entryPoint,
+        outName: mappedImport.replace(/[^A-Za-z0-9]/g, '_') + '.js',
+        key: mappedImport,
+      };
+    }
+  );
   const exposes: EntryPoint[] = Object.entries(config.exposes).map(([key, entry]) => {
     const outFilePath = key + '.js';
     return { fileName: entry, outName: outFilePath, key };
@@ -169,18 +172,18 @@ export function describeSharedMappings(
 ): Array<SharedInfo> {
   const result: Array<SharedInfo> = [];
 
-  for (const m of config.sharedMappings) {
+  for (const [mappedPath, mappedImport] of Object.entries(config.sharedMappings)) {
     result.push({
-      packageName: m.key,
+      packageName: mappedImport,
       outFileName: '',
       requiredVersion: '',
       singleton: true,
       strictVersion: false,
-      version: config.features.mappingVersion ? getMappingVersion(m.path) : '',
+      version: config.features.mappingVersion ? getMappingVersion(mappedPath) : '',
       dev: !fedOptions.dev
         ? undefined
         : {
-            entryPoint: normalize(path.normalize(m.path)),
+            entryPoint: normalize(path.normalize(mappedPath)),
           },
     });
   }

@@ -5,6 +5,7 @@ export interface FederationOptions {
   workspaceRoot: string;
   outputPath: string;
   federationConfig: string;
+  projectName: string;
   cacheExternalArtifacts?: boolean;
   chunks?: boolean | { enable: boolean; dense?: boolean };
   tsConfig?: string;

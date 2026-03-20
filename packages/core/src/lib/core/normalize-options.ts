@@ -6,10 +6,13 @@ import type {
 import * as path from 'path';
 import * as fs from 'fs';
 import { pathToFileURL } from 'url';
-import { removeUnusedDeps } from './remove-unused-deps.js';
+import { removeUnusedDeps } from '../config/remove-unused-deps.js';
 import { type FederationCache } from '../../domain.js';
 import { createFederationCache } from './federation-cache.js';
 import { getDefaultCachePath } from '../utils/cache-persistence.js';
+import { getUsedDependenciesFactory } from '../utils/get-used-dependencies.js';
+import { logger } from '../utils/logger.js';
+import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
 
 export function normalizeFederationOptions(
   options: FederationOptions
@@ -32,6 +35,7 @@ export async function normalizeFederationOptions<TBundlerCache = undefined>(
    * Step 1: normalizing config
    */
   const fullConfigPath = path.join(options.workspaceRoot, options.federationConfig);
+  const getUsedDeps = getUsedDependenciesFactory(options.workspaceRoot, options.entryPoints);
 
   if (!fs.existsSync(fullConfigPath)) {
     throw new Error('Expected ' + fullConfigPath);
@@ -59,14 +63,18 @@ export async function normalizeFederationOptions<TBundlerCache = undefined>(
    * Step 3: Remove unused deps
    */
 
-  const shouldRemoveUnusedDeps = config.features.ignoreUnusedDeps !== false;
-
-  if (shouldRemoveUnusedDeps) {
-    config = removeUnusedDeps(
-      config,
-      normalizedOptions.entryPoints,
-      normalizedOptions.workspaceRoot
-    );
+  if (config.features.ignoreUnusedDeps !== false) {
+    config = removeUnusedDeps(getUsedDeps(config), config);
+  } else {
+    const withWildcard = Object.keys(config.sharedMappings).some(m => m.includes('*'));
+    if (withWildcard) {
+      logger.warn(
+        'Sharing mapped paths with wildcards (*) is only supported with ignoreUnusedDeps feature.'
+      );
+      config.sharedMappings = Object.entries(config.sharedMappings)
+        .filter(([_path]) => !_path.includes('*'))
+        .reduce((acc, [_path, _import]) => ({ ...acc, [_path]: _import }), {} as PathToImport);
+    }
   }
 
   return { config, options: normalizedOptions };

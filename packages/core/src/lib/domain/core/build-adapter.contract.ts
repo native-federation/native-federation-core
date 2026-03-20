@@ -1,4 +1,4 @@
-import type { MappedPath } from '../utils/mapped-path.contract.js';
+import type { PathToImport } from '../utils/mapped-path.contract.js';
 import type { FederationCache } from './federation-cache.contract.js';
 
 export interface NFBuildAdapterContext<TBundlerContext = unknown> {
@@ -34,7 +34,7 @@ export interface NFBuildAdapterOptions<TBundlerCache = unknown> {
   tsConfigPath?: string;
   external: string[];
   outdir: string;
-  mappedPaths: MappedPath[];
+  mappedPaths: PathToImport;
   isMappingOrExposed: boolean;
   dev?: boolean;
   watch?: boolean;
