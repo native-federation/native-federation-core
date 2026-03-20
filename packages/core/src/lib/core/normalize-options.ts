@@ -13,6 +13,7 @@ import { getDefaultCachePath } from '../utils/cache-persistence.js';
 import { getUsedDependenciesFactory } from '../utils/get-used-dependencies.js';
 import { logger } from '../utils/logger.js';
 import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
+import { normalizePackageName } from '../utils/normalize.js';
 
 export function normalizeFederationOptions(
   options: FederationOptions
@@ -56,6 +57,7 @@ export async function normalizeFederationOptions<TBundlerCache = undefined>(
   const normalizedOptions: NormalizedFederationOptions<TBundlerCache> = {
     ...options,
     entryPoints: options.entryPoints ?? Object.values(config.exposes ?? {}),
+    projectName: resolveProjectName(options.projectName ?? config.name),
     federationCache,
   };
 
@@ -76,6 +78,27 @@ export async function normalizeFederationOptions<TBundlerCache = undefined>(
         .reduce((acc, [_path, _import]) => ({ ...acc, [_path]: _import }), {} as PathToImport);
     }
   }
+  const importsWithDot = Object.values(config.sharedMappings).filter(mappingImport =>
+    mappingImport.includes('.')
+  );
+  if (importsWithDot.length > 0) {
+    importsWithDot.forEach(e => {
+      logger.warn(`Shared mapping import '${e}' contains a dot.`);
+    });
+    logger.warn('details: https://github.com/vitejs/vite/issues/21036');
+    throw new Error('Native-federation does not support dots (.) in imports paths. ');
+  }
 
   return { config, options: normalizedOptions };
+}
+
+export function resolveProjectName(name?: string): string {
+  if (!name || name.length < 1) {
+    logger.warn(
+      "Project name in 'federation.config.js' is empty, defaulting to 'shell' cache folder (could collide with other projects in the workspace)."
+    );
+    return 'shell';
+  }
+
+  return normalizePackageName(name);
 }

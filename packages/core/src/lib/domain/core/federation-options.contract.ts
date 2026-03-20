@@ -5,7 +5,7 @@ export interface FederationOptions {
   workspaceRoot: string;
   outputPath: string;
   federationConfig: string;
-  projectName: string;
+  projectName?: string;
   cacheExternalArtifacts?: boolean;
   chunks?: boolean | { enable: boolean; dense?: boolean };
   tsConfig?: string;
@@ -20,4 +20,5 @@ export interface FederationOptions {
 export interface NormalizedFederationOptions<TBundlerCache = unknown> extends FederationOptions {
   federationCache: FederationCache<TBundlerCache>;
   entryPoints: string[];
+  projectName: string;
 }

@@ -62,7 +62,7 @@ export async function bundleExposedAndMappings(
           (typeof fedOptions.chunks === 'object' && !!fedOptions.chunks.enable),
         hash,
         optimizedMappings: config.features.ignoreUnusedDeps,
-        isMappingOrExposed: false,
+        isMappingOrExposed: true,
         cache: fedOptions.federationCache,
       });
     }

@@ -17,7 +17,6 @@ import { normalizePackageName } from '../utils/normalize.js';
 import { AbortedError } from '../utils/errors.js';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
 import type { NormalizedExternalConfig } from '../domain/config/external-config.contract.js';
-import { resolveProjectName } from '../utils/config-utils.js';
 import { addExternalsToCache } from './federation-cache.js';
 import path from 'path';
 
@@ -30,7 +29,7 @@ export async function buildForFederation(
   // 1. Setup
   fedOptions.federationCache.cachePath = path.join(
     fedOptions.federationCache.cachePath,
-    resolveProjectName(config)
+    fedOptions.projectName
   );
   logger.info('Building federation artifacts');
 
