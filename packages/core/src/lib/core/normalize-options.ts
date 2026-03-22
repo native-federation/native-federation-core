@@ -65,8 +65,12 @@ export async function normalizeFederationOptions<TBundlerCache = undefined>(
    * Step 3: Remove unused deps
    */
 
-  if (config.features.ignoreUnusedDeps !== false) {
+  if (config.features.ignoreUnusedDeps) {
     config = removeUnusedDeps(getUsedDeps(config), config);
+    logger.info('Removed unused dependencies.');
+    logger.debug(
+      'This can be disabled per dependency/external using the "includeSecondaries: {keepAll: true}" property. Or in general by disabling the "ignoreUnusedDeps" feature. '
+    );
   } else {
     const withWildcard = Object.keys(config.sharedMappings).some(m => m.includes('*'));
     if (withWildcard) {

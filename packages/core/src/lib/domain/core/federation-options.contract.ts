@@ -7,7 +7,6 @@ export interface FederationOptions {
   federationConfig: string;
   projectName?: string;
   cacheExternalArtifacts?: boolean;
-  chunks?: boolean | { enable: boolean; dense?: boolean };
   tsConfig?: string;
   verbose?: boolean;
   dev?: boolean;
