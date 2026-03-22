@@ -1,5 +1,5 @@
 import type { PreparedSkipList, SkipList } from './skip-list.contract.js';
-import type { MappedPath } from '../utils/mapped-path.contract.js';
+import type { PathToImport } from '../utils/mapped-path.contract.js';
 import type {
   NormalizedSharedExternalsConfig,
   SharedExternalsConfig,
@@ -21,10 +21,11 @@ export interface FederationConfig {
 }
 
 export interface NormalizedFederationConfig {
+  $type: 'classic';
   name: string;
   exposes: Record<string, string>;
   shared: NormalizedSharedExternalsConfig;
-  sharedMappings: Array<MappedPath>;
+  sharedMappings: PathToImport;
   skip: PreparedSkipList;
   externals: string[];
   shareScope?: string;

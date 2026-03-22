@@ -1,4 +1,4 @@
-import { getMappedPaths } from '../utils/mapped-paths.js';
+import { getRawMappedPaths } from '../utils/mapped-paths.js';
 import { shareAll, findRootTsConfigJson } from './share-utils.js';
 import type {
   FederationConfig,
@@ -10,16 +10,17 @@ import type {
   NormalizedExternalConfig,
   NormalizedSharedExternalsConfig,
 } from '../domain/config/external-config.contract.js';
-import type { MappedPath } from '../domain/utils/mapped-path.contract.js';
+import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
 
 export function withNativeFederation(config: FederationConfig): NormalizedFederationConfig {
   const skip = prepareSkipList(config.skip ?? []);
 
   const normalized: NormalizedFederationConfig = {
+    $type: 'classic',
     name: config.name ?? '',
     exposes: config.exposes ?? {},
     shared: normalizeShared(config, skip),
-    sharedMappings: normalizeSharedMappings(config, skip),
+    sharedMappings: removeSkippedMappings(config, skip),
     skip,
     externals: config.externals ?? [],
     features: {
@@ -76,16 +77,12 @@ function normalizeShared(
   return result;
 }
 
-function normalizeSharedMappings(
-  config: FederationConfig,
-  skipList: PreparedSkipList
-): Array<MappedPath> {
+function removeSkippedMappings(config: FederationConfig, skipList: PreparedSkipList): PathToImport {
   const rootTsConfigPath = findRootTsConfigJson();
 
-  const paths = getMappedPaths({
-    rootTsConfigPath,
-    sharedMappings: config.sharedMappings,
-  });
+  const paths = getRawMappedPaths(rootTsConfigPath, config.sharedMappings);
 
-  return paths.filter(p => !isInSkipList(p.key, skipList));
+  return Object.entries(paths)
+    .filter(([, _import]) => !isInSkipList(_import, skipList))
+    .reduce((acc, [_path, _import]) => ({ ...acc, [_path]: _import }), {} as PathToImport);
 }
