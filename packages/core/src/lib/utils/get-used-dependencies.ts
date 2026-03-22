@@ -8,15 +8,21 @@ import * as path from 'path';
 
 export function getUsedDependenciesFactory(
   workspaceRoot: string,
-  entryPoints?: string[]
+  fallbackEntryPoints?: string[]
 ): (config: {
   name?: string;
   exposes?: Record<string, string>;
   sharedMappings: PathToImport;
 }) => UsedDependencies {
   return config => {
-    if (!entryPoints || entryPoints.length < 1) entryPoints = Object.values(config.exposes ?? {});
-    const fileInfos = Object.values(config.exposes ?? entryPoints ?? []).reduce(
+    let entryPoints: string[] | undefined = Object.values(config.exposes ?? {});
+    if (entryPoints.length < 1) entryPoints = fallbackEntryPoints;
+
+    if (!entryPoints || entryPoints.length < 1)
+      throw new Error(
+        '[removeUnusedDeps] native-federation is missing an entryPoint! You can set it using the Federation options or by setting an exposed module in the Federation config file.'
+      );
+    const fileInfos = Object.values(entryPoints ?? []).reduce(
       (acc, entryPoint) => ({
         ...acc,
         ...getProjectData(entryPoint, cwd(), {

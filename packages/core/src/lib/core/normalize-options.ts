@@ -131,11 +131,11 @@ function checkForInvalidImports(importList: string[], type: string) {
 
   if (importsWithDot.length > 0) {
     importsWithDot.forEach(e => {
-      logger.warn(`Import '${e}' contains a dot.`);
+      logger.warn(`Import '${e}' contains a bad dot (.) import.`);
     });
     logger.debug('Bad import issue: https://github.com/vitejs/vite/issues/21036');
     throw new Error(
-      `Invalid '${type}' config. Native-federation does not support dots (.) in imports paths. `
+      `Invalid '${type}' config. Invalid imports paths detected, consider using a barrel import instead. `
     );
   }
 }
