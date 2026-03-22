@@ -396,6 +396,85 @@ module.exports = withNativeFederation({
 
 If enabled, Native Federation tries to read the version from the mapped library's nearest `package.json`. By default this feature is set to `false`.
 
+### Code-Splitting for Shared Dependencies
+
+By default, Native Federation enables code-splitting (chunking) for shared dependencies. This means large libraries can be split into smaller chunks which reduces the overal size, improving initial load times.
+
+You can configure code-splitting at two levels:
+
+#### Global Setting
+
+Use the `chunks` option in your `federation.config.js` to control the default behavior for all shared dependencies:
+
+```js
+module.exports = withNativeFederation({
+  // Disable code-splitting globally
+  chunks: false,
+
+  shared: {
+    ...shareAll({
+      singleton: true,
+      strictVersion: true,
+      requiredVersion: 'auto',
+    }),
+  },
+});
+```
+
+When `chunks` is set to `false` at the config level, all shared dependencies, shared mappings and exposed modules will be bundled as single files without code-splitting.
+
+#### Per-Package Setting
+
+You can also override the code-splitting behavior for individual packages in the `shared` configuration:
+
+```js
+module.exports = withNativeFederation({
+  shared: {
+    ...shareAll(
+      {
+        singleton: true,
+        strictVersion: true,
+        requiredVersion: 'auto',
+      },
+      overrides: {
+        'large-lib': {
+          singleton: true,
+          strictVersion: true,
+          requiredVersion: 'auto',
+          chunks: false,
+          build: 'package' // necessary for isolated bundles
+        },
+      }
+    ),
+    // Disable code-splitting for a specific package
+
+  },
+});
+```
+
+> **Note:** When setting `chunks` on individual packages, consider also setting `build: 'package'` to avoid your explicit chunk settings being ignored since all 'default' bundles are bundled in a single build step.
+
+#### Dense Chunking
+
+The `denseChunking` feature flag optimizes the `remoteEntry.json` file structure for better performance:
+
+```js
+module.exports = withNativeFederation({
+  shared: {
+    ...shareAll({
+      singleton: true,
+      strictVersion: true,
+      requiredVersion: 'auto',
+    }),
+  },
+  features: {
+    denseChunking: true,
+  },
+});
+```
+
+When enabled, instead of listing each chunk as a separate shared dependency, chunks are grouped by bundle name in a dedicated `chunks` object. Each shared dependency gets a `bundle` property linking it to its chunk bundle. This results in a smaller `remoteEntry.json` and allows chunks to be skipped if the dependency is not used in the final import map.
+
 ### Configuring Remotes
 
 When configuring a remote, you can expose files that can be loaded into the shell at runtime:

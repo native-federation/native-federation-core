@@ -11,17 +11,20 @@ import type {
   NormalizedSharedExternalsConfig,
 } from '../domain/config/external-config.contract.js';
 import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
+import { logger } from '../utils/logger.js';
 
 export function withNativeFederation(config: FederationConfig): NormalizedFederationConfig {
   const skip = prepareSkipList(config.skip ?? []);
+
+  const chunks = config.chunks ?? false;
 
   const normalized: NormalizedFederationConfig = {
     $type: 'classic',
     name: config.name ?? '',
     exposes: config.exposes ?? {},
-    shared: normalizeShared(config, skip),
+    shared: normalizeShared(config, skip, chunks),
     sharedMappings: removeSkippedMappings(config, skip),
-    chunks: config.chunks ?? true,
+    chunks,
     skip,
     externals: config.externals ?? [],
     features: {
@@ -37,41 +40,48 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
 
 function normalizeShared(
   config: FederationConfig,
-  skip: PreparedSkipList
+  skip: PreparedSkipList,
+  chunks: boolean
 ): NormalizedSharedExternalsConfig {
   let result: NormalizedSharedExternalsConfig = {};
 
-  const shared = config.shared;
-
-  if (!shared) {
-    result = shareAll({
+  const shared =
+    config.shared ??
+    (shareAll({
       singleton: true,
       strictVersion: true,
       requiredVersion: 'auto',
       platform: 'browser',
-    }) as NormalizedSharedExternalsConfig;
-  } else {
-    result = Object.keys(shared).reduce<NormalizedSharedExternalsConfig>((acc, cur) => {
-      const key = cur.replace(/\\/g, '/');
-      const sharedConfig = shared[cur]!;
-      const normalizedConfig: NormalizedExternalConfig = {
-        requiredVersion: sharedConfig.requiredVersion ?? 'auto',
-        singleton: sharedConfig.singleton ?? false,
-        strictVersion: sharedConfig.strictVersion ?? false,
-        version: sharedConfig.version,
-        chunks: sharedConfig.chunks ?? config.chunks ?? true,
-        includeSecondaries: sharedConfig.includeSecondaries,
-        packageInfo: sharedConfig.packageInfo as NormalizedExternalConfig['packageInfo'],
-        platform: sharedConfig.platform ?? config.platform ?? 'browser',
-        build: sharedConfig.build ?? 'default',
-        ...(sharedConfig.shareScope && { shareScope: sharedConfig.shareScope }),
-      };
-      return {
-        ...acc,
-        [key]: normalizedConfig,
-      };
-    }, {});
-  }
+    }) as NormalizedSharedExternalsConfig);
+
+  result = Object.keys(shared).reduce<NormalizedSharedExternalsConfig>((acc, cur) => {
+    const key = cur.replace(/\\/g, '/');
+    const sharedConfig = shared[cur]!;
+
+    if (!!sharedConfig.chunks && !sharedConfig.build && sharedConfig.chunks !== chunks) {
+      logger.warn(
+        `External '${cur}' has explicit chunk settings, consider switching build type to { build: 'package' }.`
+      );
+      sharedConfig.chunks = chunks;
+    }
+
+    const normalizedConfig: NormalizedExternalConfig = {
+      requiredVersion: sharedConfig.requiredVersion ?? 'auto',
+      singleton: sharedConfig.singleton ?? false,
+      strictVersion: sharedConfig.strictVersion ?? false,
+      version: sharedConfig.version,
+      chunks: sharedConfig.chunks ?? config.chunks ?? true,
+      includeSecondaries: sharedConfig.includeSecondaries,
+      packageInfo: sharedConfig.packageInfo as NormalizedExternalConfig['packageInfo'],
+      platform: sharedConfig.platform ?? config.platform ?? 'browser',
+      build: sharedConfig.build ?? 'default',
+      ...(sharedConfig.shareScope && { shareScope: sharedConfig.shareScope }),
+    };
+    return {
+      ...acc,
+      [key]: normalizedConfig,
+    };
+  }, {});
 
   result = Object.keys(result)
     .filter(key => !isInSkipList(key, skip))

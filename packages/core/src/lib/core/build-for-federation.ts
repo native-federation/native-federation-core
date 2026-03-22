@@ -46,7 +46,6 @@ export async function buildForFederation(
     if (Object.keys(sharedBrowser).length > 0) {
       notifyBundling('browser-shared');
       const start = process.hrtime();
-      verifyChunkSettings(config.chunks, sharedBrowser);
 
       const sharedPackageInfoBrowser = await bundleShared(
         sharedBrowser,
@@ -67,8 +66,6 @@ export async function buildForFederation(
     if (Object.keys(sharedServer).length > 0) {
       notifyBundling('server-shared');
       const start = process.hrtime();
-
-      verifyChunkSettings(config.chunks, sharedBrowser);
 
       const sharedPackageInfoServer = await bundleShared(
         sharedServer,
@@ -244,19 +241,6 @@ function notifyBundling(bundleType: string) {
   logger.info(`Preparing shared npm packages with bundle type "${bundleType}"`);
   logger.notice('This only needs to be done once, as results are cached');
   logger.notice("Skip packages you don't want to share in your federation config");
-}
-
-function verifyChunkSettings(
-  baseChunkSettings: boolean,
-  externals: Record<string, NormalizedExternalConfig>
-) {
-  Object.entries(externals).forEach(([entry, cfg]) => {
-    if (cfg.chunks !== baseChunkSettings) {
-      logger.warn(
-        `[config] External ${entry}' has separate chunk settings, this is not allowed for build type 'default', consider switching to { build: 'package' }.`
-      );
-    }
-  });
 }
 
 function splitShared(shared: Record<string, NormalizedExternalConfig>): SplitSharedResult {

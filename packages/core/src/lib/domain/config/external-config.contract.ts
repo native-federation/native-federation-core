@@ -5,7 +5,7 @@ export interface ExternalConfig {
   version?: string;
   includeSecondaries?: boolean;
   platform?: 'browser' | 'node';
-  build?: 'default' | 'separate' | 'package';
+  build?: 'separate' | 'package';
   chunks?: boolean;
   shareScope?: string;
   packageInfo?: {
