@@ -32,6 +32,7 @@ export async function buildForFederation(
     fedOptions.projectName
   );
   logger.info('Building federation artifacts');
+  logger.notice("Skip packages you don't want to share in your federation config");
 
   // 2. Externals
   if (fedOptions.federationCache.externals.length > 0) {
@@ -44,7 +45,7 @@ export async function buildForFederation(
     );
 
     if (Object.keys(sharedBrowser).length > 0) {
-      notifyBundling('browser-shared');
+      logger.info(`Bundling external npm packages with bundle type 'browser-shared'`);
       const start = process.hrtime();
 
       const sharedPackageInfoBrowser = await bundleShared(
@@ -55,7 +56,7 @@ export async function buildForFederation(
         { platform: 'browser', bundleName: 'browser-shared', chunks: config.chunks }
       );
 
-      logger.measure(start, '[build artifacts] - To bundle all shared browser externals');
+      logger.measure(start, 'Step 2.1) Bundling all shared browser externals');
 
       addExternalsToCache(fedOptions.federationCache, sharedPackageInfoBrowser);
 
@@ -64,7 +65,7 @@ export async function buildForFederation(
     }
 
     if (Object.keys(sharedServer).length > 0) {
-      notifyBundling('server-shared');
+      logger.info(`Bundling external npm packages with bundle type 'server-shared'`);
       const start = process.hrtime();
 
       const sharedPackageInfoServer = await bundleShared(
@@ -74,7 +75,7 @@ export async function buildForFederation(
         externals,
         { platform: 'node', bundleName: 'node-shared', chunks: config.chunks }
       );
-      logger.measure(start, '[build artifacts] - To bundle all shared node externals');
+      logger.measure(start, 'Step 2.1) Bundling all shared node externals');
 
       addExternalsToCache(fedOptions.federationCache, sharedPackageInfoServer);
 
@@ -82,7 +83,8 @@ export async function buildForFederation(
     }
 
     if (Object.keys(separateBrowser).length > 0) {
-      notifyBundling('browser-separate');
+      logger.info(`Bundling external npm packages with bundle type 'browser-separate'`);
+
       const start = process.hrtime();
       const separatePackageInfoBrowser = await bundleSeparatePackages(
         separateBrowser,
@@ -91,14 +93,15 @@ export async function buildForFederation(
         fedOptions,
         { platform: 'browser' }
       );
-      logger.measure(start, '[build artifacts] - To bundle all separate browser externals');
+      logger.measure(start, 'Step 2.2) Bundling all separate browser external packages');
       addExternalsToCache(fedOptions.federationCache, separatePackageInfoBrowser);
       if (signal?.aborted)
         throw new AbortedError('[buildForFederation] After separate-browser bundle');
     }
 
     if (Object.keys(separateServer).length > 0) {
-      notifyBundling('server-separate');
+      logger.info(`Bundling external npm packages with bundle type 'node-separate'`);
+
       const start = process.hrtime();
       const separatePackageInfoServer = await bundleSeparatePackages(
         separateServer,
@@ -108,7 +111,7 @@ export async function buildForFederation(
         { platform: 'node' }
       );
 
-      logger.measure(start, '[build artifacts] - To bundle all separate node externals');
+      logger.measure(start, 'Step 2.2) Bundling all separate node external packages');
       addExternalsToCache(fedOptions.federationCache, separatePackageInfoServer);
     }
 
@@ -125,7 +128,7 @@ export async function buildForFederation(
     undefined,
     signal
   );
-  logger.measure(start, '[build artifacts] - To bundle all mappings and exposed.');
+  logger.measure(start, 'Step 3) Bundling all internal libraries and exposed modules.');
 
   if (signal?.aborted)
     throw new AbortedError('[buildForFederation] After exposed-and-mappings bundle');
@@ -235,12 +238,6 @@ async function bundleSeparatePackages(
     },
     { externals: [] } as { externals: SharedInfo[]; chunks?: ChunkInfo }
   );
-}
-
-function notifyBundling(bundleType: string) {
-  logger.info(`Preparing shared npm packages with bundle type "${bundleType}"`);
-  logger.notice('This only needs to be done once, as results are cached');
-  logger.notice("Skip packages you don't want to share in your federation config");
 }
 
 function splitShared(shared: Record<string, NormalizedExternalConfig>): SplitSharedResult {

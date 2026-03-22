@@ -20,9 +20,9 @@ export async function rebuildForFederation(
 ): Promise<FederationInfo> {
   const federationCache = fedOptions.federationCache;
 
+  logger.info(`Re-bundling all internal libraries and exposed modules..'`);
   const start = process.hrtime();
 
-  // Shared mappings and exposed modules
   const artifactInfo = await bundleExposedAndMappings(
     config,
     fedOptions,
@@ -30,7 +30,7 @@ export async function rebuildForFederation(
     modifiedFiles,
     signal
   );
-  logger.measure(start, '[build artifacts] - To re-bundle all mappings and exposed.');
+  logger.measure(start, 'To re-bundle all internal libraries and exposed modules.');
 
   if (signal?.aborted)
     throw new AbortedError('[buildForFederation] After exposed-and-mappings bundle');
