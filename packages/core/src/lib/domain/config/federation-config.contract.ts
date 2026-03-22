@@ -11,12 +11,14 @@ export interface FederationConfig {
   shared?: SharedExternalsConfig;
   platform?: 'browser' | 'node';
   sharedMappings?: Array<string>;
+  chunks?: boolean;
   skip?: SkipList;
   externals?: string[];
   shareScope?: string;
   features?: {
     mappingVersion?: boolean;
     ignoreUnusedDeps?: boolean;
+    denseChunking?: boolean;
   };
 }
 
@@ -27,10 +29,12 @@ export interface NormalizedFederationConfig {
   shared: NormalizedSharedExternalsConfig;
   sharedMappings: PathToImport;
   skip: PreparedSkipList;
+  chunks: boolean;
   externals: string[];
   shareScope?: string;
   features: {
     mappingVersion: boolean;
     ignoreUnusedDeps: boolean;
+    denseChunking: boolean;
   };
 }

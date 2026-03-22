@@ -57,9 +57,7 @@ export async function bundleExposedAndMappings(
         dev: !!fedOptions.dev,
         watch: fedOptions.watch,
         mappedPaths: config.sharedMappings,
-        chunks:
-          (typeof fedOptions.chunks === 'boolean' && fedOptions.chunks) ||
-          (typeof fedOptions.chunks === 'object' && !!fedOptions.chunks.enable),
+        chunks: config.chunks,
         hash,
         optimizedMappings: config.features.ignoreUnusedDeps,
         isMappingOrExposed: true,
@@ -131,7 +129,7 @@ export async function bundleExposedAndMappings(
 
   // Process remaining chunks and lazy loaded internal modules
   let exportedChunks: ChunkInfo | undefined = undefined;
-  if (typeof fedOptions.chunks === 'object' && fedOptions.chunks.dense === true) {
+  if (config.chunks && config.features.denseChunking) {
     for (const entryFile of entryFiles) rewriteChunkImports(entryFile);
     exportedChunks = {
       ['mapping-or-exposed']: Object.values(resultMap).map(chunk => path.basename(chunk)),

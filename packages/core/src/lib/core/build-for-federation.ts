@@ -46,12 +46,14 @@ export async function buildForFederation(
     if (Object.keys(sharedBrowser).length > 0) {
       notifyBundling('browser-shared');
       const start = process.hrtime();
+      verifyChunkSettings(config.chunks, sharedBrowser);
+
       const sharedPackageInfoBrowser = await bundleShared(
         sharedBrowser,
         config,
         fedOptions,
         externals,
-        { platform: 'browser', bundleName: 'browser-shared' }
+        { platform: 'browser', bundleName: 'browser-shared', chunks: config.chunks }
       );
 
       logger.measure(start, '[build artifacts] - To bundle all shared browser externals');
@@ -65,12 +67,15 @@ export async function buildForFederation(
     if (Object.keys(sharedServer).length > 0) {
       notifyBundling('server-shared');
       const start = process.hrtime();
+
+      verifyChunkSettings(config.chunks, sharedBrowser);
+
       const sharedPackageInfoServer = await bundleShared(
         sharedServer,
         config,
         fedOptions,
         externals,
-        { platform: 'node', bundleName: 'node-shared' }
+        { platform: 'node', bundleName: 'node-shared', chunks: config.chunks }
       );
       logger.measure(start, '[build artifacts] - To bundle all shared node externals');
 
@@ -187,25 +192,35 @@ async function bundleSeparatePackages(
   fedOptions: NormalizedFederationOptions,
   buildOptions: { platform: 'browser' | 'node' }
 ) {
-  const groupedByPackage: Record<string, Record<string, NormalizedExternalConfig>> = {};
+  const groupedByPackage: Record<
+    string,
+    {
+      entries: Record<string, NormalizedExternalConfig>;
+      chunks: boolean;
+    }
+  > = {};
 
   for (const [key, shared] of Object.entries(separateBrowser)) {
     const packageName = shared.build === 'separate' ? key : inferPackageFromSecondary(key);
     if (!groupedByPackage[packageName]) {
-      groupedByPackage[packageName] = {};
+      groupedByPackage[packageName] = {
+        chunks: shared.chunks,
+        entries: {},
+      };
     }
-    groupedByPackage[packageName][key] = shared;
+    groupedByPackage[packageName].entries[key] = shared;
   }
 
   const bundlePromises = Object.entries(groupedByPackage).map(
-    async ([packageName, sharedGroup]) => {
+    async ([packageName, packageConfig]) => {
       return bundleShared(
-        sharedGroup,
+        packageConfig.entries,
         config,
         fedOptions,
         externals.filter(e => !e.startsWith(packageName)),
         {
           platform: buildOptions.platform,
+          chunks: packageConfig.chunks,
           bundleName: `${buildOptions.platform}-${normalizePackageName(packageName)}`,
         }
       );
@@ -225,10 +240,23 @@ async function bundleSeparatePackages(
   );
 }
 
-function notifyBundling(platform: string) {
-  logger.info(`Preparing shared npm packages with bundle type "${platform}"`);
+function notifyBundling(bundleType: string) {
+  logger.info(`Preparing shared npm packages with bundle type "${bundleType}"`);
   logger.notice('This only needs to be done once, as results are cached');
   logger.notice("Skip packages you don't want to share in your federation config");
+}
+
+function verifyChunkSettings(
+  baseChunkSettings: boolean,
+  externals: Record<string, NormalizedExternalConfig>
+) {
+  Object.entries(externals).forEach(([entry, cfg]) => {
+    if (cfg.chunks !== baseChunkSettings) {
+      logger.warn(
+        `[config] External ${entry}' has separate chunk settings, this is not allowed for build type 'default', consider switching to { build: 'package' }.`
+      );
+    }
+  });
 }
 
 function splitShared(shared: Record<string, NormalizedExternalConfig>): SplitSharedResult {

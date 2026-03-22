@@ -21,11 +21,13 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
     exposes: config.exposes ?? {},
     shared: normalizeShared(config, skip),
     sharedMappings: removeSkippedMappings(config, skip),
+    chunks: config.chunks ?? true,
     skip,
     externals: config.externals ?? [],
     features: {
       mappingVersion: config.features?.mappingVersion ?? false,
-      ignoreUnusedDeps: config.features?.ignoreUnusedDeps ?? false,
+      ignoreUnusedDeps: config.features?.ignoreUnusedDeps ?? true,
+      denseChunking: config.features?.denseChunking ?? false,
     },
     ...(config.shareScope && { shareScope: config.shareScope }),
   };
@@ -57,6 +59,7 @@ function normalizeShared(
         singleton: sharedConfig.singleton ?? false,
         strictVersion: sharedConfig.strictVersion ?? false,
         version: sharedConfig.version,
+        chunks: sharedConfig.chunks ?? config.chunks ?? true,
         includeSecondaries: sharedConfig.includeSecondaries,
         packageInfo: sharedConfig.packageInfo as NormalizedExternalConfig['packageInfo'],
         platform: sharedConfig.platform ?? config.platform ?? 'browser',

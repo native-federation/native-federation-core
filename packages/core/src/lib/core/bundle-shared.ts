@@ -20,7 +20,7 @@ export async function bundleShared(
   config: NormalizedFederationConfig,
   fedOptions: NormalizedFederationOptions,
   externals: string[],
-  buildOptions: { platform: 'browser' | 'node'; bundleName: string }
+  buildOptions: { platform: 'browser' | 'node'; bundleName: string; chunks: boolean }
 ): Promise<{ externals: SharedInfo[]; chunks?: Record<string, string[]> }> {
   const checksum = getChecksum(sharedBundles, fedOptions.dev ? '1' : '0');
 
@@ -97,9 +97,7 @@ export async function bundleShared(
       dev: fedOptions.dev,
       isMappingOrExposed: false,
       hash: false,
-      chunks:
-        (typeof fedOptions.chunks === 'boolean' && fedOptions.chunks) ||
-        (typeof fedOptions.chunks === 'object' && !!fedOptions.chunks.enable),
+      chunks: buildOptions.chunks,
       platform: buildOptions.platform,
       optimizedMappings: config.features.ignoreUnusedDeps,
       cache: fedOptions.federationCache,
@@ -153,7 +151,7 @@ export async function bundleShared(
    * Chunking
    */
   let exportedChunks: ChunkInfo | undefined = undefined;
-  if (typeof fedOptions.chunks === 'object' && fedOptions.chunks.dense === true) {
+  if (buildOptions.chunks && config.features.denseChunking) {
     result.forEach(external => {
       external.bundle = buildOptions.bundleName;
     });
