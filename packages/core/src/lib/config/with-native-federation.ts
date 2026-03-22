@@ -16,7 +16,7 @@ import { logger } from '../utils/logger.js';
 export function withNativeFederation(config: FederationConfig): NormalizedFederationConfig {
   const skip = prepareSkipList(config.skip ?? []);
 
-  const chunks = config.chunks ?? false;
+  const chunks = config.chunks ?? true;
 
   const normalized: NormalizedFederationConfig = {
     $type: 'classic',
@@ -70,7 +70,7 @@ function normalizeShared(
       singleton: sharedConfig.singleton ?? false,
       strictVersion: sharedConfig.strictVersion ?? false,
       version: sharedConfig.version,
-      chunks: sharedConfig.chunks ?? config.chunks ?? true,
+      chunks: sharedConfig.chunks ?? chunks,
       includeSecondaries: sharedConfig.includeSecondaries,
       packageInfo: sharedConfig.packageInfo as NormalizedExternalConfig['packageInfo'],
       platform: sharedConfig.platform ?? config.platform ?? 'browser',
