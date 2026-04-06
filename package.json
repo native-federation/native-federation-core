@@ -10,6 +10,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@nx/esbuild": "~22.6.0",
+    "@softarc/sheriff-core": "^0.19.6",
     "@nx/js": "~22.6.0",
     "@nx/vite": "~22.6.0",
     "@nx/web": "~22.6.0",
@@ -23,38 +24,35 @@
     "@vitest/browser": "^4.0.0",
     "@vitest/coverage-v8": "^4.0.0",
     "@vitest/ui": "^4.0.0",
-    "esbuild": "^0.27.0",
+    "chalk": "^5.6.2",
+    "esbuild": "^0.28.0",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
+    "fast-glob": "^3.3.3",
     "globals": "^17.3.0",
     "jiti": "^2.6.1",
     "jsdom": "^29.0.0",
+    "json5": "^2.2.3",
     "msw": "^2.12.3",
     "nx": "~22.6.0",
     "prettier": "^3.8.1",
     "tslib": "^2.3.0",
     "typescript": "~5.9.2",
     "typescript-eslint": "^8.46.4",
-    "verdaccio": "^6.0.5",
     "vite": "^7.0.0",
     "vitest": "^4.0.0"
   },
   "pnpm": {
     "overrides": {
-      "minimatch": "^7.4.8",
-      "flatted": "^3.4.2"
+      "axios": "~1.13.6",
+      "minimatch": ">=7.4.7",
+      "lodash": ">4.17.23"
     }
   },
   "workspaces": [
     "packages/*"
   ],
-  "dependencies": {
-    "@softarc/sheriff-core": "^0.19.6",
-    "chalk": "^5.6.2",
-    "fast-glob": "^3.3.3",
-    "json5": "^2.2.3"
-  },
   "nx": {
     "includedScripts": []
   }
