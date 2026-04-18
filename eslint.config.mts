@@ -15,6 +15,7 @@ export default [
         'error',
         {
           args: 'all',
+          argsIgnorePattern: '^_',
           varsIgnorePattern: '^_',
         },
       ],

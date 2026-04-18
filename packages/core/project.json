@@ -25,6 +25,20 @@
       "outputs": ["{workspaceRoot}/coverage/packages/core"],
       "dependsOn": ["^build"]
     },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "eslint packages/core/src"
+      },
+      "cache": true,
+      "inputs": [
+        "default",
+        "{workspaceRoot}/eslint.config.mts",
+        {
+          "externalDependencies": ["eslint"]
+        }
+      ]
+    },
     "nx-release-publish": {
       "executor": "@nx/js:release-publish",
       "dependsOn": ["^nx-release-publish"],
