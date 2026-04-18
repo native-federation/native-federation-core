@@ -37,6 +37,6 @@
     }
   },
   "dependencies": {
-    "@softarc/native-federation-runtime": "4.0.0-RC9"
+    "@softarc/native-federation-runtime": "4.0.0-RC10"
   }
 }
