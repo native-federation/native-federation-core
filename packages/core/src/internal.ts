@@ -22,3 +22,6 @@ export type {
 export type { NormalizedFederationConfig } from './lib/domain/config/federation-config.contract.js';
 export { getDefaultCachePath, getChecksum } from './lib/utils/cache-persistence.js';
 export { isInSkipList, prepareSkipList } from './lib/config/default-skip-list.js';
+
+export { NfFileWatcher, NfFileWatcherOptions } from './lib/domain/utils/file-watcher.contract.js';
+export { syncNfFileWatcher, createNfWatcher } from './lib/utils/file-watcher.js';
