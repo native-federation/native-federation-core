@@ -2,14 +2,16 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
+    "rootDir": ".",
     "tsBuildInfoFile": "dist/tsconfig.lib.tsbuildinfo",
+    "declaration": true,
+    "emitDeclarationOnly": true,
     "forceConsistentCasingInFileNames": true,
     "types": ["node"],
-    "allowJs": true,
     "paths": {
-      "@softarc/native-federation/domain": ["packages/core/dist/src/domain.d.ts"],
-      "@softarc/native-federation/internal": ["packages/core/dist/src/internal.d.ts"],
-      "@softarc/native-federation-runtime": ["packages/runtime/dist/index.d.ts"]
+      "@softarc/native-federation/domain": ["./packages/core/dist/src/domain.d.ts"],
+      "@softarc/native-federation/internal": ["./packages/core/dist/src/internal.d.ts"],
+      "@softarc/native-federation-runtime": ["./packages/runtime/dist/index.d.ts"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.js"],
@@ -23,5 +25,7 @@
     "src/**/*.test.js",
     "src/**/*.spec.js"
   ],
-  "references": []
+  "references": [
+    { "path": "../core" }
+  ]
 }

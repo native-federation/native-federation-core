@@ -1,7 +1,6 @@
 {
   "compilerOptions": {
     "rootDir": ".",
-    "baseUrl": ".",
     "declaration": false,
     "importHelpers": true,
     "module": "nodenext",

@@ -1,5 +1,5 @@
 {
-  "name": "@softarc/native-federation-node",
+  "name": "node-runtime",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "library",
   "sourceRoot": "packages/node/src",
@@ -14,7 +14,10 @@
         "tsConfig": "packages/node/tsconfig.build.json",
         "format": ["esm"],
         "bundle": true,
-        "declarationRootDir": "packages/node/src"
+        "external": [
+          "@softarc/native-federation/*",
+          "@softarc/native-federation-runtime"
+        ]
       },
       "dependsOn": ["^build"],
       "cache": true,
@@ -28,11 +31,41 @@
       },
       "dependsOn": ["^build"]
     },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "packages/node",
+        "command": "tsc --build --emitDeclarationOnly"
+      },
+      "cache": true,
+      "inputs": [
+        "production",
+        "^production",
+        {
+          "externalDependencies": ["typescript"]
+        }
+      ],
+      "dependsOn": ["^build"]
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "eslint packages/node/src"
+      },
+      "cache": true,
+      "inputs": [
+        "default",
+        "{workspaceRoot}/eslint.config.mts",
+        {
+          "externalDependencies": ["eslint"]
+        }
+      ]
+    },
     "nx-release-publish": {
       "executor": "@nx/js:release-publish",
       "dependsOn": ["^nx-release-publish"],
       "options": {}
     }
   },
-  "implicitDependencies": ["@softarc/native-federation", "@softarc/native-federation-runtime"]
+  "implicitDependencies": ["core", "runtime"]
 }

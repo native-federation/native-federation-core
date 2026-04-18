@@ -27,11 +27,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: 'pnpm'
+          cache: "pnpm"
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Derive SHAs for nx affected
+      - name: Set SHAs for Nx affected commands
         uses: nrwl/nx-set-shas@v4
 
-      - run: pnpm exec nx affected -t lint typecheck build
+      - name: Lint affected projects
+        run: pnpm exec nx affected -t lint
+
+      - name: Typecheck affected projects
+        run: pnpm exec nx affected -t typecheck
+
+      - name: Build affected projects
+        run: pnpm exec nx affected -t build

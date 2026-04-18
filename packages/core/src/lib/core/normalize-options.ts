@@ -58,6 +58,7 @@ export async function normalizeFederationOptions<TBundlerCache = undefined>(
     ...options,
     entryPoints: options.entryPoints ?? Object.values(config.exposes ?? {}),
     projectName: resolveProjectName(options.projectName ?? config.name),
+    cacheExternalArtifacts: options.cacheExternalArtifacts ?? true,
     federationCache,
   };
 

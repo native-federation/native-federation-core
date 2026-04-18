@@ -20,4 +20,5 @@ export interface NormalizedFederationOptions<TBundlerCache = unknown> extends Fe
   federationCache: FederationCache<TBundlerCache>;
   entryPoints: string[];
   projectName: string;
+  cacheExternalArtifacts: boolean;
 }

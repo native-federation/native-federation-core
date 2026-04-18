@@ -9,8 +9,8 @@
     "lib": ["es2022", "dom"],
     "forceConsistentCasingInFileNames": true,
     "paths": {
-      "@softarc/native-federation/domain": ["packages/core/dist/src/domain.d.ts"],
-      "@softarc/native-federation/internal": ["packages/core/dist/src/internal.d.ts"]
+      "@softarc/native-federation/domain": ["./packages/core/dist/src/domain.d.ts"],
+      "@softarc/native-federation/internal": ["./packages/core/dist/src/internal.d.ts"]
     }
   },
   "include": ["src/**/*.ts"],

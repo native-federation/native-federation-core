@@ -37,6 +37,7 @@
     }
   },
   "dependencies": {
+    "@softarc/native-federation": "workspace:^",
     "@softarc/native-federation-runtime": "4.0.0-RC10"
   }
 }

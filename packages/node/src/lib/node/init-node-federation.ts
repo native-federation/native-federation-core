@@ -9,7 +9,7 @@ import {
   mergeImportMaps,
   processHostInfo,
 } from '@softarc/native-federation-runtime';
-import { type FederationInfo } from '@softarc/native-federation/domain';
+import type { FederationInfo } from '@softarc/native-federation';
 import { IMPORT_MAP_FILE_NAME } from '../utils/import-map-loader.js';
 import { resolver } from '../utils/loader-as-data-url.js';
 

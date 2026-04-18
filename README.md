@@ -3,7 +3,7 @@
 Native Federation is a "browser-native" implementation of the successful mental model behind wepback Module Federation for building Micro Frontends and plugin-based solutions. It can be **used with any framework and build tool** for implementing **Micro Frontends** and plugin-based architectures.
 
 > [!WARNING]
-> This is our v4 version which is currently in beta and contains breaking changes. For the v3 (stable) version, check out the [module-federation-plugin repository](https://github.com/angular-architects/module-federation-plugin/tree/main/libs/native-federation-core).
+> **This is our v4 version**. For the v3 version, check out the [module-federation-plugin repository](https://github.com/angular-architects/module-federation-plugin/tree/main/libs/native-federation-core).
 
 ## Features
 

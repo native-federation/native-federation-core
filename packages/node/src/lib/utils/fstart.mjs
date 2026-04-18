@@ -66,6 +66,7 @@ function watchFederationBuildCompletion(endpoint) {
   eventSource.onmessage = function (event) {
     const data = JSON.parse(event.data);
     if (data.type === 'federation-rebuild-complete' /* COMPLETED */) {
+      // eslint-disable-next-line no-console
       console.log('[Federation] Rebuild completed, reloading...');
       window.location.reload();
     }
@@ -85,7 +86,7 @@ async function processRemoteInfos(remotes, options = { throwIfRemoteNotFound: fa
         url2 += `${addAppend}t=${options.cacheTag}`;
       }
       return await processRemoteInfo(url2, remoteName);
-    } catch (e) {
+    } catch {
       const error = `Error loading remote entry for ${remoteName} from file ${remotes[remoteName]}`;
       if (options.throwIfRemoteNotFound) {
         throw new Error(error);
@@ -194,13 +195,13 @@ function resolveAndComposeImportMap(parsed) {
 }
 function sortAndNormalizeSpecifierMap(map, baseURL2) {
   const normalized = {};
-  for (let specifierKey in map) {
+  for (const specifierKey in map) {
     const value = map[specifierKey];
     const normalizedSpecifierKey = normalizeSpecifierKey(specifierKey, baseURL2);
     if (normalizedSpecifierKey === null) {
       continue;
     }
-    let addressURL = parseURLLikeSpecifier(value, baseURL2);
+    const addressURL = parseURLLikeSpecifier(value, baseURL2);
     if (addressURL === null) {
       console.warn(`Invalid URL address for import map specifier '${specifierKey}'`);
       normalized[normalizedSpecifierKey] = null;
@@ -234,8 +235,8 @@ function parseURLLikeSpecifier(specifier, baseURL2) {
   }
 }
 function sortAndNormalizeScopes(map, baseURL2) {
-  let normalized = {};
-  for (let scopePrefix in map) {
+  const normalized = {};
+  for (const scopePrefix in map) {
     const potentialSpecifierMap = map[scopePrefix];
     if (!isPlainObject(potentialSpecifierMap)) {
       throw TypeError(`The value of scope ${scopePrefix} must be a JSON object`);
@@ -254,6 +255,7 @@ function sortAndNormalizeScopes(map, baseURL2) {
 function isPlainObject(obj) {
   return obj === Object(obj) && !Array.isArray(obj);
 }
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 var importMapPromise = getImportMapPromise();
 async function getImportMapPromise() {
   const relativePath = process.env.IMPORT_MAP_PATH || IMPORT_MAP_FILE_NAME;
@@ -261,7 +263,7 @@ async function getImportMapPromise() {
   let str;
   try {
     str = await fs.readFile(importMapPath);
-  } catch (err) {
+  } catch {
     return emptyMap();
   }
   let json;
@@ -387,6 +389,7 @@ function exitWithUsage(defaultArgs2) {
   for (const key in defaultArgs2) {
     args2 += `[--${key} ${defaultArgs2[key]}] `;
   }
+  // eslint-disable-next-line no-console
   console.log('usage: nfstart ' + args2);
   process.exit(1);
 }

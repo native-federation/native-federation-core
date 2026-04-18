@@ -34,6 +34,6 @@ export default [
       'prefer-const': 'error',
       '@typescript-eslint/no-require-imports': 'warn',
     },
-    languageOptions: { globals: globals.browser },
+    languageOptions: { globals: { ...globals.browser, ...globals.node } },
   },
 ];
