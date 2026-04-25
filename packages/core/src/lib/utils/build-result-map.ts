@@ -1,22 +1,25 @@
 import path from 'path';
 import type { NFBuildAdapterResult } from '../domain/core/build-adapter.contract.js';
 
+function stripHash(fileName: string): string {
+  const start = fileName.lastIndexOf('-');
+  const end = fileName.lastIndexOf('.');
+  if (start < 0 || end < 0 || start > end) return fileName;
+  return fileName.substring(0, start) + fileName.substring(end);
+}
+
 export function createBuildResultMap(
   buildResult: NFBuildAdapterResult[],
-  isHashed: boolean
+  isHashed: boolean,
+  expectedNames: string[] = []
 ): Record<string, string> {
+  const expected = new Set(expectedNames.map(n => path.basename(n)));
   const map: Record<string, string> = {};
 
   for (const item of buildResult) {
     const resultName = path.basename(item.fileName);
-    let requestName = resultName;
-    if (isHashed) {
-      const start = resultName.lastIndexOf('-');
-      const end = resultName.lastIndexOf('.');
-      const part1 = resultName.substring(0, start);
-      const part2 = resultName.substring(end);
-      requestName = part1 + part2;
-    }
+    const requestName =
+      isHashed && expected.has(stripHash(resultName)) ? stripHash(resultName) : resultName;
     map[requestName] = item.fileName;
   }
   return map;

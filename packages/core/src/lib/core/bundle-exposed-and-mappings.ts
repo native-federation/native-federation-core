@@ -80,7 +80,10 @@ export async function bundleExposedAndMappings(
     throw error;
   }
 
-  const resultMap = createBuildResultMap(result, hash);
+  const resultMap = createBuildResultMap(result, hash, [
+    ...shared.map(s => s.outName),
+    ...exposes.map(e => e.outName),
+  ]);
 
   const sharedResult: Array<SharedInfo> = [];
   const entryFiles: string[] = [];
