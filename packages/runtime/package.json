@@ -21,7 +21,7 @@
     "!**/*.tsbuildinfo"
   ],
   "dependencies": {
-    "@softarc/native-federation": "^4.0.0"
+    "@softarc/native-federation": "^4.1.0"
   },
   "devDependencies": {
     "@types/node": "~24.10.0",
