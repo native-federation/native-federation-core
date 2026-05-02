@@ -4,6 +4,7 @@ export type {
   ExposesInfo,
   ArtifactInfo,
   ChunkInfo,
+  IntegrityMap,
 } from './federation-info.contract.js';
 export {
   type BuildNotificationOptions,

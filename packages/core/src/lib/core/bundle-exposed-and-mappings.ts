@@ -5,8 +5,10 @@ import type {
   ArtifactInfo,
   ChunkInfo,
   ExposesInfo,
+  IntegrityMap,
   SharedInfo,
 } from '../domain/core/federation-info.contract.js';
+import { integrityForFile } from '../utils/hash-file.js';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
 import { createBuildResultMap, popFromResultMap } from '../utils/build-result-map.js';
 import { logger } from '../utils/logger.js';
@@ -134,14 +136,26 @@ export async function bundleExposedAndMappings(
 
   // Process remaining chunks and lazy loaded internal modules
   let exportedChunks: ChunkInfo | undefined = undefined;
+  const chunkPaths: string[] = [];
   if (config.chunks && config.features.denseChunking) {
     for (const entryFile of entryFiles) rewriteChunkImports(entryFile);
+    chunkPaths.push(...Object.values(resultMap));
     exportedChunks = {
-      ['mapping-or-exposed']: Object.values(resultMap).map(chunk => path.basename(chunk)),
+      ['mapping-or-exposed']: chunkPaths.map(chunk => path.basename(chunk)),
     };
   }
 
-  return { mappings: sharedResult, exposes: exposedResult, chunks: exportedChunks };
+  // Must run after rewriteChunkImports so SRI matches the final on-disk bytes.
+  let integrity: IntegrityMap | undefined;
+  if (fedOptions.integrity) {
+    integrity = {};
+    for (const filePath of [...entryFiles, ...chunkPaths]) {
+      if (!fs.existsSync(filePath)) continue;
+      integrity[path.basename(filePath)] = integrityForFile(filePath);
+    }
+  }
+
+  return { mappings: sharedResult, exposes: exposedResult, chunks: exportedChunks, integrity };
 }
 
 export function describeExposed(
