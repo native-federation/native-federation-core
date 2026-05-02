@@ -1,12 +1,17 @@
 import * as path from 'path';
 import * as fs from 'fs';
-import type { ChunkInfo, SharedInfo } from '../domain/core/federation-info.contract.js';
+import type {
+  ChunkInfo,
+  IntegrityMap,
+  SharedInfo,
+} from '../domain/core/federation-info.contract.js';
 import type { FederationOptions } from '../domain/core/federation-options.contract.js';
 import { toChunkImport } from '../domain/core/chunk.js';
 
 export function writeImportMap(
   sharedInfo: { externals: SharedInfo[]; chunks?: ChunkInfo },
-  fedOption: FederationOptions
+  fedOption: FederationOptions,
+  fileIntegrity?: IntegrityMap
 ) {
   const imports = sharedInfo.externals.reduce(
     (acc, cur) => {
@@ -26,7 +31,19 @@ export function writeImportMap(
     });
   }
 
-  const importMap = { imports };
+  const importMap: { imports: Record<string, string>; integrity?: IntegrityMap } = { imports };
+
+  if (fileIntegrity) {
+    const integrity: IntegrityMap = {};
+    for (const url of Object.values(imports)) {
+      const sri = fileIntegrity[url];
+      if (sri) integrity[url] = sri;
+    }
+    if (Object.keys(integrity).length > 0) {
+      importMap.integrity = integrity;
+    }
+  }
+
   const importMapPath = path.join(fedOption.workspaceRoot, fedOption.outputPath, 'importmap.json');
   fs.writeFileSync(importMapPath, JSON.stringify(importMap, null, 2));
 }

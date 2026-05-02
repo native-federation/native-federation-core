@@ -63,8 +63,15 @@ export async function rebuildForFederation(
     federationInfo.chunks = { ...(federationInfo.chunks ?? {}), ...artifactInfo?.chunks };
   }
 
+  if (fedOptions.integrity) {
+    federationInfo.integrity = {
+      ...(federationCache.integrity ?? {}),
+      ...(artifactInfo?.integrity ?? {}),
+    };
+  }
+
   writeFederationInfo(federationInfo, fedOptions);
-  writeImportMap(federationCache, fedOptions);
+  writeImportMap(federationCache, fedOptions, federationInfo.integrity);
 
   return federationInfo;
 }

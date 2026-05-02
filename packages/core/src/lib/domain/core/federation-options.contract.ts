@@ -14,6 +14,7 @@ export interface FederationOptions {
   packageJson?: string;
   entryPoints?: string[];
   buildNotifications?: BuildNotificationOptions;
+  integrity?: boolean;
 }
 
 export interface NormalizedFederationOptions<TBundlerCache = unknown> extends FederationOptions {

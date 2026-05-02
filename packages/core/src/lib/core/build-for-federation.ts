@@ -1,6 +1,7 @@
 import type {
   ChunkInfo,
   FederationInfo,
+  IntegrityMap,
   SharedInfo,
 } from '../domain/core/federation-info.contract.js';
 import {
@@ -164,8 +165,15 @@ export async function buildForFederation(
     federationInfo.chunks = { ...(federationInfo.chunks ?? {}), ...artifactInfo?.chunks };
   }
 
+  if (fedOptions.integrity) {
+    federationInfo.integrity = {
+      ...(fedOptions.federationCache.integrity ?? {}),
+      ...(artifactInfo?.integrity ?? {}),
+    };
+  }
+
   writeFederationInfo(federationInfo, fedOptions);
-  writeImportMap(fedOptions.federationCache, fedOptions);
+  writeImportMap(fedOptions.federationCache, fedOptions, federationInfo.integrity);
 
   return federationInfo;
 }
@@ -234,9 +242,21 @@ async function bundleSeparatePackages(
       if (r.chunks) {
         chunks = { ...(acc.chunks ?? {}), ...r.chunks };
       }
-      return { externals: [...acc.externals, ...r.externals], chunks };
+      let integrity = acc.integrity;
+      if (r.integrity) {
+        integrity = { ...(acc.integrity ?? {}), ...r.integrity };
+      }
+      return {
+        externals: [...acc.externals, ...r.externals],
+        chunks,
+        integrity,
+      };
     },
-    { externals: [] } as { externals: SharedInfo[]; chunks?: ChunkInfo }
+    { externals: [] } as {
+      externals: SharedInfo[];
+      chunks?: ChunkInfo;
+      integrity?: IntegrityMap;
+    }
   );
 }
 
