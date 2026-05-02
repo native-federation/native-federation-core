@@ -378,7 +378,7 @@ Native Federation uses an intelligent caching system to speed up builds:
 ## Version Management
 
 - Versions are managed in individual `package.json` files
-- Core and runtime should stay in sync (both currently `4.0.0-RC10`)
+- Core and runtime should stay in sync (both currently `4.0.0`)
 - Uses conventional commits for changelog generation
 - Release process: update versions, build, publish to npm
 
