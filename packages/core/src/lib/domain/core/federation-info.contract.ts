@@ -36,4 +36,5 @@ export interface ArtifactInfo {
   mappings: SharedInfo[];
   exposes: ExposesInfo[];
   chunks?: ChunkInfo;
+  integrity?: IntegrityMap;
 }

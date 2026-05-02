@@ -1,5 +1,9 @@
 import type { FederationCache } from '../domain/core/federation-cache.contract.js';
-import type { ChunkInfo, SharedInfo } from '../domain/core/federation-info.contract.js';
+import type {
+  ChunkInfo,
+  IntegrityMap,
+  SharedInfo,
+} from '../domain/core/federation-info.contract.js';
 
 export function createFederationCache(cachePath: string): FederationCache<undefined>;
 export function createFederationCache<TBundlerCache>(
@@ -15,11 +19,19 @@ export function createFederationCache<TBundlerCache = unknown>(
 
 export function addExternalsToCache(
   cache: FederationCache,
-  { externals, chunks }: { externals: SharedInfo[]; chunks?: ChunkInfo }
+  {
+    externals,
+    chunks,
+    integrity,
+  }: { externals: SharedInfo[]; chunks?: ChunkInfo; integrity?: IntegrityMap }
 ) {
   cache.externals.push(...externals);
   if (chunks) {
     if (!cache.chunks) cache.chunks = {};
     cache.chunks = { ...cache.chunks, ...chunks };
+  }
+  if (integrity) {
+    if (!cache.integrity) cache.integrity = {};
+    cache.integrity = { ...cache.integrity, ...integrity };
   }
 }

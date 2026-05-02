@@ -2,7 +2,11 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import type { NormalizedExternalConfig } from '../domain/config/external-config.contract.js';
-import type { ChunkInfo, SharedInfo } from '../domain/core/federation-info.contract.js';
+import type {
+  ChunkInfo,
+  IntegrityMap,
+  SharedInfo,
+} from '../domain/core/federation-info.contract.js';
 import { logger } from './logger.js';
 
 export const getDefaultCachePath = (workspaceRoot: string) =>
@@ -31,35 +35,24 @@ export const getChecksum = (
     .digest('hex');
 };
 
+type CacheMetadata = {
+  checksum: string;
+  externals: SharedInfo[];
+  chunks?: ChunkInfo;
+  integrity?: IntegrityMap;
+  files: string[];
+};
+
 export const cacheEntry = (pathToCache: string, fileName: string) => ({
-  getMetadata: (
-    checksum: string
-  ):
-    | {
-        checksum: string;
-        externals: SharedInfo[];
-        chunks?: ChunkInfo;
-        files: string[];
-      }
-    | undefined => {
+  getMetadata: (checksum: string): CacheMetadata | undefined => {
     const metadataFile = path.join(pathToCache, fileName);
     if (!fs.existsSync(pathToCache) || !fs.existsSync(metadataFile)) return undefined;
 
-    const cachedResult: {
-      checksum: string;
-      externals: SharedInfo[];
-      chunks?: ChunkInfo;
-      files: string[];
-    } = JSON.parse(fs.readFileSync(metadataFile, 'utf-8'));
+    const cachedResult: CacheMetadata = JSON.parse(fs.readFileSync(metadataFile, 'utf-8'));
     if (cachedResult.checksum !== checksum) return undefined;
     return cachedResult;
   },
-  persist: (payload: {
-    checksum: string;
-    externals: SharedInfo[];
-    chunks?: ChunkInfo;
-    files: string[];
-  }) => {
+  persist: (payload: CacheMetadata) => {
     fs.writeFileSync(path.join(pathToCache, fileName), JSON.stringify(payload), 'utf-8');
   },
   copyFiles: (fullOutputPath: string) => {

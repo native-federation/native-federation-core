@@ -7,7 +7,6 @@ import {
 import type { NormalizedFederationOptions } from '../domain/core/federation-options.contract.js';
 import { writeFederationInfo } from './write-federation-info.js';
 import { writeImportMap } from './write-import-map.js';
-import { computeIntegrityMap } from './compute-integrity-map.js';
 import { logger } from '../utils/logger.js';
 import { AbortedError } from '../utils/errors.js';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
@@ -65,7 +64,10 @@ export async function rebuildForFederation(
   }
 
   if (fedOptions.integrity) {
-    federationInfo.integrity = computeIntegrityMap(federationInfo, fedOptions);
+    federationInfo.integrity = {
+      ...(federationCache.integrity ?? {}),
+      ...(artifactInfo?.integrity ?? {}),
+    };
   }
 
   writeFederationInfo(federationInfo, fedOptions);

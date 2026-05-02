@@ -1,6 +1,7 @@
 import type {
   ChunkInfo,
   FederationInfo,
+  IntegrityMap,
   SharedInfo,
 } from '../domain/core/federation-info.contract.js';
 import {
@@ -12,7 +13,6 @@ import { bundleShared } from './bundle-shared.js';
 import type { NormalizedFederationOptions } from '../domain/core/federation-options.contract.js';
 import { writeFederationInfo } from './write-federation-info.js';
 import { writeImportMap } from './write-import-map.js';
-import { computeIntegrityMap } from './compute-integrity-map.js';
 import { logger } from '../utils/logger.js';
 import { normalizePackageName } from '../utils/normalize.js';
 import { AbortedError } from '../utils/errors.js';
@@ -166,7 +166,10 @@ export async function buildForFederation(
   }
 
   if (fedOptions.integrity) {
-    federationInfo.integrity = computeIntegrityMap(federationInfo, fedOptions);
+    federationInfo.integrity = {
+      ...(fedOptions.federationCache.integrity ?? {}),
+      ...(artifactInfo?.integrity ?? {}),
+    };
   }
 
   writeFederationInfo(federationInfo, fedOptions);
@@ -239,9 +242,21 @@ async function bundleSeparatePackages(
       if (r.chunks) {
         chunks = { ...(acc.chunks ?? {}), ...r.chunks };
       }
-      return { externals: [...acc.externals, ...r.externals], chunks };
+      let integrity = acc.integrity;
+      if (r.integrity) {
+        integrity = { ...(acc.integrity ?? {}), ...r.integrity };
+      }
+      return {
+        externals: [...acc.externals, ...r.externals],
+        chunks,
+        integrity,
+      };
     },
-    { externals: [] } as { externals: SharedInfo[]; chunks?: ChunkInfo }
+    { externals: [] } as {
+      externals: SharedInfo[];
+      chunks?: ChunkInfo;
+      integrity?: IntegrityMap;
+    }
   );
 }
 

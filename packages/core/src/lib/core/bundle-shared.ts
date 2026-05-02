@@ -2,7 +2,11 @@ import * as path from 'path';
 import * as fs from 'fs';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
 import { getPackageInfo, type PackageInfo } from '../utils/package-info.js';
-import type { ChunkInfo, SharedInfo } from '../domain/core/federation-info.contract.js';
+import type {
+  ChunkInfo,
+  IntegrityMap,
+  SharedInfo,
+} from '../domain/core/federation-info.contract.js';
 import { type NormalizedFederationOptions } from '../domain/core/federation-options.contract.js';
 import { logger } from '../utils/logger.js';
 import crypto from 'crypto';
@@ -14,6 +18,7 @@ import { fileURLToPath } from 'url';
 import type { NormalizedExternalConfig } from '../domain/config/external-config.contract.js';
 import type { EntryPoint, NFBuildAdapterResult } from '../domain/core/build-adapter.contract.js';
 import { getBuildAdapter } from './build-adapter.js';
+import { integrityForFile } from '../utils/hash-file.js';
 
 export async function bundleShared(
   sharedBundles: Record<string, NormalizedExternalConfig>,
@@ -21,7 +26,11 @@ export async function bundleShared(
   fedOptions: NormalizedFederationOptions,
   externals: string[],
   buildOptions: { platform: 'browser' | 'node'; bundleName: string; chunks: boolean }
-): Promise<{ externals: SharedInfo[]; chunks?: Record<string, string[]> }> {
+): Promise<{
+  externals: SharedInfo[];
+  chunks?: Record<string, string[]>;
+  integrity?: IntegrityMap;
+}> {
   const checksum = getChecksum(sharedBundles, fedOptions.dev ? '1' : '0');
 
   const folder = fedOptions.packageJson
@@ -38,7 +47,18 @@ export async function bundleShared(
     if (cacheMetadata) {
       logger.debug(`Checksum of ${buildOptions.bundleName} matched, Skipped artifact bundling`);
       bundleCache.copyFiles(path.join(fedOptions.workspaceRoot, fedOptions.outputPath));
-      return { externals: cacheMetadata.externals, chunks: cacheMetadata.chunks };
+      let integrity = cacheMetadata.integrity;
+      if (fedOptions.integrity && !integrity) {
+        integrity = computeIntegrityForFiles(
+          cacheMetadata.files,
+          fedOptions.federationCache.cachePath
+        );
+      }
+      return {
+        externals: cacheMetadata.externals,
+        chunks: cacheMetadata.chunks,
+        integrity,
+      };
     }
   }
 
@@ -162,16 +182,35 @@ export async function bundleShared(
     addChunksToResult(chunks, result);
   }
 
+  const persistedFiles = bundleResult.map(r => r.fileName.split(path.sep).pop() ?? r.fileName);
+
+  // Must run after rewriteImports so SRI matches the bytes copied to dist.
+  const integrity = fedOptions.integrity
+    ? computeIntegrityForFiles(persistedFiles, fedOptions.federationCache.cachePath)
+    : undefined;
+
   bundleCache.persist({
     checksum,
     externals: result,
-    files: bundleResult.map(r => r.fileName.split(path.sep).pop() ?? r.fileName),
+    files: persistedFiles,
     chunks: exportedChunks,
+    integrity,
   });
 
   bundleCache.copyFiles(path.join(fedOptions.workspaceRoot, fedOptions.outputPath));
 
-  return { externals: result, chunks: exportedChunks };
+  return { externals: result, chunks: exportedChunks, integrity };
+}
+
+function computeIntegrityForFiles(files: string[], baseDir: string): IntegrityMap {
+  const integrity: IntegrityMap = {};
+  for (const file of files) {
+    if (file.endsWith('.map')) continue;
+    const fullPath = path.join(baseDir, file);
+    if (!fs.existsSync(fullPath)) continue;
+    integrity[path.basename(file)] = integrityForFile(fullPath);
+  }
+  return integrity;
 }
 
 function rewriteImports(cachedFiles: string[], cachePath: string) {
