@@ -93,21 +93,9 @@ export async function bundleExposedAndMappings(
   // Pick shared-mappings
   for (const item of shared) {
     const distEntryFile = popFromResultMap(resultMap, item.outName);
-    sharedResult.push({
-      packageName: item.key!,
-      outFileName: path.basename(distEntryFile),
-      requiredVersion: '',
-      singleton: true,
-      strictVersion: false,
-      version: config.features.mappingVersion
-        ? getMappingVersion(item.fileName, fedOptions.workspaceRoot)
-        : '',
-      dev: !fedOptions.dev
-        ? undefined
-        : {
-            entryPoint: normalize(path.normalize(item.fileName)),
-          },
-    });
+    sharedResult.push(
+      toSharedMappingInfo(item.fileName, item.key!, path.basename(distEntryFile), config, fedOptions)
+    );
     entryFiles.push(distEntryFile);
   }
 
@@ -190,24 +178,35 @@ export function describeSharedMappings(
   const result: Array<SharedInfo> = [];
 
   for (const [mappedPath, mappedImport] of Object.entries(config.sharedMappings)) {
-    result.push({
-      packageName: mappedImport,
-      outFileName: '',
-      requiredVersion: '',
-      singleton: true,
-      strictVersion: false,
-      version: config.features.mappingVersion
-        ? getMappingVersion(mappedPath, fedOptions.workspaceRoot)
-        : '',
-      dev: !fedOptions.dev
-        ? undefined
-        : {
-            entryPoint: normalize(path.normalize(mappedPath)),
-          },
-    });
+    result.push(toSharedMappingInfo(mappedPath, mappedImport, '', config, fedOptions));
   }
 
   return result;
+}
+
+function toSharedMappingInfo(
+  mappedPath: string,
+  mappedImport: string,
+  outFileName: string,
+  config: NormalizedFederationConfig,
+  fedOptions: NormalizedFederationOptions
+): SharedInfo {
+  const mappingVersion = config.features.mappingVersion
+    ? getMappingVersion(mappedPath, fedOptions.workspaceRoot)
+    : '';
+  return {
+    packageName: mappedImport,
+    outFileName,
+    requiredVersion: mappingVersion.length > 0 ? '~' + mappingVersion : '',
+    singleton: true,
+    strictVersion: config.features.mappingVersion,
+    version: mappingVersion,
+    dev: !fedOptions.dev
+      ? undefined
+      : {
+          entryPoint: normalize(path.normalize(mappedPath)),
+        },
+  };
 }
 
 export function getMappingVersion(fileName: string, workspaceRoot: string): string {
