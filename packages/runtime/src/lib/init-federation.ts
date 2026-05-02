@@ -4,7 +4,13 @@ import {
   type InitFederationOptions,
   type ProcessRemoteInfoOptions,
 } from './model/federation-info.js';
-import { type ImportMap, type Imports, mergeImportMaps, type Scopes } from './model/import-map.js';
+import {
+  type ImportMap,
+  type Imports,
+  type Integrity,
+  mergeImportMaps,
+  type Scopes,
+} from './model/import-map.js';
 import { addRemote } from './model/remotes.js';
 import { appendImportMap } from './utils/add-import-map.js';
 import { getDirectory, joinPaths } from './utils/path-utils.js';
@@ -252,10 +258,16 @@ function createRemoteImportMap(
   remoteName: string,
   baseUrl: string
 ): ImportMap {
-  const imports = processExposed(remoteInfo, remoteName, baseUrl);
-  const scopes = processRemoteImports(remoteInfo, baseUrl);
+  const { imports, integrity: exposedIntegrity } = processExposed(remoteInfo, remoteName, baseUrl);
+  const { scopes, integrity: scopedIntegrity } = processRemoteImports(remoteInfo, baseUrl);
 
-  return { imports, scopes };
+  const importMap: ImportMap = { imports, scopes };
+
+  if (exposedIntegrity || scopedIntegrity) {
+    importMap.integrity = { ...(exposedIntegrity ?? {}), ...(scopedIntegrity ?? {}) };
+  }
+
+  return importMap;
 }
 
 /**
@@ -298,14 +310,19 @@ async function loadFederationInfo(remoteEntryUrl: string): Promise<FederationInf
  *
  * @returns Scopes object mapping baseUrl to its shared dependencies
  */
-function processRemoteImports(remoteInfo: FederationInfo, baseUrl: string): Scopes {
+function processRemoteImports(
+  remoteInfo: FederationInfo,
+  baseUrl: string
+): { scopes: Scopes; integrity?: Integrity } {
   const scopes: Scopes = {};
   const scopedImports: Imports = {};
+  const integrity: Integrity = {};
 
   for (const shared of remoteInfo.shared) {
     // Check if this dependency already has an external URL registered
     // If not, construct the URL from the base path and output filename
-    const outFileName = getExternalUrl(shared) ?? joinPaths(baseUrl, shared.outFileName);
+    const reusedUrl = getExternalUrl(shared);
+    const outFileName = reusedUrl ?? joinPaths(baseUrl, shared.outFileName);
 
     // Register this URL as the external location for this shared dependency
     // This allows other remotes to potentially reuse this version
@@ -313,20 +330,30 @@ function processRemoteImports(remoteInfo: FederationInfo, baseUrl: string): Scop
 
     // Add to the scoped imports: package name -> full URL
     scopedImports[shared.packageName] = outFileName;
+
+    // Only attach an integrity hash when this remote owns the URL.
+    // If the URL was reused from another remote, that remote's integrity
+    // entry already covers it — claiming a different hash for the same URL
+    // would cause a mismatch.
+    if (!reusedUrl) {
+      addIntegrity(integrity, remoteInfo.integrity, shared.outFileName, outFileName);
+    }
   }
 
   if (remoteInfo.chunks) {
     Object.values(remoteInfo.chunks).forEach(c => {
       c.forEach(e => {
         const key: string = toChunkImport(e);
-        scopedImports[key] = joinPaths(baseUrl, e);
+        const url = joinPaths(baseUrl, e);
+        scopedImports[key] = url;
+        addIntegrity(integrity, remoteInfo.integrity, e, url);
       });
     });
   }
 
   scopes[baseUrl + '/'] = scopedImports;
 
-  return scopes;
+  return Object.keys(integrity).length > 0 ? { scopes, integrity } : { scopes };
 }
 
 /**
@@ -350,8 +377,13 @@ function processRemoteImports(remoteInfo: FederationInfo, baseUrl: string): Scop
  *
  * @returns Imports object mapping remote module keys to their URLs
  */
-function processExposed(remoteInfo: FederationInfo, remoteName: string, baseUrl: string): Imports {
+function processExposed(
+  remoteInfo: FederationInfo,
+  remoteName: string,
+  baseUrl: string
+): { imports: Imports; integrity?: Integrity } {
   const imports: Imports = {};
+  const integrity: Integrity = {};
 
   for (const exposed of remoteInfo.exposes) {
     // Create the import key by joining remote name with the exposed key
@@ -363,9 +395,10 @@ function processExposed(remoteInfo: FederationInfo, remoteName: string, baseUrl:
     const value = joinPaths(baseUrl, exposed.outFileName);
 
     imports[key] = value;
+    addIntegrity(integrity, remoteInfo.integrity, exposed.outFileName, value);
   }
 
-  return imports;
+  return Object.keys(integrity).length > 0 ? { imports, integrity } : { imports };
 }
 
 /**
@@ -387,20 +420,23 @@ export async function processHostInfo(
   hostInfo: FederationInfo,
   relBundlesPath = './'
 ): Promise<ImportMap> {
+  const imports: Imports = {};
+  const integrity: Integrity = {};
+
   // Transform shared array into imports object
-  const imports = hostInfo.shared.reduce(
-    (acc, cur) => ({
-      ...acc,
-      [cur.packageName]: relBundlesPath + cur.outFileName,
-    }),
-    {}
-  ) as Imports;
+  for (const shared of hostInfo.shared) {
+    const url = relBundlesPath + shared.outFileName;
+    imports[shared.packageName] = url;
+    addIntegrity(integrity, hostInfo.integrity, shared.outFileName, url);
+  }
 
   if (hostInfo.chunks) {
     Object.values(hostInfo.chunks).forEach(c => {
       c.forEach(e => {
         const key: string = toChunkImport(e);
-        imports[key] = relBundlesPath + e;
+        const url = relBundlesPath + e;
+        imports[key] = url;
+        addIntegrity(integrity, hostInfo.integrity, e, url);
       });
     });
   }
@@ -411,5 +447,21 @@ export async function processHostInfo(
     setExternalUrl(shared, relBundlesPath + shared.outFileName);
   }
 
-  return { imports, scopes: {} };
+  const importMap: ImportMap = { imports, scopes: {} };
+  if (Object.keys(integrity).length > 0) {
+    importMap.integrity = integrity;
+  }
+  return importMap;
+}
+
+function addIntegrity(
+  bag: Integrity,
+  source: Record<string, string> | undefined,
+  fileKey: string,
+  resolvedUrl: string
+): void {
+  const sri = source?.[fileKey];
+  if (sri) {
+    bag[resolvedUrl] = sri;
+  }
 }

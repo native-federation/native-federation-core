@@ -51,5 +51,42 @@ describe('import-map', () => {
 
       expect(result).toEqual(fakeImportMap1);
     });
+
+    it('omits integrity when neither side defines it', () => {
+      const result = mergeImportMaps(fakeImportMap1, fakeImportMap2);
+      expect(result.integrity).toBeUndefined();
+    });
+
+    it('preserves integrity from one side when only one is set', () => {
+      const withIntegrity: ImportMap = {
+        ...fakeImportMap1,
+        integrity: { 'http://localhost:4200/angular-core.js': 'sha384-abc' },
+      };
+      const result = mergeImportMaps(withIntegrity, fakeImportMap2);
+      expect(result.integrity).toEqual({ 'http://localhost:4200/angular-core.js': 'sha384-abc' });
+    });
+
+    it('merges integrity from both sides with the second map winning on collision', () => {
+      const a: ImportMap = {
+        ...fakeImportMap1,
+        integrity: {
+          'http://localhost:4200/angular-core.js': 'sha384-a',
+          'http://localhost:4200/lodash.js': 'sha384-shared',
+        },
+      };
+      const b: ImportMap = {
+        ...fakeImportMap2,
+        integrity: {
+          'http://localhost:4201/angular-common.js': 'sha384-b',
+          'http://localhost:4200/lodash.js': 'sha384-overridden',
+        },
+      };
+      const result = mergeImportMaps(a, b);
+      expect(result.integrity).toEqual({
+        'http://localhost:4200/angular-core.js': 'sha384-a',
+        'http://localhost:4201/angular-common.js': 'sha384-b',
+        'http://localhost:4200/lodash.js': 'sha384-overridden',
+      });
+    });
   });
 });

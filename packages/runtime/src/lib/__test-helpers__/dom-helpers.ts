@@ -23,6 +23,7 @@ export const clearImportMapScripts = (): void => {
 export const getImportMapContent = (): {
   imports: Record<string, string>;
   scopes: Record<string, Record<string, string>>;
+  integrity?: Record<string, string>;
 } | null => {
   const scripts = getImportMapScripts();
   if (scripts.length === 0) {
@@ -31,6 +32,28 @@ export const getImportMapContent = (): {
 
   try {
     return JSON.parse(scripts[0]?.innerHTML ?? '{}');
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Gets the parsed content of the most recently appended importmap-shim script.
+ * Useful for inspecting the import map produced by lazy-loaded remotes, which
+ * are appended after the initial initFederation call.
+ */
+export const getLatestImportMapContent = (): {
+  imports: Record<string, string>;
+  scopes: Record<string, Record<string, string>>;
+  integrity?: Record<string, string>;
+} | null => {
+  const scripts = getImportMapScripts();
+  if (scripts.length === 0) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(scripts[scripts.length - 1]?.innerHTML ?? '{}');
   } catch {
     return null;
   }

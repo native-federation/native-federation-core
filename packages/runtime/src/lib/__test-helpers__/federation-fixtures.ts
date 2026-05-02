@@ -13,7 +13,10 @@ export const createFederationInfo = (overrides?: Partial<FederationInfo>): Feder
 /**
  * Creates a host federation info with shared dependencies
  */
-export const createHostInfo = (name = 'host'): FederationInfo => ({
+export const createHostInfo = (
+  name = 'host',
+  overrides?: Partial<FederationInfo>
+): FederationInfo => ({
   name,
   exposes: [],
   shared: [
@@ -32,6 +35,7 @@ export const createHostInfo = (name = 'host'): FederationInfo => ({
       outFileName: 'rxjs.js',
     },
   ],
+  ...overrides,
 });
 
 /**
@@ -39,7 +43,8 @@ export const createHostInfo = (name = 'host'): FederationInfo => ({
  */
 export const createRemoteInfo = (
   name = 'mfe1',
-  exposes: Array<{ key: string; outFileName: string }> = []
+  exposes: Array<{ key: string; outFileName: string }> = [],
+  overrides?: Partial<FederationInfo>
 ): FederationInfo => ({
   name,
   exposes:
@@ -60,6 +65,7 @@ export const createRemoteInfo = (
       outFileName: 'lodash.js',
     },
   ],
+  ...overrides,
 });
 
 /**

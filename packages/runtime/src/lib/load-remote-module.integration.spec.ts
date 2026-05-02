@@ -1,7 +1,11 @@
 import { http, HttpResponse } from 'msw';
 import { setupWorker } from 'msw/browser';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { clearFederationDOMEffects, getImportMapContent } from './__test-helpers__/dom-helpers.js';
+import {
+  clearFederationDOMEffects,
+  getImportMapContent,
+  getLatestImportMapContent,
+} from './__test-helpers__/dom-helpers.js';
 import {
   createHostInfo,
   createRemoteConfig,
@@ -399,6 +403,45 @@ describe('loadRemoteModule - Browser Integration Test', () => {
       // Should not fetch remoteEntry again since remote is already initialized
       expect(fetchCount).toBe(0);
       expect(module.cached).toBe(true);
+    });
+
+    it('should append integrity entries when lazy-loading a remote with SRI', async () => {
+      const hostInfo = createHostInfo();
+      worker.use(hostRemoteEntryHandler(hostInfo));
+      await initFederation({});
+
+      // Use a base URL that's unique to this test so the global remotes
+      // registry doesn't short-circuit `ensureRemoteInitialized` from a
+      // prior test that already registered MFE1/MFE2.
+      const LAZY_BASE = 'http://localhost:5101/mfe-lazy-sri';
+      const LAZY_REMOTE_ENTRY = `${LAZY_BASE}/remoteEntry.json`;
+      const LAZY_SRI = 'sha384-lazy-module-hash';
+      const remoteInfo = createRemoteInfo(
+        'mfe-lazy-sri',
+        [{ key: './LazyModule', outFileName: 'LazyModule.js' }],
+        { integrity: { 'LazyModule.js': LAZY_SRI } }
+      );
+
+      worker.use(
+        remoteEntryHandler(LAZY_REMOTE_ENTRY, remoteInfo),
+        http.get(`${LAZY_BASE}/LazyModule.js`, () => {
+          return new HttpResponse(`export const value = 'lazy-sri';`, {
+            headers: { 'Content-Type': 'application/javascript' },
+          });
+        })
+      );
+
+      await loadRemoteModule({
+        remoteEntry: LAZY_REMOTE_ENTRY,
+        exposedModule: './LazyModule',
+      });
+
+      const latest = getLatestImportMapContent();
+      expect(latest?.integrity).toEqual(
+        expect.objectContaining({
+          [`${LAZY_BASE}/LazyModule.js`]: LAZY_SRI,
+        })
+      );
     });
 
     it('should determine remote name from remoteEntry URL', async () => {

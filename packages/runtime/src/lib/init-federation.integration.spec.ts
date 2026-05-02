@@ -385,6 +385,143 @@ describe('initFederation - Browser Integration Test', () => {
   });
 
   // ==========================================================================
+  // SUBRESOURCE INTEGRITY TESTS
+  // ==========================================================================
+  // These tests verify that integrity hashes from remoteEntry.json are
+  // surfaced as an `integrity` block on the injected import map, keyed by
+  // the resolved (absolute) module URLs.
+  describe('Subresource Integrity', () => {
+    const HOST_SRI = 'sha384-host-shared-hash';
+    const HOST_CHUNK_SRI = 'sha384-host-chunk-hash';
+    const MFE1_EXPOSED_SRI = 'sha384-mfe1-component-hash';
+    const MFE1_SHARED_SRI = 'sha384-mfe1-lodash-hash';
+    const MFE1_CHUNK_SRI = 'sha384-mfe1-chunk-hash';
+    const MFE2_SHARED_SRI = 'sha384-mfe2-lodash-hash';
+
+    it('should omit integrity block when no federation info supplies it', async () => {
+      const hostInfo = createHostInfo();
+      worker.use(hostRemoteEntryHandler(hostInfo));
+
+      const result = await initFederation({});
+
+      expect(result.integrity).toBeUndefined();
+      expect(getImportMapContent()?.integrity).toBeUndefined();
+    });
+
+    it('should surface host integrity entries keyed by resolved URLs', async () => {
+      const hostInfo = createHostInfo('host', {
+        chunks: { angular: ['angular-chunk.js'] },
+        integrity: {
+          'angular.js': HOST_SRI,
+          'angular-chunk.js': HOST_CHUNK_SRI,
+        },
+      });
+      worker.use(hostRemoteEntryHandler(hostInfo));
+
+      const result = await initFederation({});
+
+      expect(result.integrity).toEqual({
+        './angular.js': HOST_SRI,
+        './angular-chunk.js': HOST_CHUNK_SRI,
+      });
+      expect(getImportMapContent()?.integrity).toEqual(result.integrity);
+    });
+
+    it('should surface remote integrity for exposed, shared and chunk files', async () => {
+      const hostInfo = createFederationInfo({ name: 'host' });
+      // Pin a unique `version` on the shared dep so the externals registry
+      // doesn't reuse a URL registered by an earlier test in this suite —
+      // `processRemoteImports` only emits integrity when it owns the URL.
+      const remoteInfo = createRemoteInfo(
+        'mfe1',
+        [{ key: './Component', outFileName: 'Component.js' }],
+        {
+          shared: [
+            {
+              singleton: true,
+              strictVersion: false,
+              requiredVersion: '^4.0.0',
+              version: '4.0.0-sri-exposed',
+              packageName: 'lodash',
+              outFileName: 'lodash.js',
+            },
+          ],
+          chunks: { mfe1: ['chunk-abc.js'] },
+          integrity: {
+            'Component.js': MFE1_EXPOSED_SRI,
+            'lodash.js': MFE1_SHARED_SRI,
+            'chunk-abc.js': MFE1_CHUNK_SRI,
+          },
+        }
+      );
+
+      worker.use(
+        ...createFederationHandlers({
+          host: hostInfo,
+          remotes: [{ url: TEST_URLS.MFE1_REMOTE_ENTRY, info: remoteInfo }],
+        })
+      );
+
+      const result = await initFederation(
+        createRemoteConfig({ name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY })
+      );
+
+      expect(result.integrity).toEqual({
+        [`${TEST_URLS.MFE1_BASE}/Component.js`]: MFE1_EXPOSED_SRI,
+        [`${TEST_URLS.MFE1_BASE}/lodash.js`]: MFE1_SHARED_SRI,
+        [`${TEST_URLS.MFE1_BASE}/chunk-abc.js`]: MFE1_CHUNK_SRI,
+      });
+    });
+
+    it('should not duplicate integrity when a shared dep URL is reused across remotes', async () => {
+      const hostInfo = createFederationInfo({ name: 'host' });
+      const sharedDep = {
+        singleton: true,
+        strictVersion: false,
+        requiredVersion: '^4.0.0',
+        packageName: 'lodash',
+        version: '4.17.21',
+        outFileName: 'lodash.js',
+      };
+
+      // mfe1 owns the shared URL — its integrity hash should be preserved.
+      // mfe2 reuses mfe1's URL — it must not overwrite mfe1's hash.
+      const mfe1Info = createFederationInfo({
+        name: 'mfe1',
+        exposes: [{ key: './Component', outFileName: 'Component.js' }],
+        shared: [sharedDep],
+        integrity: { 'lodash.js': MFE1_SHARED_SRI },
+      });
+      const mfe2Info = createFederationInfo({
+        name: 'mfe2',
+        exposes: [{ key: './Service', outFileName: 'Service.js' }],
+        shared: [sharedDep],
+        integrity: { 'lodash.js': MFE2_SHARED_SRI },
+      });
+
+      worker.use(
+        ...createFederationHandlers({
+          host: hostInfo,
+          remotes: [
+            { url: TEST_URLS.MFE1_REMOTE_ENTRY, info: mfe1Info },
+            { url: TEST_URLS.MFE2_REMOTE_ENTRY, info: mfe2Info },
+          ],
+        })
+      );
+
+      const result = await initFederation(
+        createRemoteConfig(
+          { name: 'mfe1', url: TEST_URLS.MFE1_REMOTE_ENTRY },
+          { name: 'mfe2', url: TEST_URLS.MFE2_REMOTE_ENTRY }
+        )
+      );
+
+      expect(result.integrity?.[`${TEST_URLS.MFE1_BASE}/lodash.js`]).toBe(MFE1_SHARED_SRI);
+      expect(result.integrity?.[`${TEST_URLS.MFE2_BASE}/lodash.js`]).toBeUndefined();
+    });
+  });
+
+  // ==========================================================================
   // ERROR HANDLING TESTS
   // ==========================================================================
   // These tests verify resilient error handling:
