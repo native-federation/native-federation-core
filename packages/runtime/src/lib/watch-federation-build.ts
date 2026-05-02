@@ -1,4 +1,5 @@
 import { BuildNotificationType } from '@softarc/native-federation/domain';
+import { hasBuildWatcher, registerBuildWatcher, unregisterBuildWatcher } from './model/build-watchers.js';
 
 /**
  * Watches for federation build completion events and automatically reloads the page.
@@ -8,7 +9,13 @@ import { BuildNotificationType } from '@softarc/native-federation/domain';
  * it triggers a page reload to reflect the latest changes.
  * @param endpoint - The SSE endpoint URL to watch for build notifications.
  */
-export function watchFederationBuildCompletion(endpoint: string) {
+export function watchFederationBuildCompletion(endpoint: string): void {
+  if (hasBuildWatcher(endpoint)) {
+    return;
+  }
+
+  registerBuildWatcher(endpoint);
+
   const eventSource = new EventSource(endpoint);
 
   eventSource.onmessage = function (event) {
@@ -21,5 +28,9 @@ export function watchFederationBuildCompletion(endpoint: string) {
 
   eventSource.onerror = function (event) {
     console.warn('[Federation] SSE connection error:', event);
+
+    if (eventSource.readyState === EventSource.CLOSED) {
+      unregisterBuildWatcher(endpoint);
+    }
   };
 }
