@@ -28,7 +28,7 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
     skip,
     externals: config.externals ?? [],
     features: {
-      mappingVersion: config.features?.mappingVersion ?? false,
+      mappingVersion: config.features?.mappingVersion ?? true,
       ignoreUnusedDeps: config.features?.ignoreUnusedDeps ?? true,
       denseChunking: config.features?.denseChunking ?? false,
     },

@@ -97,7 +97,9 @@ export async function bundleExposedAndMappings(
       requiredVersion: '',
       singleton: true,
       strictVersion: false,
-      version: config.features.mappingVersion ? getMappingVersion(item.fileName) : '',
+      version: config.features.mappingVersion
+        ? getMappingVersion(item.fileName, fedOptions.workspaceRoot)
+        : '',
       dev: !fedOptions.dev
         ? undefined
         : {
@@ -180,7 +182,9 @@ export function describeSharedMappings(
       requiredVersion: '',
       singleton: true,
       strictVersion: false,
-      version: config.features.mappingVersion ? getMappingVersion(mappedPath) : '',
+      version: config.features.mappingVersion
+        ? getMappingVersion(mappedPath, fedOptions.workspaceRoot)
+        : '',
       dev: !fedOptions.dev
         ? undefined
         : {
@@ -192,15 +196,22 @@ export function describeSharedMappings(
   return result;
 }
 
-function getMappingVersion(fileName: string): string {
-  const entryFileDir = path.dirname(fileName);
-  const cand1 = path.join(entryFileDir, 'package.json');
-  const cand2 = path.join(path.dirname(entryFileDir), 'package.json');
+export function getMappingVersion(fileName: string, workspaceRoot: string): string {
+  const resolvedRoot = path.resolve(workspaceRoot);
+  let dir = path.dirname(path.resolve(fileName));
 
-  const packageJsonPath = [cand1, cand2].find(cand => fs.existsSync(cand));
-  if (packageJsonPath) {
-    const json = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-    return json.version ?? '';
+  while (true) {
+    const candidate = path.join(dir, 'package.json');
+    try {
+      const json = JSON.parse(fs.readFileSync(candidate, 'utf-8'));
+      if (typeof json.version === 'string' && json.version) return json.version;
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        logger.warn(`[getMappingVersion] Failed to parse ${candidate}: ${(err as Error).message}`);
+      }
+    }
+    const parent = path.dirname(dir);
+    if (dir === resolvedRoot || parent === dir) return '';
+    dir = parent;
   }
-  return '';
 }
