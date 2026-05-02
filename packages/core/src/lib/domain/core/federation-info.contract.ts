@@ -3,6 +3,7 @@ export interface FederationInfo {
   exposes: ExposesInfo[];
   shared: SharedInfo[];
   chunks?: Record<string, string[]>;
+  integrity?: IntegrityMap;
   buildNotificationsEndpoint?: string;
 }
 export type SharedInfo = {
@@ -20,6 +21,8 @@ export type SharedInfo = {
 };
 
 export type ChunkInfo = Record<string, string[]>;
+
+export type IntegrityMap = Record<string, string>;
 
 export interface ExposesInfo {
   key: string;

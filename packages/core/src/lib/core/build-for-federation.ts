@@ -12,6 +12,7 @@ import { bundleShared } from './bundle-shared.js';
 import type { NormalizedFederationOptions } from '../domain/core/federation-options.contract.js';
 import { writeFederationInfo } from './write-federation-info.js';
 import { writeImportMap } from './write-import-map.js';
+import { computeIntegrityMap } from './compute-integrity-map.js';
 import { logger } from '../utils/logger.js';
 import { normalizePackageName } from '../utils/normalize.js';
 import { AbortedError } from '../utils/errors.js';
@@ -164,8 +165,12 @@ export async function buildForFederation(
     federationInfo.chunks = { ...(federationInfo.chunks ?? {}), ...artifactInfo?.chunks };
   }
 
+  if (fedOptions.integrity) {
+    federationInfo.integrity = computeIntegrityMap(federationInfo, fedOptions);
+  }
+
   writeFederationInfo(federationInfo, fedOptions);
-  writeImportMap(fedOptions.federationCache, fedOptions);
+  writeImportMap(fedOptions.federationCache, fedOptions, federationInfo.integrity);
 
   return federationInfo;
 }
