@@ -142,7 +142,7 @@ importers:
     dependencies:
       '@softarc/native-federation':
         specifier: ^4.1.0
-        version: 4.1.0(typescript@5.9.3)
+        version: 4.1.1(typescript@5.9.3)
     devDependencies:
       '@types/node':
         specifier: ~24.10.0
@@ -1628,8 +1628,8 @@ packages:
   '@softarc/native-federation@4.0.0-RC10':
     resolution: {integrity: sha512-DTjvhWudcNvLpRyyTes9LUsv5SpSiqtzI8GFTbvRLvBBrLDOvJjwGtC+sGC9BZxPRgRm9hsa6F2VrcgWLGDwKQ==}
 
-  '@softarc/native-federation@4.1.0':
-    resolution: {integrity: sha512-8/gP/MlERF2G3yKPl1UvWg3xioIffYJavG1TCX18rW+Qs809uJMGcoDsCFQB4dXbLDJBVIbwxpmIPFvshO1aeQ==}
+  '@softarc/native-federation@4.1.1':
+    resolution: {integrity: sha512-jm6dBb5s+uTFla0jPe87UNVJTgsoEYujHNbKyvGITmk18dXmnni+7xJdeVa1XgH0doymB8371XDF9uE4R/MNDA==}
 
   '@softarc/sheriff-core@0.19.6':
     resolution: {integrity: sha512-KACxHG9sS7kNWgnnBODzdr14kMLMrJVlQKc+tViUP03p2fRwNhESOA49bz51Yn7dro1mbtMmmFjICLmZSJDZZA==}
@@ -4917,7 +4917,7 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  '@softarc/native-federation@4.1.0(typescript@5.9.3)':
+  '@softarc/native-federation@4.1.1(typescript@5.9.3)':
     dependencies:
       '@softarc/sheriff-core': 0.19.6(typescript@5.9.3)
       chalk: 5.6.2
