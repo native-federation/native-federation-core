@@ -221,7 +221,7 @@ export default withNativeFederation({
 
   features: {
     denseChunking: true, // Optimize remoteEntry.json structure
-    mappingVersion: true, // Use versions for shared mappings
+    mappingVersion: true, // Use versions for shared mappings, is now opt-out
   },
 });
 ```

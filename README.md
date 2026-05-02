@@ -376,7 +376,7 @@ Notes:
 - Mapped paths are read from the workspace root tsconfig file: `tsconfig.base.json` if present, otherwise `tsconfig.json`.
 - The workspace root is detected by searching upward from the current working directory until a `package.json` is found.
 
-If you want to share libraries within a monorepo and also distribute them as built libraries with a version, enable the `mappingVersion` feature flag in your `federation.config.js`. This ensures that the corresponding versions from your buildable libraries are used.
+If you don't want to share libraries within a monorepo and also distribute them as built libraries with a version, disable the `mappingVersion` feature flag in your `federation.config.js`. This ensures that the corresponding versions from your buildable libraries are used.
 
 ```js
 module.exports = withNativeFederation({
@@ -389,7 +389,7 @@ module.exports = withNativeFederation({
   },
   sharedMappings: ['@my-org/auth-lib', '@my-org/ui/*'],
   features: {
-    mappingVersion: true,
+    mappingVersion: false,
   },
 });
 ```

@@ -93,19 +93,9 @@ export async function bundleExposedAndMappings(
   // Pick shared-mappings
   for (const item of shared) {
     const distEntryFile = popFromResultMap(resultMap, item.outName);
-    sharedResult.push({
-      packageName: item.key!,
-      outFileName: path.basename(distEntryFile),
-      requiredVersion: '',
-      singleton: true,
-      strictVersion: false,
-      version: config.features.mappingVersion ? getMappingVersion(item.fileName) : '',
-      dev: !fedOptions.dev
-        ? undefined
-        : {
-            entryPoint: normalize(path.normalize(item.fileName)),
-          },
-    });
+    sharedResult.push(
+      toSharedMappingInfo(item.fileName, item.key!, path.basename(distEntryFile), config, fedOptions)
+    );
     entryFiles.push(distEntryFile);
   }
 
@@ -188,33 +178,53 @@ export function describeSharedMappings(
   const result: Array<SharedInfo> = [];
 
   for (const [mappedPath, mappedImport] of Object.entries(config.sharedMappings)) {
-    result.push({
-      packageName: mappedImport,
-      outFileName: '',
-      requiredVersion: '',
-      singleton: true,
-      strictVersion: false,
-      version: config.features.mappingVersion ? getMappingVersion(mappedPath) : '',
-      dev: !fedOptions.dev
-        ? undefined
-        : {
-            entryPoint: normalize(path.normalize(mappedPath)),
-          },
-    });
+    result.push(toSharedMappingInfo(mappedPath, mappedImport, '', config, fedOptions));
   }
 
   return result;
 }
 
-function getMappingVersion(fileName: string): string {
-  const entryFileDir = path.dirname(fileName);
-  const cand1 = path.join(entryFileDir, 'package.json');
-  const cand2 = path.join(path.dirname(entryFileDir), 'package.json');
+function toSharedMappingInfo(
+  mappedPath: string,
+  mappedImport: string,
+  outFileName: string,
+  config: NormalizedFederationConfig,
+  fedOptions: NormalizedFederationOptions
+): SharedInfo {
+  const mappingVersion = config.features.mappingVersion
+    ? getMappingVersion(mappedPath, fedOptions.workspaceRoot)
+    : '';
+  return {
+    packageName: mappedImport,
+    outFileName,
+    requiredVersion: mappingVersion.length > 0 ? '~' + mappingVersion : '',
+    singleton: true,
+    strictVersion: config.features.mappingVersion,
+    version: mappingVersion,
+    dev: !fedOptions.dev
+      ? undefined
+      : {
+          entryPoint: normalize(path.normalize(mappedPath)),
+        },
+  };
+}
 
-  const packageJsonPath = [cand1, cand2].find(cand => fs.existsSync(cand));
-  if (packageJsonPath) {
-    const json = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-    return json.version ?? '';
+export function getMappingVersion(fileName: string, workspaceRoot: string): string {
+  const resolvedRoot = path.resolve(workspaceRoot);
+  let dir = path.dirname(path.resolve(fileName));
+
+  while (true) {
+    const candidate = path.join(dir, 'package.json');
+    try {
+      const json = JSON.parse(fs.readFileSync(candidate, 'utf-8'));
+      if (typeof json.version === 'string' && json.version) return json.version;
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        logger.warn(`[getMappingVersion] Failed to parse ${candidate}: ${(err as Error).message}`);
+      }
+    }
+    const parent = path.dirname(dir);
+    if (dir === resolvedRoot || parent === dir) return '';
+    dir = parent;
   }
-  return '';
 }
