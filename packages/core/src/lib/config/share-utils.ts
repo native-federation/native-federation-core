@@ -409,7 +409,8 @@ export function share(
 
     if (
       shareObject.requiredVersion === 'auto' ||
-      (inferVersion && typeof shareObject.requiredVersion === 'undefined')
+      (inferVersion && typeof shareObject.requiredVersion === 'undefined') ||
+      shareObject.requiredVersion.length < 1
     ) {
       const version = lookupVersion(key, projectPath);
 

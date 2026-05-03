@@ -48,7 +48,7 @@ export async function bundleShared(
       logger.debug(`Checksum of ${buildOptions.bundleName} matched, Skipped artifact bundling`);
       bundleCache.copyFiles(path.join(fedOptions.workspaceRoot, fedOptions.outputPath));
       let integrity = cacheMetadata.integrity;
-      if (fedOptions.integrity && !integrity) {
+      if (config.features.integrityHashes && !integrity) {
         integrity = computeIntegrityForFiles(
           cacheMetadata.files,
           fedOptions.federationCache.cachePath
@@ -185,7 +185,7 @@ export async function bundleShared(
   const persistedFiles = bundleResult.map(r => r.fileName.split(path.sep).pop() ?? r.fileName);
 
   // Must run after rewriteImports so SRI matches the bytes copied to dist.
-  const integrity = fedOptions.integrity
+  const integrity = config.features.integrityHashes
     ? computeIntegrityForFiles(persistedFiles, fedOptions.federationCache.cachePath)
     : undefined;
 

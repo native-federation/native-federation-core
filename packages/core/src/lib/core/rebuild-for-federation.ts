@@ -63,7 +63,7 @@ export async function rebuildForFederation(
     federationInfo.chunks = { ...(federationInfo.chunks ?? {}), ...artifactInfo?.chunks };
   }
 
-  if (fedOptions.integrity) {
+  if (config.features.integrityHashes) {
     federationInfo.integrity = {
       ...(federationCache.integrity ?? {}),
       ...(artifactInfo?.integrity ?? {}),

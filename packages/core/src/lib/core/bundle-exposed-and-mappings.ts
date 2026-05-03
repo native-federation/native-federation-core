@@ -135,7 +135,7 @@ export async function bundleExposedAndMappings(
 
   // Must run after rewriteChunkImports so SRI matches the final on-disk bytes.
   let integrity: IntegrityMap | undefined;
-  if (fedOptions.integrity) {
+  if (config.features.integrityHashes) {
     integrity = {};
     for (const filePath of [...entryFiles, ...chunkPaths]) {
       if (!fs.existsSync(filePath)) continue;

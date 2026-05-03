@@ -165,7 +165,7 @@ export async function buildForFederation(
     federationInfo.chunks = { ...(federationInfo.chunks ?? {}), ...artifactInfo?.chunks };
   }
 
-  if (fedOptions.integrity) {
+  if (config.features.integrityHashes) {
     federationInfo.integrity = {
       ...(fedOptions.federationCache.integrity ?? {}),
       ...(artifactInfo?.integrity ?? {}),

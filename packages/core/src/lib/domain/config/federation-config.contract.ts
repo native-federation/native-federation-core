@@ -19,6 +19,7 @@ export interface FederationConfig {
     mappingVersion?: boolean;
     ignoreUnusedDeps?: boolean;
     denseChunking?: boolean;
+    integrityHashes?: boolean;
   };
 }
 
@@ -36,5 +37,6 @@ export interface NormalizedFederationConfig {
     mappingVersion: boolean;
     ignoreUnusedDeps: boolean;
     denseChunking: boolean;
+    integrityHashes: boolean;
   };
 }
