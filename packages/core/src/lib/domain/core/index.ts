@@ -23,3 +23,4 @@ export type {
 } from './build-adapter.contract.js';
 export { CHUNK_PREFIX, toChunkImport } from './chunk.js';
 export type { FederationCache } from './federation-cache.contract.js';
+export type { FederationManifest } from './manifest.contract.js';
