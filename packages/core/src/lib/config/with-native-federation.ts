@@ -1,6 +1,7 @@
 import { getRawMappedPaths } from '../utils/mapped-paths.js';
 import { shareAll, findRootTsConfigJson } from './share-utils.js';
 import type {
+  ExposeEntry,
   FederationConfig,
   NormalizedFederationConfig,
 } from '../domain/config/federation-config.contract.js';
@@ -21,7 +22,7 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
   const normalized: NormalizedFederationConfig = {
     $type: 'classic',
     name: config.name ?? '',
-    exposes: config.exposes ?? {},
+    exposes: normalizeExposes(config.exposes),
     shared: normalizeShared(config, skip, chunks),
     sharedMappings: removeSkippedMappings(config, skip),
     chunks,
@@ -37,6 +38,18 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
   };
 
   return normalized;
+}
+
+function normalizeExposes(
+  exposes: FederationConfig['exposes']
+): Record<string, ExposeEntry> {
+  if (!exposes) return {};
+  return Object.fromEntries(
+    Object.entries(exposes).map(([key, value]) => [
+      key,
+      typeof value === 'string' ? { file: value } : value,
+    ])
+  );
 }
 
 function normalizeShared(

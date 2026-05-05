@@ -5,9 +5,11 @@ import type {
   SharedExternalsConfig,
 } from './external-config.contract.js';
 
+export type ExposeEntry = { file: string; element?: string };
+
 export interface FederationConfig {
   name?: string;
-  exposes?: Record<string, string>;
+  exposes?: Record<string, string | ExposeEntry>;
   shared?: SharedExternalsConfig;
   platform?: 'browser' | 'node';
   sharedMappings?: Array<string>;
@@ -26,7 +28,7 @@ export interface FederationConfig {
 export interface NormalizedFederationConfig {
   $type: 'classic';
   name: string;
-  exposes: Record<string, string>;
+  exposes: Record<string, ExposeEntry>;
   shared: NormalizedSharedExternalsConfig;
   sharedMappings: PathToImport;
   skip: PreparedSkipList;

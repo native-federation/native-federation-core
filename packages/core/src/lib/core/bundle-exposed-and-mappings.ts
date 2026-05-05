@@ -39,10 +39,12 @@ export async function bundleExposedAndMappings(
       };
     }
   );
-  const exposes: EntryPoint[] = Object.entries(config.exposes).map(([key, entry]) => {
-    const outFilePath = key + '.js';
-    return { fileName: entry, outName: outFilePath, key };
-  });
+  const exposes: Array<EntryPoint & { element?: string }> = Object.entries(config.exposes).map(
+    ([key, expose]) => {
+      const outFilePath = key + '.js';
+      return { fileName: expose.file, outName: outFilePath, key, element: expose.element };
+    }
+  );
 
   const entryPoints: EntryPoint[] = [...shared, ...exposes];
 
@@ -108,6 +110,7 @@ export async function bundleExposedAndMappings(
     exposedResult.push({
       key: item.key!,
       outFileName: path.basename(distEntryFile),
+      ...(item.element && { element: item.element }),
       dev: !fedOptions.dev
         ? undefined
         : {
@@ -153,13 +156,15 @@ export function describeExposed(
   const result: Array<ExposesInfo> = [];
 
   for (const key in config.exposes) {
+    const expose = config.exposes[key]!;
     const localPath = normalize(
-      path.normalize(path.join(options.workspaceRoot, config.exposes[key]!))
+      path.normalize(path.join(options.workspaceRoot, expose.file))
     );
 
     result.push({
       key,
       outFileName: '',
+      ...(expose.element && { element: expose.element }),
       dev: !options.dev
         ? undefined
         : {

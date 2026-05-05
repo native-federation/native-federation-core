@@ -6,6 +6,7 @@ export interface FederationInfo {
   integrity?: IntegrityMap;
   buildNotificationsEndpoint?: string;
 }
+
 export type SharedInfo = {
   singleton: boolean;
   strictVersion: boolean;
@@ -27,6 +28,7 @@ export type IntegrityMap = Record<string, string>;
 export interface ExposesInfo {
   key: string;
   outFileName: string;
+  element?: string;
   dev?: {
     entryPoint: string;
   };

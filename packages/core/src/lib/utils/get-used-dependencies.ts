@@ -4,6 +4,7 @@ import { getPackageInfo } from './package-info.js';
 import { getExternalImports as extractExternalImports } from './get-external-imports.js';
 import { type PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { type UsedDependencies } from '../domain/utils/used-dependencies.contract.js';
+import { type ExposeEntry } from '../domain/config/federation-config.contract.js';
 import * as path from 'path';
 
 export function getUsedDependenciesFactory(
@@ -11,11 +12,11 @@ export function getUsedDependenciesFactory(
   fallbackEntryPoints?: string[]
 ): (config: {
   name?: string;
-  exposes?: Record<string, string>;
+  exposes?: Record<string, ExposeEntry>;
   sharedMappings: PathToImport;
 }) => UsedDependencies {
   return config => {
-    let entryPoints: string[] | undefined = Object.values(config.exposes ?? {});
+    let entryPoints: string[] | undefined = Object.values(config.exposes ?? {}).map(e => e.file);
     if (entryPoints.length < 1) entryPoints = fallbackEntryPoints;
 
     if (!entryPoints || entryPoints.length < 1)
