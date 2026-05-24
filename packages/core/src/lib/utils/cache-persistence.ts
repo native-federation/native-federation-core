@@ -65,7 +65,7 @@ export const cacheEntry = (pathToCache: string, fileName: string) => ({
       files: string[];
     } = JSON.parse(fs.readFileSync(metadataFile, 'utf-8'));
 
-    fs.mkdirSync(path.dirname(fullOutputPath), { recursive: true });
+    fs.mkdirSync(fullOutputPath, { recursive: true });
 
     cachedResult.files.forEach(file => {
       const cachedFile = path.join(pathToCache, file);
