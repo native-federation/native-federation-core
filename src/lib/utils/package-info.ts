@@ -10,14 +10,14 @@ export interface PackageInfo {
   esm: boolean;
 }
 
-export interface PartialPackageJson {
+interface PartialPackageJson {
   module: string;
   main: string;
 }
 
 export type VersionMap = Record<string, string>;
 
-export type PackageJsonInfo = {
+type PackageJsonInfo = {
   content: any;
   directory: string;
 };
@@ -51,17 +51,15 @@ export type ExportEntry =
   | { [key in ExportCondition]?: ExportEntry }
   | ExportEntry[];
 
-export type PackageJsonExports = string | ExportEntry | { [path: `.${string}`]: ExportEntry };
-
 const packageCache: Record<string, PackageJsonInfo[]> = {};
 
-export function findPackageJsonFiles(project: string, workspace: string): string[] {
+function findPackageJsonFiles(project: string, workspace: string): string[] {
   return expandFolders(project, workspace)
     .map(f => path.join(f, 'package.json'))
     .filter(f => fs.existsSync(f));
 }
 
-export function expandFolders(child: string, parent: string): string[] {
+function expandFolders(child: string, parent: string): string[] {
   const result: string[] = [];
   parent = normalize(parent, true);
   child = normalize(child, true);
@@ -111,7 +109,7 @@ export function getVersionMaps(project: string, workspace: string): VersionMap[]
   }));
 }
 
-export function getPackageJsonFiles(project: string, workspace: string): PackageJsonInfo[] {
+function getPackageJsonFiles(project: string, workspace: string): PackageJsonInfo[] {
   const cacheKey = getVersionMapCacheKey(project, workspace);
 
   let maps = packageCache[cacheKey];
@@ -212,7 +210,7 @@ function findOptimalExport(
   return findOptimalExport(secondBestExport, info, isESM ?? isESMExport(secondBestEntry!));
 }
 
-export function _getPackageInfo(packageName: string, directory: string): PackageInfo | null {
+function _getPackageInfo(packageName: string, directory: string): PackageInfo | null {
   const mainPkgName = getPkgFolder(packageName);
   if (!mainPkgName) throw new Error(`Could not resolve "${packageName}" in "${directory}`);
   const mainPkgJsonPath = findDepPackageJson(packageName, directory);
