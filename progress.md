@@ -85,13 +85,38 @@ real-fs `defaultRepo`. Now a `PackageJsonRepository` is threaded through:
 **Verification (all green):** `npm test -- --run` → 165 passed · `npm run typecheck`
 · `npm run lint` (0 errors; 8 pre-existing warnings).
 
+## DONE — `BuildAdapter` / `ConfigLoader` seam through the bundler orchestrators (working tree, NOT committed)
+
+`normalizeFederationOptions`, `bundleExposedAndMappings`, and `bundleShared` are now
+end-to-end testable. Each public fn is an unchanged thin wrapper delegating to a new
+`*Core(deps, ...)` that takes its dependencies injected:
+
+- **`normalize-options.ts`** — new `ConfigLoader` type + `defaultConfigLoader`
+  (the dynamic `import()`); `normalizeFederationOptionsCore({ io, loadConfig }, ...)`.
+  Tests pass a fake loader + memory `io` + a supplied `cache` (skips
+  `createFederationCache`/`getDefaultCachePath`). The `ignoreUnusedDeps` branch is
+  NOT covered (its `getUsedDependenciesFactory` still uses `defaultRepo` — see gap).
+- **`bundle-exposed-and-mappings.ts`** — `bundleExposedAndMappingsCore({ adapter }, ...)`.
+- **`bundle-shared.ts`** — `bundleSharedCore({ io, repo, adapter }, ...)`; threaded
+  `getChecksumCore`/`cacheEntryCore`/`computeIntegrityMapCore`/`rewriteChunkImportsCore`
+  and `getPackageInfo(..., repo)` so the whole path is driven by the injected `io`/`repo`.
+- **`core/__test-helpers__/fake-build-adapter.ts`** — `createFakeBuildAdapter({ io?, results? })`;
+  records setup/build/dispose, echoes one result per setup entry point (writing files
+  through `io` when given), mirroring `memory-io`.
+
+**Public API unchanged (verified):** the four entry barrels' `.d.ts`
+(`index`/`config`/`domain`/`internal`) are byte-identical before/after; only the
+internal modules gained additive `*Core` exports (not re-exported anywhere public).
+
+**Verification (all green):** `npm test -- --run` → 174 passed · `npm run typecheck`
+· `npm run lint` (0 errors; 8 pre-existing warnings).
+
 ## Caveat / known gap
 
-The bundler orchestrators — `bundleShared`, `bundleExposedAndMappings`,
-`normalizeFederationOptions` — now route IO through the adapter but are still NOT
-unit-testable end-to-end: they depend on `getBuildAdapter()` and dynamic `import()`.
-Only their extractable pure pieces are tested. Fully testing them needs a
-`BuildAdapter` / `ConfigLoader` seam — a larger follow-up.
+`normalizeFederationOptions`'s `ignoreUnusedDeps` branch is still not unit-testable
+fs-free: `getUsedDependenciesFactory` (`config/get-used-dependencies.ts`) calls
+`getPackageInfo` against the process-wide `defaultRepo`. Threading `repo` through that
+factory would close it (small, same pattern as the share seam).
 
 ## Next / deferred (decided with user)
 
@@ -107,9 +132,9 @@ Only their extractable pure pieces are tested. Fully testing them needs a
    Remaining: the boundary ESLint rule could be extended to `package-resolution`
    (already fs-free) and `utils` outside the adapter.
 
-3. **`BuildAdapter` / `ConfigLoader` seam** — to unblock end-to-end testing of the
-   bundler orchestrators (`bundleShared`, `bundleExposedAndMappings`,
-   `normalizeFederationOptions`).
+3. **`BuildAdapter` / `ConfigLoader` seam — DONE** (see section above). Remaining:
+   thread `repo` through `getUsedDependenciesFactory` to cover the `ignoreUnusedDeps`
+   branch of `normalizeFederationOptions`.
 
 ## Architecture review findings still open (lower priority)
 

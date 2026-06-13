@@ -3,9 +3,17 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { getMappingVersion, getMappingVersionCore } from './bundle-exposed-and-mappings.js';
+import {
+  bundleExposedAndMappingsCore,
+  getMappingVersion,
+  getMappingVersionCore,
+} from './bundle-exposed-and-mappings.js';
 import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
+import { createFakeBuildAdapter } from './__test-helpers__/fake-build-adapter.js';
+import { prepareSkipList } from '../config/default-skip-list.js';
 import { logger } from '../utils/logger.js';
+import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
+import type { NormalizedFederationOptions } from '../domain/core/federation-options.contract.js';
 
 describe('getMappingVersion', () => {
   let tmpRoot: string;
@@ -125,5 +133,97 @@ describe('getMappingVersionCore', () => {
       .setFile('/ws/libs/shared/src/index.ts', '');
     expect(getMappingVersionCore(io, '/ws/libs/shared/src/index.ts', '/ws')).toBe('');
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to parse'));
+  });
+});
+
+function makeConfig(overrides: Partial<NormalizedFederationConfig> = {}): NormalizedFederationConfig {
+  return {
+    $type: 'classic',
+    name: 'app',
+    exposes: {},
+    shared: {},
+    sharedMappings: {},
+    skip: prepareSkipList([]),
+    chunks: false,
+    externals: [],
+    features: {
+      mappingVersion: false,
+      ignoreUnusedDeps: false,
+      denseChunking: false,
+      integrityHashes: false,
+    },
+    ...overrides,
+  };
+}
+
+function makeFedOptions(
+  overrides: Partial<NormalizedFederationOptions> = {}
+): NormalizedFederationOptions {
+  return {
+    workspaceRoot: '/ws',
+    outputPath: 'dist',
+    federationConfig: 'federation.config.js',
+    tsConfig: 'tsconfig.json',
+    dev: true,
+    federationCache: { externals: [], bundlerCache: undefined, cachePath: '/cache' },
+    entryPoints: [],
+    projectName: 'app',
+    cacheExternalArtifacts: false,
+    ...overrides,
+  };
+}
+
+describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
+  it('maps exposes and shared mappings from the adapter results', async () => {
+    const config = makeConfig({
+      exposes: { './Comp': { file: './src/comp.ts' } },
+      sharedMappings: { './libs/foo': 'foo' },
+    });
+    const adapter = createFakeBuildAdapter();
+
+    const result = await bundleExposedAndMappingsCore(
+      { adapter },
+      config,
+      makeFedOptions(),
+      ['rxjs']
+    );
+
+    expect(result.exposes).toEqual([
+      expect.objectContaining({ key: './Comp', outFileName: 'Comp.js' }),
+    ]);
+    expect(result.mappings).toEqual([
+      expect.objectContaining({ packageName: 'foo', outFileName: 'foo.js' }),
+    ]);
+    expect(adapter.calls.setup).toHaveLength(1);
+    expect(adapter.calls.build).toHaveLength(1);
+  });
+
+  it('skips setup and forwards modifiedFiles on a rebuild', async () => {
+    const adapter = createFakeBuildAdapter({ results: [] });
+
+    await bundleExposedAndMappingsCore({ adapter }, makeConfig(), makeFedOptions(), [], [
+      '/ws/src/x.ts',
+    ]);
+
+    expect(adapter.calls.setup).toHaveLength(0);
+    expect(adapter.calls.build[0]!.modifiedFiles).toEqual(['/ws/src/x.ts']);
+  });
+
+  it('throws before invoking the adapter when the signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const adapter = createFakeBuildAdapter();
+
+    await expect(
+      bundleExposedAndMappingsCore(
+        { adapter },
+        makeConfig(),
+        makeFedOptions(),
+        [],
+        undefined,
+        controller.signal
+      )
+    ).rejects.toThrow(/Aborted before bundling/);
+    expect(adapter.calls.build).toHaveLength(0);
   });
 });

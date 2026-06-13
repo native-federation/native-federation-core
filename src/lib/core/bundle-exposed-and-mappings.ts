@@ -16,11 +16,29 @@ import { normalize } from '../utils/normalize.js';
 import { nodeIo } from '../utils/io/node-io-adapter.js';
 import { type NormalizedFederationOptions } from '../domain/core/federation-options.contract.js';
 import { AbortedError } from '../utils/errors.js';
-import type { EntryPoint } from './../domain/core/build-adapter.contract.js';
+import type { EntryPoint, NFBuildAdapter } from './../domain/core/build-adapter.contract.js';
 import { rewriteChunkImports } from './rewrite-chunk-imports.js';
 import { getBuildAdapter } from './build-adapter.js';
 
 export async function bundleExposedAndMappings(
+  config: NormalizedFederationConfig,
+  fedOptions: NormalizedFederationOptions,
+  externals: string[],
+  modifiedFiles?: string[],
+  signal?: AbortSignal
+): Promise<ArtifactInfo> {
+  return bundleExposedAndMappingsCore(
+    { adapter: getBuildAdapter() },
+    config,
+    fedOptions,
+    externals,
+    modifiedFiles,
+    signal
+  );
+}
+
+export async function bundleExposedAndMappingsCore(
+  deps: { adapter: NFBuildAdapter },
   config: NormalizedFederationConfig,
   fedOptions: NormalizedFederationOptions,
   externals: string[],
@@ -54,7 +72,7 @@ export async function bundleExposedAndMappings(
   let result;
   try {
     if (!modifiedFiles) {
-      await getBuildAdapter().setup('mapping-or-exposed', {
+      await deps.adapter.setup('mapping-or-exposed', {
         entryPoints,
         outdir: fedOptions.outputPath,
         tsConfigPath: fedOptions.tsConfig,
@@ -70,7 +88,7 @@ export async function bundleExposedAndMappings(
       });
     }
 
-    result = await getBuildAdapter().build('mapping-or-exposed', {
+    result = await deps.adapter.build('mapping-or-exposed', {
       signal,
       modifiedFiles,
     });

@@ -1,23 +1,28 @@
 import * as path from 'path';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
-import { getPackageInfo, type PackageInfo } from '../package-resolution/package-info.js';
+import { defaultRepo, getPackageInfo, type PackageInfo } from '../package-resolution/package-info.js';
+import type { PackageJsonRepository } from '../package-resolution/package-json-repository.js';
 import type {
   ChunkInfo,
   IntegrityMap,
   SharedInfo,
 } from '../domain/core/federation-info.contract.js';
-import type { HashPort } from '../domain/utils/io-port.contract.js';
+import type { HashPort, IoPort } from '../domain/utils/io-port.contract.js';
 import { type NormalizedFederationOptions } from '../domain/core/federation-options.contract.js';
 import { logger } from '../utils/logger.js';
 import { nodeIo } from '../utils/io/node-io-adapter.js';
 import { DEFAULT_EXTERNAL_LIST } from './default-external-list.js';
-import { isSourceFile, rewriteChunkImports } from './rewrite-chunk-imports.js';
+import { isSourceFile, rewriteChunkImportsCore } from './rewrite-chunk-imports.js';
 import { toChunkImport } from '../domain/core/chunk.js';
-import { cacheEntry, getChecksum, getFilename } from './cache-persistence.js';
-import { computeIntegrityMap } from './compute-integrity.js';
+import { cacheEntryCore, getChecksumCore, getFilename } from './cache-persistence.js';
+import { computeIntegrityMapCore } from './compute-integrity.js';
 import { fileURLToPath } from 'url';
 import type { NormalizedExternalConfig } from '../domain/config/external-config.contract.js';
-import type { EntryPoint, NFBuildAdapterResult } from '../domain/core/build-adapter.contract.js';
+import type {
+  EntryPoint,
+  NFBuildAdapter,
+  NFBuildAdapterResult,
+} from '../domain/core/build-adapter.contract.js';
 import { getBuildAdapter } from './build-adapter.js';
 
 export async function bundleShared(
@@ -31,13 +36,42 @@ export async function bundleShared(
   chunks?: Record<string, string[]>;
   integrity?: IntegrityMap;
 }> {
-  const checksum = getChecksum(sharedBundles, fedOptions.dev ? '1' : '0');
+  return bundleSharedCore(
+    { io: nodeIo, repo: defaultRepo, adapter: getBuildAdapter() },
+    sharedBundles,
+    config,
+    fedOptions,
+    externals,
+    buildOptions
+  );
+}
+
+interface BundleSharedDeps {
+  io: IoPort;
+  repo: PackageJsonRepository;
+  adapter: NFBuildAdapter;
+}
+
+export async function bundleSharedCore(
+  deps: BundleSharedDeps,
+  sharedBundles: Record<string, NormalizedExternalConfig>,
+  config: NormalizedFederationConfig,
+  fedOptions: NormalizedFederationOptions,
+  externals: string[],
+  buildOptions: { platform: 'browser' | 'node'; bundleName: string; chunks: boolean }
+): Promise<{
+  externals: SharedInfo[];
+  chunks?: Record<string, string[]>;
+  integrity?: IntegrityMap;
+}> {
+  const checksum = getChecksumCore(deps.io, sharedBundles, fedOptions.dev ? '1' : '0');
 
   const folder = fedOptions.packageJson
     ? path.dirname(fedOptions.packageJson)
     : fedOptions.workspaceRoot;
 
-  const bundleCache = cacheEntry(
+  const bundleCache = cacheEntryCore(
+    deps.io,
     fedOptions.federationCache.cachePath,
     getFilename(buildOptions.bundleName, fedOptions.dev)
   );
@@ -49,7 +83,8 @@ export async function bundleShared(
       bundleCache.copyFiles(path.join(fedOptions.workspaceRoot, fedOptions.outputPath));
       let integrity = cacheMetadata.integrity;
       if (config.features.integrityHashes && !integrity) {
-        integrity = computeIntegrityMap(
+        integrity = computeIntegrityMapCore(
+          deps.io,
           cacheMetadata.files,
           fedOptions.federationCache.cachePath
         );
@@ -66,7 +101,7 @@ export async function bundleShared(
 
   const inferredPackageInfos = Object.keys(sharedBundles)
     .filter(packageName => !sharedBundles[packageName]?.packageInfo)
-    .map(packageName => getPackageInfo(packageName, folder))
+    .map(packageName => getPackageInfo(packageName, folder, deps.repo))
     .filter(pi => !!pi) as PackageInfo[];
 
   const configuredPackageInfos = Object.keys(sharedBundles)
@@ -82,12 +117,12 @@ export async function bundleShared(
 
   const configState =
     'BUNDLER_CHUNKS' + // TODO: Replace this with lib version
-    nodeIo.readText(path.join(path.dirname(__filename), '../../../package.json')) +
+    deps.io.readText(path.join(path.dirname(__filename), '../../../package.json')) +
     JSON.stringify(config);
 
   const allEntryPoints: EntryPoint[] = packageInfos.map(pi => {
     const encName = pi.packageName.replace(/[^A-Za-z0-9]/g, '_');
-    const outName = createOutName(pi, configState, fedOptions, encName);
+    const outName = createOutName(deps.io, pi, configState, fedOptions, encName);
     return { fileName: pi.entryPoint, outName };
   });
 
@@ -95,7 +130,7 @@ export async function bundleShared(
 
   const expectedResults = allEntryPoints.map(ep => path.join(fullOutputPath, ep.outName));
   const entryPoints = allEntryPoints.filter(
-    ep => !nodeIo.exists(path.join(fedOptions.federationCache.cachePath, ep.outName))
+    ep => !deps.io.exists(path.join(fedOptions.federationCache.cachePath, ep.outName))
   );
 
   // If we build for the browser and don't remote unused deps from the shared config,
@@ -108,7 +143,7 @@ export async function bundleShared(
   let bundleResult: NFBuildAdapterResult[];
 
   try {
-    await getBuildAdapter().setup(buildOptions.bundleName, {
+    await deps.adapter.setup(buildOptions.bundleName, {
       entryPoints,
       tsConfigPath: fedOptions.tsConfig,
       external: [...additionalExternals, ...externals],
@@ -123,12 +158,12 @@ export async function bundleShared(
       cache: fedOptions.federationCache,
     });
 
-    bundleResult = await getBuildAdapter().build(buildOptions.bundleName);
+    bundleResult = await deps.adapter.build(buildOptions.bundleName);
 
-    await getBuildAdapter().dispose(buildOptions.bundleName);
+    await deps.adapter.dispose(buildOptions.bundleName);
 
     const cachedFiles = bundleResult.map(br => path.basename(br.fileName));
-    rewriteImports(cachedFiles, fedOptions.federationCache.cachePath);
+    rewriteImports(deps.io, cachedFiles, fedOptions.federationCache.cachePath);
   } catch (e) {
     logger.error('Error bundling shared npm package ');
     if (e instanceof Error) {
@@ -186,7 +221,7 @@ export async function bundleShared(
 
   // Must run after rewriteImports so SRI matches the bytes copied to dist.
   const integrity = config.features.integrityHashes
-    ? computeIntegrityMap(persistedFiles, fedOptions.federationCache.cachePath)
+    ? computeIntegrityMapCore(deps.io, persistedFiles, fedOptions.federationCache.cachePath)
     : undefined;
 
   bundleCache.persist({
@@ -202,23 +237,24 @@ export async function bundleShared(
   return { externals: result, chunks: exportedChunks, integrity };
 }
 
-function rewriteImports(cachedFiles: string[], cachePath: string) {
+function rewriteImports(io: IoPort, cachedFiles: string[], cachePath: string) {
   const newSourceFiles = cachedFiles.filter(cf => isSourceFile(cf));
 
   for (const sourceFile of newSourceFiles) {
     const sourceFilePath = path.join(cachePath, sourceFile);
-    rewriteChunkImports(sourceFilePath);
+    rewriteChunkImportsCore(io, sourceFilePath);
   }
 }
 
 function createOutName(
+  io: HashPort,
   pi: PackageInfo,
   configState: string,
   fedOptions: NormalizedFederationOptions,
   encName: string
 ) {
   const hashBase = pi.version + '_' + pi.entryPoint + '_' + configState;
-  const hash = calcHashCore(nodeIo, hashBase);
+  const hash = calcHashCore(io, hashBase);
 
   const outName = fedOptions.dev ? `${encName}.${hash}-dev.js` : `${encName}.${hash}.js`;
   return outName;
