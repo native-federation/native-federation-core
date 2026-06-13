@@ -1,6 +1,52 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
-  ]
+    "config:best-practices",
+    "group:recommended",
+    "schedule:weekly"
+  ],
+  "timezone": "Europe/Amsterdam",
+  "prConcurrentLimit": 5,
+  "minimumReleaseAge": "3 days",
+  "packageRules": [
+    {
+      "description": "Group the eslint/prettier toolchain into one PR",
+      "groupName": "linting",
+      "matchPackageNames": [
+        "eslint",
+        "eslint-**",
+        "@eslint/**",
+        "typescript-eslint",
+        "@typescript-eslint/**",
+        "prettier",
+        "globals"
+      ]
+    },
+    {
+      "description": "Group the test toolchain into one PR",
+      "groupName": "testing",
+      "matchPackageNames": ["vite", "vitest", "@vitest/**", "jsdom"]
+    },
+    {
+      "description": "Automerge minor/patch devDependency updates once CI passes",
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true
+    },
+    {
+      "description": "Automerge GitHub Actions digest/minor/patch updates",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch", "pin", "pinDigest", "digest"],
+      "automerge": true
+    },
+    {
+      "description": "Never automerge @softarc/sheriff-core — review compatibility by hand",
+      "matchPackageNames": ["@softarc/sheriff-core"],
+      "automerge": false
+    }
+  ],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "automerge": true
+  }
 }
