@@ -1,11 +1,5 @@
-packages:
-  - packages/core
-  - packages/runtime
-  - packages/node
 allowBuilds:
-  '@swc/core': true
   esbuild: true
-  msw: false
-  nx: false
-minimumReleaseAgeExclude:
-  - '@softarc/native-federation-runtime@4.1.2'
+  msw: true
+onlyBuiltDependencies:
+  - esbuild

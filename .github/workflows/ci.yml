@@ -1,44 +1,41 @@
-name: CI
-
+name: Code checks
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-
-permissions:
-  actions: read
-  contents: read
-
+    branches: [main]
 jobs:
-  ci:
+  verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
         with:
-          filter: tree:0
-          fetch-depth: 0
-
+          node-version: "24.x"
       - name: Setup PNPM
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v4
         with:
           version: 11
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: "pnpm"
+      - name: Dependencies OK
+        run: pnpm install --frozen-lockfile
 
-      - run: pnpm install --frozen-lockfile
+      - name: Typecheck OK
+        run: pnpm typecheck
 
-      - name: Set SHAs for Nx affected commands
-        uses: nrwl/nx-set-shas@v4
+      - name: Build OK
+        run: pnpm build
 
-      - name: Lint affected projects
-        run: pnpm exec nx affected -t lint
+      - name: Lint OK
+        run: pnpm lint
 
-      - name: Typecheck affected projects
-        run: pnpm exec nx affected -t typecheck
+      - name: Knip OK
+        run: pnpm knip
 
-      - name: Build affected projects
-        run: pnpm exec nx affected -t build
+      - name: Test OK
+        run: pnpm test
+
+      - name: Audit OK
+        run: pnpm audit --audit-level moderate
+        env:
+          CI: true
