@@ -16,7 +16,7 @@ import { logger } from '../utils/logger.js';
 import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { normalizePackageName } from '../utils/normalize.js';
 
-export type ConfigLoader = (fullConfigPath: string) => Promise<NormalizedFederationConfig>;
+type ConfigLoader = (fullConfigPath: string) => Promise<NormalizedFederationConfig>;
 
 const defaultConfigLoader: ConfigLoader = async fullConfigPath =>
   (await import(pathToFileURL(fullConfigPath).href))?.default;

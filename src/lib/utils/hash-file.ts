@@ -9,10 +9,6 @@ export function hashFile(fileName: string): string {
   return hashFileCore(nodeIo, fileName);
 }
 
-export function integrityForFile(fileName: string, algorithm: SriAlgorithm = 'sha384'): string {
-  return integrityForFileCore(nodeIo, fileName, algorithm);
-}
-
 export function hashFileCore(io: HashDeps, fileName: string): string {
   return io.hash('md5', io.readBytes(fileName)).hex();
 }

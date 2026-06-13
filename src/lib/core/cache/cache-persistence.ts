@@ -52,9 +52,6 @@ export type CacheMetadata = {
 
 type CachePort = FileReaderPort & FileWriterPort;
 
-export const cacheEntry = (pathToCache: string, fileName: string) =>
-  cacheEntryCore(nodeIo, pathToCache, fileName);
-
 export const cacheEntryCore = (io: CachePort, pathToCache: string, fileName: string) => {
   const metadataFile = path.join(pathToCache, fileName);
   const readMetadata = (): CacheMetadata => JSON.parse(io.readText(metadataFile));

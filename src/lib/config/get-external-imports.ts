@@ -1,13 +1,8 @@
 import * as path from 'path';
 import * as ts from 'typescript';
 import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
-import { nodeIo } from '../utils/io/node-io-adapter.js';
 
 const RESOLVE_EXTENSIONS = ['.ts', '.js', '.mjs', '.cjs'];
-
-export function getExternalImports(entryFilePath: string): string[] {
-  return getExternalImportsCore(nodeIo, entryFilePath);
-}
 
 export function getExternalImportsCore(io: FileReaderPort, entryFilePath: string): string[] {
   const visited = new Set<string>();

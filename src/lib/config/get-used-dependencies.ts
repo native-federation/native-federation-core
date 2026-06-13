@@ -11,7 +11,7 @@ import { type ExposeEntry } from '../domain/config/federation-config.contract.js
 import { parseWildcard, substituteWildcard, toPosix } from '../utils/path-patterns.js';
 import * as path from 'path';
 
-export type GetProjectData = (
+type GetProjectData = (
   entryPoint: string,
   cwd: string,
   options: { includeExternalLibraries: boolean }
