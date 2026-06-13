@@ -1,27 +1,27 @@
-import { logger } from '../utils/logger.js';
-import { normalize } from '../utils/normalize.js';
-import {
-  createPackageJsonRepository,
-  type PackageInfo,
-  type PackageJsonRepository,
-  type VersionMap,
-} from './package-json-repository.js';
+import { logger } from '../logger.js';
+import { normalize } from '../normalize.js';
+import { sharedPackageJsonRepository } from '../io/package-json-repository.js';
+import type {
+  PackageInfo,
+  PackageJsonRepository,
+  VersionMap,
+} from '../../domain/utils/package-json.contract.js';
 import { resolvePackageInfo } from './entry-point-resolver.js';
 import { getVersionMaps as getVersionMapsFromRepo } from './version-maps.js';
 
-export type { PackageInfo, VersionMap } from './package-json-repository.js';
-export {
-  isESMExport,
-  type ExportCondition,
-  type ExportEntry,
-} from './esm-detection.js';
-
-export const defaultRepo = createPackageJsonRepository();
+export { sharedPackageJsonRepository } from '../io/package-json-repository.js';
+export type {
+  PackageInfo,
+  VersionMap,
+  ExportCondition,
+  ExportEntry,
+} from '../../domain/utils/package-json.contract.js';
+export { isESMExport } from './esm-detection.js';
 
 export function getPackageInfo(
   packageName: string,
   workspaceRoot: string,
-  repo: PackageJsonRepository = defaultRepo
+  repo: PackageJsonRepository = sharedPackageJsonRepository
 ): PackageInfo | null {
   workspaceRoot = normalize(workspaceRoot, true);
 
@@ -39,7 +39,7 @@ export function getPackageInfo(
 export function getVersionMaps(
   project: string,
   workspace: string,
-  repo: PackageJsonRepository = defaultRepo
+  repo: PackageJsonRepository = sharedPackageJsonRepository
 ): VersionMap[] {
   return getVersionMapsFromRepo(repo, project, workspace);
 }
@@ -47,7 +47,7 @@ export function getVersionMaps(
 export function findDepPackageJson(
   packageName: string,
   projectRoot: string,
-  repo: PackageJsonRepository = defaultRepo
+  repo: PackageJsonRepository = sharedPackageJsonRepository
 ): string | null {
   return repo.findDepPackageJson(packageName, projectRoot);
 }

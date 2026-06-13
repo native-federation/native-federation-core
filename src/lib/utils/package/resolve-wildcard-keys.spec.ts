@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as path from 'path';
 import { resolvePackageJsonExportsWildcardCore } from './resolve-wildcard-keys.js';
-import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
+import { createMemoryIo } from '../io/__test-helpers__/memory-io.js';
 
 const CWD = path.resolve('/pkg');
 

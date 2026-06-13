@@ -1,4 +1,7 @@
-import type { PackageJsonRepository, VersionMap } from './package-json-repository.js';
+import type {
+  PackageJsonRepository,
+  VersionMap,
+} from '../../domain/utils/package-json.contract.js';
 
 /** Extract a `{ name: version }` map from every package.json's `dependencies`. */
 export function getVersionMaps(

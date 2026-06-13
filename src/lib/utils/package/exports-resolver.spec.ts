@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as path from 'path';
 import { findOptimalExport, replaceGlob, resolveExportsEntry } from './exports-resolver.js';
-import type { PackageInfo } from './package-json-repository.js';
+import type { PackageInfo } from '../../domain/utils/package-json.contract.js';
 
 const info: PackageInfo = { packageName: 'p', entryPoint: '/pkg', version: '1.0.0', esm: false };
 

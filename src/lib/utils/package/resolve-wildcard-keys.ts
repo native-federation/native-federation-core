@@ -1,7 +1,7 @@
-import { nodeIo } from '../utils/io/node-io-adapter.js';
-import type { GlobPort } from '../domain/utils/io-port.contract.js';
-import type { KeyValuePair } from '../domain/utils/keyvaluepair.contract.js';
-import { captureWildcard, parseWildcard, substituteWildcard, toPosix } from '../utils/path-patterns.js';
+import { nodeIo } from '../io/node-io-adapter.js';
+import type { GlobPort } from '../../domain/utils/io-port.contract.js';
+import type { KeyValuePair } from '../../domain/utils/keyvaluepair.contract.js';
+import { captureWildcard, parseWildcard, substituteWildcard, toPosix } from '../path-patterns.js';
 
 /**
  * Resolves package.json exports wildcard patterns.

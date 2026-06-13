@@ -1,7 +1,7 @@
 import * as path from 'path';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
-import { defaultRepo, getPackageInfo, type PackageInfo } from '../../package-resolution/package-info.js';
-import type { PackageJsonRepository } from '../../package-resolution/package-json-repository.js';
+import { sharedPackageJsonRepository, getPackageInfo, type PackageInfo } from '../../utils/package/package-info.js';
+import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
 import type {
   ChunkInfo,
   IntegrityMap,
@@ -37,7 +37,7 @@ export async function bundleShared(
   integrity?: IntegrityMap;
 }> {
   return bundleSharedCore(
-    { io: nodeIo, repo: defaultRepo, adapter: getBuildAdapter() },
+    { io: nodeIo, repo: sharedPackageJsonRepository, adapter: getBuildAdapter() },
     sharedBundles,
     config,
     fedOptions,

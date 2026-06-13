@@ -1,20 +1,3 @@
-export type ExportCondition =
-  | 'import'
-  | 'require'
-  | 'node'
-  | 'cjs'
-  | 'esm'
-  | 'default'
-  | 'types'
-  | 'browser'
-  | (string & {});
-
-export type ExportEntry =
-  | string
-  | undefined
-  | { [key in ExportCondition]?: ExportEntry }
-  | ExportEntry[];
-
 /**
  * Classify a package.json `exports` condition key as ESM (`true`), CJS (`false`),
  * or ambiguous (`undefined`).

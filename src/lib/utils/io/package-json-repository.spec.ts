@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
 import { createPackageJsonRepository, getPkgFolder } from './package-json-repository.js';
-import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
-import { logger } from '../utils/logger.js';
+import { createMemoryIo } from './__test-helpers__/memory-io.js';
+import { logger } from '../logger.js';
 
 const abs = (p: string) => path.resolve(p);
 

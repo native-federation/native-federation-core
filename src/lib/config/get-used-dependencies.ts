@@ -1,7 +1,7 @@
 import { getProjectData as sheriffGetProjectData, type ProjectData } from '@softarc/sheriff-core';
 import { cwd } from 'process';
-import { defaultRepo, getPackageInfo } from '../package-resolution/package-info.js';
-import { type PackageJsonRepository } from '../package-resolution/package-json-repository.js';
+import { sharedPackageJsonRepository, getPackageInfo } from '../utils/package/package-info.js';
+import { type PackageJsonRepository } from '../domain/utils/package-json.contract.js';
 import { getExternalImportsCore } from './get-external-imports.js';
 import { nodeIo } from '../utils/io/node-io-adapter.js';
 import { type FileReaderPort } from '../domain/utils/io-port.contract.js';
@@ -25,7 +25,7 @@ export interface UsedDependenciesDeps {
 
 const defaultDeps: UsedDependenciesDeps = {
   io: nodeIo,
-  repo: defaultRepo,
+  repo: sharedPackageJsonRepository,
   getProjectData: sheriffGetProjectData,
 };
 

@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
 import { resolvePackageInfo } from './entry-point-resolver.js';
-import { createPackageJsonRepository } from './package-json-repository.js';
-import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
-import { logger } from '../utils/logger.js';
+import { createPackageJsonRepository } from '../io/package-json-repository.js';
+import { createMemoryIo } from '../io/__test-helpers__/memory-io.js';
+import { logger } from '../logger.js';
 
 const WS = path.resolve('/ws');
 const nm = (rel: string) => path.join(WS, 'node_modules', rel);

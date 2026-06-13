@@ -1,28 +1,12 @@
 import * as path from 'path';
-import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
-import { nodeIo } from '../utils/io/node-io-adapter.js';
-import { normalize } from '../utils/normalize.js';
-import { logger } from '../utils/logger.js';
-
-export interface PackageInfo {
-  packageName: string;
-  entryPoint: string;
-  version: string;
-  esm: boolean;
-}
-
-export interface PartialPackageJson {
-  module: string;
-  main: string;
-}
-
-export type VersionMap = Record<string, string>;
-
-type PackageJsonInfo = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  content: any;
-  directory: string;
-};
+import type { FileReaderPort } from '../../domain/utils/io-port.contract.js';
+import type {
+  PackageJsonInfo,
+  PackageJsonRepository,
+} from '../../domain/utils/package-json.contract.js';
+import { nodeIo } from './node-io-adapter.js';
+import { normalize } from '../normalize.js';
+import { logger } from '../logger.js';
 
 export function getPkgFolder(packageName: string): string {
   const parts = packageName.split('/');
@@ -31,17 +15,6 @@ export function getPkgFolder(packageName: string): string {
     folder += '/' + parts[1];
   }
   return folder;
-}
-
-// Reads and caches `package.json` files; the cache is per-instance.
-export interface PackageJsonRepository {
-  /** package.json files between `project` and `workspace`, nearest first. */
-  getPackageJsonFiles(project: string, workspace: string): PackageJsonInfo[];
-  /** Nearest `node_modules/<pkg>/package.json` walking up from `projectRoot`. */
-  findDepPackageJson(packageName: string, projectRoot: string): string | null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  readJson(filePath: string): any;
-  exists(filePath: string): boolean;
 }
 
 export function createPackageJsonRepository(
@@ -121,3 +94,5 @@ export function createPackageJsonRepository(
     exists: (filePath: string) => io.exists(filePath),
   };
 }
+
+export const sharedPackageJsonRepository = createPackageJsonRepository();

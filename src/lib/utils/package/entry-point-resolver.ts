@@ -1,12 +1,12 @@
 import * as path from 'path';
-import { logger } from '../utils/logger.js';
+import { logger } from '../logger.js';
 import { findOptimalExport, resolveExportsEntry } from './exports-resolver.js';
-import {
-  getPkgFolder,
-  type PackageInfo,
-  type PartialPackageJson,
-  type PackageJsonRepository,
-} from './package-json-repository.js';
+import { getPkgFolder } from '../io/package-json-repository.js';
+import type {
+  PackageInfo,
+  PartialPackageJson,
+  PackageJsonRepository,
+} from '../../domain/utils/package-json.contract.js';
 
 interface ResolveContext {
   packageName: string;

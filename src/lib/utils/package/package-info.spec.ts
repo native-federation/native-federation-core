@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import * as path from 'path';
 import { getPackageInfo, getVersionMaps, findDepPackageJson } from './package-info.js';
-import { createPackageJsonRepository } from './package-json-repository.js';
-import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
+import { createPackageJsonRepository } from '../io/package-json-repository.js';
+import { createMemoryIo } from '../io/__test-helpers__/memory-io.js';
 
 const WS = path.resolve('/ws');
 

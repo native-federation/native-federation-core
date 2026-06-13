@@ -6,7 +6,7 @@ import { bundleSharedCore, calcHashCore } from './bundle-shared.js';
 import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
 import { createFakeBuildAdapter } from './__test-helpers__/fake-build-adapter.js';
 import { prepareSkipList } from '../../config/default-skip-list.js';
-import type { PackageJsonRepository } from '../../package-resolution/package-json-repository.js';
+import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
 import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';

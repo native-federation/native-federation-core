@@ -2,14 +2,14 @@ import * as path from 'path';
 import { cwd } from 'process';
 import { DEFAULT_SKIP_LIST, isInSkipList, prepareSkipList } from './default-skip-list.js';
 import { type SkipList, type PreparedSkipList } from '../domain/config/skip-list.contract.js';
-import { defaultRepo, findDepPackageJson, getVersionMaps, type VersionMap } from '../package-resolution/package-info.js';
-import type { PackageJsonRepository } from '../package-resolution/package-json-repository.js';
+import { sharedPackageJsonRepository, findDepPackageJson, getVersionMaps, type VersionMap } from '../utils/package/package-info.js';
+import type { PackageJsonRepository } from '../domain/utils/package-json.contract.js';
 import { getConfigContext } from './configuration-context.js';
 import { logger } from '../utils/logger.js';
 import { nodeIo } from '../utils/io/node-io-adapter.js';
 import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
 
-import { resolvePackageJsonExportsWildcard } from '../package-resolution/resolve-wildcard-keys.js';
+import { resolvePackageJsonExportsWildcard } from '../utils/package/resolve-wildcard-keys.js';
 import type {
   ExternalConfig,
   IncludeSecondariesOptions,
@@ -354,7 +354,7 @@ export function shareAllCore(
     projectPath?: string;
     overrides?: ShareExternalsOptions;
   } = {},
-  repo: PackageJsonRepository = defaultRepo
+  repo: PackageJsonRepository = sharedPackageJsonRepository
 ): ShareExternalsOptions | null {
   // let workspacePath: string | undefined = undefined;
   const projectPath = inferProjectPath(opts.projectPath);
@@ -425,7 +425,7 @@ export function shareCore(
   configuredShareObjects: ShareExternalsOptions,
   projectPath = '',
   skipList = DEFAULT_SKIP_LIST,
-  repo: PackageJsonRepository = defaultRepo
+  repo: PackageJsonRepository = sharedPackageJsonRepository
 ): ShareExternalsOptions {
   projectPath = inferProjectPath(projectPath);
   const packagePath = findPackageJson(io, projectPath);

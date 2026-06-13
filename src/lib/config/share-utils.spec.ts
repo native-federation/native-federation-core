@@ -4,7 +4,7 @@ import { cwd } from 'process';
 import { findRootTsConfigJsonCore, getSecondaries, shareAllCore, shareCore } from './share-utils.js';
 import { DEFAULT_SKIP_LIST, prepareSkipList } from './default-skip-list.js';
 import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
-import { createPackageJsonRepository } from '../package-resolution/package-json-repository.js';
+import { createPackageJsonRepository } from '../utils/io/package-json-repository.js';
 import type { ExternalConfig } from '../domain/config/external-config.contract.js';
 
 const ROOT = cwd();

@@ -7,7 +7,7 @@ import {
   type UsedDependenciesDeps,
 } from './get-used-dependencies.js';
 import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
-import { createPackageJsonRepository } from '../package-resolution/package-json-repository.js';
+import { createPackageJsonRepository } from '../utils/io/package-json-repository.js';
 
 describe('getUsedDependenciesFactoryCore', () => {
   // Build deps backed by memory-io: `projectData` is the canned sheriff output

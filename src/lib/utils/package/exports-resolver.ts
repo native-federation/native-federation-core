@@ -1,6 +1,9 @@
 import * as path from 'path';
-import { type ExportEntry, isESMExport } from './esm-detection.js';
-import type { PackageInfo } from './package-json-repository.js';
+import { isESMExport } from './esm-detection.js';
+import type {
+  ExportEntry,
+  PackageInfo,
+} from '../../domain/utils/package-json.contract.js';
 
 export function replaceGlob(target: ExportEntry, replacement: string): ExportEntry {
   if (!target) return undefined;
