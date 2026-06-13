@@ -1,5 +1,5 @@
 import path from 'path';
-import type { NFBuildAdapterResult } from '../domain/core/build-adapter.contract.js';
+import type { NFBuildAdapterResult } from '../../domain/core/build-adapter.contract.js';
 
 function stripHash(fileName: string): string {
   const start = fileName.lastIndexOf('-');

@@ -8,12 +8,12 @@ import {
   getMappingVersion,
   getMappingVersionCore,
 } from './bundle-exposed-and-mappings.js';
-import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
+import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
 import { createFakeBuildAdapter } from './__test-helpers__/fake-build-adapter.js';
-import { prepareSkipList } from '../config/default-skip-list.js';
-import { logger } from '../utils/logger.js';
-import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
-import type { NormalizedFederationOptions } from '../domain/core/federation-options.contract.js';
+import { prepareSkipList } from '../../config/default-skip-list.js';
+import { logger } from '../../utils/logger.js';
+import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
+import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
 
 describe('getMappingVersion', () => {
   let tmpRoot: string;

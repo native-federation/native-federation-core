@@ -24,7 +24,6 @@ type PackageJsonInfo = {
   directory: string;
 };
 
-/** Top-level package folder for a (possibly scoped/deep) specifier. */
 export function getPkgFolder(packageName: string): string {
   const parts = packageName.split('/');
   let folder = parts[0]!;
@@ -34,8 +33,7 @@ export function getPkgFolder(packageName: string): string {
   return folder;
 }
 
-// Reads and caches `package.json` files. The cache is per-instance, so a fresh
-// repository never leaks state into another (important for tests).
+// Reads and caches `package.json` files; the cache is per-instance.
 export interface PackageJsonRepository {
   /** package.json files between `project` and `workspace`, nearest first. */
   getPackageJsonFiles(project: string, workspace: string): PackageJsonInfo[];

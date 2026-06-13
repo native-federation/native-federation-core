@@ -6,17 +6,17 @@ import type {
   ExposesInfo,
   IntegrityMap,
   SharedInfo,
-} from '../domain/core/federation-info.contract.js';
-import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
-import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
+} from '../../domain/core/federation-info.contract.js';
+import type { FileReaderPort } from '../../domain/utils/io-port.contract.js';
+import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import { createBuildResultMap, popFromResultMap } from './build-result-map.js';
 import { computeIntegrityMap } from './compute-integrity.js';
-import { logger } from '../utils/logger.js';
-import { normalize } from '../utils/normalize.js';
-import { nodeIo } from '../utils/io/node-io-adapter.js';
-import { type NormalizedFederationOptions } from '../domain/core/federation-options.contract.js';
-import { AbortedError } from '../utils/errors.js';
-import type { EntryPoint, NFBuildAdapter } from './../domain/core/build-adapter.contract.js';
+import { logger } from '../../utils/logger.js';
+import { normalize } from '../../utils/normalize.js';
+import { nodeIo } from '../../utils/io/node-io-adapter.js';
+import { type NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
+import { AbortedError } from '../../utils/errors.js';
+import type { EntryPoint, NFBuildAdapter } from '../../domain/core/build-adapter.contract.js';
 import { rewriteChunkImports } from './rewrite-chunk-imports.js';
 import { getBuildAdapter } from './build-adapter.js';
 
@@ -156,7 +156,6 @@ export async function bundleExposedAndMappingsCore(
   }
 
   // Must run after rewriteChunkImports so SRI matches the final on-disk bytes.
-  // Paths are already absolute, so the baseDir is empty.
   const integrity: IntegrityMap | undefined = config.features.integrityHashes
     ? computeIntegrityMap([...entryFiles, ...chunkPaths], '')
     : undefined;
@@ -239,8 +238,6 @@ export function getMappingVersionCore(
 
   while (true) {
     const candidate = path.join(dir, 'package.json');
-    // io.isFile replaces the previous ENOENT errno check: a missing file is
-    // simply skipped, while a malformed (but present) package.json still warns.
     if (io.isFile(candidate)) {
       try {
         const json = JSON.parse(io.readText(candidate));

@@ -1,8 +1,8 @@
 import * as ts from 'typescript';
 import * as path from 'path';
-import type { FileReaderPort, FileWriterPort } from '../domain/utils/io-port.contract.js';
-import { nodeIo } from '../utils/io/node-io-adapter.js';
-import { toChunkImport } from '../domain/core/chunk.js';
+import type { FileReaderPort, FileWriterPort } from '../../domain/utils/io-port.contract.js';
+import { nodeIo } from '../../utils/io/node-io-adapter.js';
+import { toChunkImport } from '../../domain/core/chunk.js';
 
 export function rewriteChunkImports(filePath: string): void {
   rewriteChunkImportsCore(nodeIo, filePath);

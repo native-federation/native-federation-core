@@ -1,8 +1,8 @@
 import * as path from 'path';
-import type { FileReaderPort, HashPort } from '../domain/utils/io-port.contract.js';
-import type { IntegrityMap } from '../domain/core/federation-info.contract.js';
-import { nodeIo } from '../utils/io/node-io-adapter.js';
-import { integrityForFileCore } from '../utils/hash-file.js';
+import type { FileReaderPort, HashPort } from '../../domain/utils/io-port.contract.js';
+import type { IntegrityMap } from '../../domain/core/federation-info.contract.js';
+import { nodeIo } from '../../utils/io/node-io-adapter.js';
+import { integrityForFileCore } from '../../utils/hash-file.js';
 
 type IntegrityDeps = FileReaderPort & HashPort;
 

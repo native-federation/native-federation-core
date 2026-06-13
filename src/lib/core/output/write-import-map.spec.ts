@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { writeImportMapCore } from './write-import-map.js';
-import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
-import { toChunkImport } from '../domain/core/chunk.js';
-import type { SharedInfo } from '../domain/core/federation-info.contract.js';
-import type { FederationOptions } from '../domain/core/federation-options.contract.js';
+import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
+import { toChunkImport } from '../../domain/core/chunk.js';
+import type { SharedInfo } from '../../domain/core/federation-info.contract.js';
+import type { FederationOptions } from '../../domain/core/federation-options.contract.js';
 
 const opts = (): FederationOptions =>
   ({ workspaceRoot: '/ws', outputPath: 'dist' }) as FederationOptions;

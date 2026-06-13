@@ -1,21 +1,52 @@
-import { getProjectData, type ProjectData } from '@softarc/sheriff-core';
+import { getProjectData as sheriffGetProjectData, type ProjectData } from '@softarc/sheriff-core';
 import { cwd } from 'process';
-import { getPackageInfo } from '../package-resolution/package-info.js';
-import { getExternalImports as extractExternalImports } from './get-external-imports.js';
+import { defaultRepo, getPackageInfo } from '../package-resolution/package-info.js';
+import { type PackageJsonRepository } from '../package-resolution/package-json-repository.js';
+import { getExternalImportsCore } from './get-external-imports.js';
+import { nodeIo } from '../utils/io/node-io-adapter.js';
+import { type FileReaderPort } from '../domain/utils/io-port.contract.js';
 import { type PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { type UsedDependencies } from '../domain/utils/used-dependencies.contract.js';
 import { type ExposeEntry } from '../domain/config/federation-config.contract.js';
 import { parseWildcard, substituteWildcard, toPosix } from '../utils/path-patterns.js';
 import * as path from 'path';
 
-export function getUsedDependenciesFactory(
-  workspaceRoot: string,
-  fallbackEntryPoints?: string[]
-): (config: {
+export type GetProjectData = (
+  entryPoint: string,
+  cwd: string,
+  options: { includeExternalLibraries: boolean }
+) => ProjectData;
+
+export interface UsedDependenciesDeps {
+  io: FileReaderPort;
+  repo: PackageJsonRepository;
+  getProjectData: GetProjectData;
+}
+
+const defaultDeps: UsedDependenciesDeps = {
+  io: nodeIo,
+  repo: defaultRepo,
+  getProjectData: sheriffGetProjectData,
+};
+
+type UsedDependenciesConfig = {
   name?: string;
   exposes?: Record<string, ExposeEntry>;
   sharedMappings: PathToImport;
-}) => UsedDependencies {
+};
+
+export function getUsedDependenciesFactory(
+  workspaceRoot: string,
+  fallbackEntryPoints?: string[]
+): (config: UsedDependenciesConfig) => UsedDependencies {
+  return getUsedDependenciesFactoryCore(defaultDeps, workspaceRoot, fallbackEntryPoints);
+}
+
+export function getUsedDependenciesFactoryCore(
+  deps: UsedDependenciesDeps,
+  workspaceRoot: string,
+  fallbackEntryPoints?: string[]
+): (config: UsedDependenciesConfig) => UsedDependencies {
   return config => {
     let entryPoints: string[] | undefined = Object.values(config.exposes ?? {}).map(e => e.file);
     if (entryPoints.length < 1) entryPoints = fallbackEntryPoints;
@@ -27,7 +58,7 @@ export function getUsedDependenciesFactory(
     const fileInfos = Object.values(entryPoints ?? []).reduce(
       (acc, entryPoint) => ({
         ...acc,
-        ...getProjectData(entryPoint, cwd(), {
+        ...deps.getProjectData(entryPoint, cwd(), {
           includeExternalLibraries: true,
         }),
       }),
@@ -45,13 +76,17 @@ export function getUsedDependenciesFactory(
     }
 
     return {
-      external: addTransientDeps(usedPackageNames, workspaceRoot),
+      external: addTransientDeps(usedPackageNames, workspaceRoot, deps),
       internal: resolveUsedMappings(fileInfos, workspaceRoot, config.sharedMappings),
     };
   };
 }
 
-function addTransientDeps(packages: Set<string>, workspaceRoot: string) {
+function addTransientDeps(
+  packages: Set<string>,
+  workspaceRoot: string,
+  deps: UsedDependenciesDeps
+) {
   const packagesAndPeers = new Set<string>([...packages]);
   const discovered = new Set<string>(packagesAndPeers);
   const stack = [...packagesAndPeers];
@@ -63,13 +98,13 @@ function addTransientDeps(packages: Set<string>, workspaceRoot: string) {
       continue;
     }
 
-    const pInfo = getPackageInfo(dep, workspaceRoot);
+    const pInfo = getPackageInfo(dep, workspaceRoot, deps.repo);
 
     if (!pInfo) {
       continue;
     }
 
-    const peerDeps = extractExternalImports(pInfo.entryPoint);
+    const peerDeps = getExternalImportsCore(deps.io, pInfo.entryPoint);
 
     for (const peerDep of peerDeps) {
       if (!discovered.has(peerDep)) {

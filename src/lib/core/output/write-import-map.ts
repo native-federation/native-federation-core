@@ -3,11 +3,11 @@ import type {
   ChunkInfo,
   IntegrityMap,
   SharedInfo,
-} from '../domain/core/federation-info.contract.js';
-import type { FileWriterPort } from '../domain/utils/io-port.contract.js';
-import type { FederationOptions } from '../domain/core/federation-options.contract.js';
-import { toChunkImport } from '../domain/core/chunk.js';
-import { nodeIo } from '../utils/io/node-io-adapter.js';
+} from '../../domain/core/federation-info.contract.js';
+import type { FileWriterPort } from '../../domain/utils/io-port.contract.js';
+import type { FederationOptions } from '../../domain/core/federation-options.contract.js';
+import { toChunkImport } from '../../domain/core/chunk.js';
+import { nodeIo } from '../../utils/io/node-io-adapter.js';
 
 export function writeImportMapCore(
   io: FileWriterPort,

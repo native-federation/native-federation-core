@@ -21,13 +21,10 @@ export type ExportEntry =
  */
 export const isESMExport = (e: string): boolean | undefined => {
   if (e === 'import' || e === 'module-sync') return true;
-  // Common ESM conventions
   if (e === 'module' || e === 'esm' || /^es20\d{2}$/.test(e)) return true;
 
   if (e === 'require') return false;
-  // Common CJS conventions
   if (e === 'cjs' || e === 'commonjs') return false;
 
-  // Ambiguous
   return undefined;
 };

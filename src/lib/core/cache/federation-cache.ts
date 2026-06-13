@@ -1,9 +1,9 @@
-import type { FederationCache } from '../domain/core/federation-cache.contract.js';
+import type { FederationCache } from '../../domain/core/federation-cache.contract.js';
 import type {
   ChunkInfo,
   IntegrityMap,
   SharedInfo,
-} from '../domain/core/federation-info.contract.js';
+} from '../../domain/core/federation-info.contract.js';
 
 export function createFederationCache(cachePath: string): FederationCache<undefined>;
 export function createFederationCache<TBundlerCache>(

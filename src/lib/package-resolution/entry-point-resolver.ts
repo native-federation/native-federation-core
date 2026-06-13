@@ -30,7 +30,6 @@ const base = (ctx: ResolveContext, entryPoint: string, esm: boolean): PackageInf
   esm,
 });
 
-// Ordered fallbacks, tried until one resolves (replaces a nested `if`-cascade).
 const STRATEGIES: Strategy[] = [
   ctx => {
     const entry = resolveExportsEntry(ctx.mainPkgJson?.exports, ctx.relSecondaryPath);

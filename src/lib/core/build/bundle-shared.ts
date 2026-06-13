@@ -1,28 +1,28 @@
 import * as path from 'path';
-import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
-import { defaultRepo, getPackageInfo, type PackageInfo } from '../package-resolution/package-info.js';
-import type { PackageJsonRepository } from '../package-resolution/package-json-repository.js';
+import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
+import { defaultRepo, getPackageInfo, type PackageInfo } from '../../package-resolution/package-info.js';
+import type { PackageJsonRepository } from '../../package-resolution/package-json-repository.js';
 import type {
   ChunkInfo,
   IntegrityMap,
   SharedInfo,
-} from '../domain/core/federation-info.contract.js';
-import type { HashPort, IoPort } from '../domain/utils/io-port.contract.js';
-import { type NormalizedFederationOptions } from '../domain/core/federation-options.contract.js';
-import { logger } from '../utils/logger.js';
-import { nodeIo } from '../utils/io/node-io-adapter.js';
+} from '../../domain/core/federation-info.contract.js';
+import type { HashPort, IoPort } from '../../domain/utils/io-port.contract.js';
+import { type NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
+import { logger } from '../../utils/logger.js';
+import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import { DEFAULT_EXTERNAL_LIST } from './default-external-list.js';
 import { isSourceFile, rewriteChunkImportsCore } from './rewrite-chunk-imports.js';
-import { toChunkImport } from '../domain/core/chunk.js';
-import { cacheEntryCore, getChecksumCore, getFilename } from './cache-persistence.js';
+import { toChunkImport } from '../../domain/core/chunk.js';
+import { cacheEntryCore, getChecksumCore, getFilename } from '../cache/cache-persistence.js';
 import { computeIntegrityMapCore } from './compute-integrity.js';
 import { fileURLToPath } from 'url';
-import type { NormalizedExternalConfig } from '../domain/config/external-config.contract.js';
+import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
 import type {
   EntryPoint,
   NFBuildAdapter,
   NFBuildAdapterResult,
-} from '../domain/core/build-adapter.contract.js';
+} from '../../domain/core/build-adapter.contract.js';
 import { getBuildAdapter } from './build-adapter.js';
 
 export async function bundleShared(

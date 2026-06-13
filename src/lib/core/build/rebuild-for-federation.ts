@@ -1,15 +1,15 @@
-import type { FederationInfo } from '../domain/core/federation-info.contract.js';
+import type { FederationInfo } from '../../domain/core/federation-info.contract.js';
 import {
   bundleExposedAndMappings,
   describeExposed,
   describeSharedMappings,
 } from './bundle-exposed-and-mappings.js';
-import type { NormalizedFederationOptions } from '../domain/core/federation-options.contract.js';
-import { writeFederationInfo } from './write-federation-info.js';
-import { writeImportMap } from './write-import-map.js';
-import { logger } from '../utils/logger.js';
-import { AbortedError } from '../utils/errors.js';
-import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
+import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
+import { writeFederationInfo } from '../output/write-federation-info.js';
+import { writeImportMap } from '../output/write-import-map.js';
+import { logger } from '../../utils/logger.js';
+import { AbortedError } from '../../utils/errors.js';
+import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 
 export async function rebuildForFederation(
   config: NormalizedFederationConfig,

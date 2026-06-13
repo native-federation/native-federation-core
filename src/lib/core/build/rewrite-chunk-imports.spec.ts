@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isSourceFile, rewriteChunkImportsCore } from './rewrite-chunk-imports.js';
-import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
+import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
 
 const rewrite = (source: string): string => {
   const io = createMemoryIo().setFile('/chunk.js', source);

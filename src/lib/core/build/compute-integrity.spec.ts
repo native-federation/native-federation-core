@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as crypto from 'crypto';
 import { computeIntegrityMapCore } from './compute-integrity.js';
-import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
+import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
 
 const sri = (data: string, algorithm: 'sha384' = 'sha384') =>
   `${algorithm}-${crypto.createHash(algorithm).update(data).digest('base64')}`;

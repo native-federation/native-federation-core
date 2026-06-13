@@ -1,7 +1,3 @@
-// Filesystem / crypto / glob abstraction. Utils depend on these small,
-// segregated ports rather than `fs`/`crypto`/`fast-glob` directly, so they can
-// be unit-tested with in-memory fakes (see ../../utils/io/).
-
 export type HashAlgorithm = 'md5' | 'sha256' | 'sha384' | 'sha512';
 
 export interface Digest {
@@ -23,7 +19,6 @@ export interface FileReaderPort {
 
 export interface FileWriterPort {
   writeText(path: string, data: string): void;
-  /** Create a directory and any missing parents. */
   mkdirp(path: string): void;
   copyFile(from: string, to: string): void;
   remove(path: string): void;

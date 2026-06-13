@@ -16,8 +16,6 @@ export {
   type ExportEntry,
 } from './esm-detection.js';
 
-// Process-wide repository, preserving the cross-call package.json caching the
-// library relied on previously. Tests pass their own repository instead.
 export const defaultRepo = createPackageJsonRepository();
 
 export function getPackageInfo(

@@ -7,8 +7,8 @@ import type {
   WatchHandle,
 } from '../../../domain/utils/io-port.contract.js';
 
-// In-memory IoPort for unit tests. Hashing uses real `crypto` so tests can
-// assert known digests; `watch` is driven manually via `emit`.
+// Hashing uses real `crypto` so tests can assert known digests; `watch` is
+// driven manually via `emit`.
 export interface MemoryIo extends IoPort {
   setFile(filePath: string, data: string | Uint8Array): MemoryIo;
   setDir(dirPath: string): MemoryIo;

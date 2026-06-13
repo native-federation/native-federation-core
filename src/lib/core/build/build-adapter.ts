@@ -1,5 +1,5 @@
-import type { NFBuildAdapter } from '../domain/core/build-adapter.contract.js';
-import { logger } from '../utils/logger.js';
+import type { NFBuildAdapter } from '../../domain/core/build-adapter.contract.js';
+import { logger } from '../../utils/logger.js';
 
 let _buildAdapter: NFBuildAdapter | null = null;
 

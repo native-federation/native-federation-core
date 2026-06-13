@@ -9,15 +9,13 @@ import { nodeIo } from '../utils/io/node-io-adapter.js';
 import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
 import { removeUnusedDeps } from '../config/remove-unused-deps.js';
 import { type FederationCache } from '../../domain.js';
-import { createFederationCache } from './federation-cache.js';
-import { getDefaultCachePath } from './cache-persistence.js';
+import { createFederationCache } from './cache/federation-cache.js';
+import { getDefaultCachePath } from './cache/cache-persistence.js';
 import { getUsedDependenciesFactory } from '../config/get-used-dependencies.js';
 import { logger } from '../utils/logger.js';
 import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { normalizePackageName } from '../utils/normalize.js';
 
-// Loads the federation config module. Defaults to a dynamic import() of the
-// resolved file URL; tests inject a fake so the config can be supplied directly.
 export type ConfigLoader = (fullConfigPath: string) => Promise<NormalizedFederationConfig>;
 
 const defaultConfigLoader: ConfigLoader = async fullConfigPath =>
@@ -26,6 +24,7 @@ const defaultConfigLoader: ConfigLoader = async fullConfigPath =>
 interface NormalizeFederationDeps {
   io: FileReaderPort;
   loadConfig: ConfigLoader;
+  usedDependenciesFactory?: typeof getUsedDependenciesFactory;
 }
 
 export function normalizeFederationOptions(
@@ -64,11 +63,7 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
    * Step 1: normalizing config
    */
   const fullConfigPath = path.join(options.workspaceRoot, options.federationConfig);
-  const getUsedDeps = getUsedDependenciesFactory(options.workspaceRoot, options.entryPoints);
 
-  // NOTE: the config module itself is loaded via the injected ConfigLoader
-  // (a dynamic import() in production), which is a module-loader concern outside
-  // IoPort; only the existence check is ported.
   if (!deps.io.exists(fullConfigPath)) {
     throw new Error('Expected ' + fullConfigPath);
   }
@@ -97,6 +92,10 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
    */
 
   if (config.features.ignoreUnusedDeps) {
+    const getUsedDeps = (deps.usedDependenciesFactory ?? getUsedDependenciesFactory)(
+      options.workspaceRoot,
+      options.entryPoints
+    );
     config = removeUnusedDeps(getUsedDeps(config), config);
     logger.info('Removed unused dependencies.');
     logger.debug(

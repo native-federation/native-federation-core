@@ -2,7 +2,6 @@ import * as path from 'path';
 import { type ExportEntry, isESMExport } from './esm-detection.js';
 import type { PackageInfo } from './package-json-repository.js';
 
-/** Substitute the `*` in every string leaf of an export entry with `replacement`. */
 export function replaceGlob(target: ExportEntry, replacement: string): ExportEntry {
   if (!target) return undefined;
   if (typeof target === 'string') return target.replace('*', replacement);
@@ -37,7 +36,6 @@ export function findOptimalExport(
 
   const exportTypes = Object.keys(target);
 
-  // We prefer ESM exports for native support.
   if (typeof isESM === 'undefined') {
     const esmExport = exportTypes.find(e => isESMExport(e));
     if (esmExport) {
@@ -45,7 +43,6 @@ export function findOptimalExport(
     }
   }
 
-  // Node.js looks at the exports object and uses the first key that matches the current environment.
   const secondBestEntry =
     'default' in target && target['default']
       ? 'default'

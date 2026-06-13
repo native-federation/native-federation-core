@@ -84,6 +84,32 @@ describe('normalizeFederationOptionsCore', () => {
     expect(loadConfig).toHaveBeenCalledWith(CONFIG_PATH);
   });
 
+  it('prunes unused shared deps via the injected factory when ignoreUnusedDeps is on', async () => {
+    const io = createMemoryIo().setFile(CONFIG_PATH, '');
+    const info = vi.spyOn(logger, 'info').mockImplementation(() => undefined);
+    const config = makeConfig({
+      shared: { keep: {}, drop: {} },
+      features: { ...makeConfig().features, ignoreUnusedDeps: true },
+    });
+    // Fake factory: only "keep" is reported used, plus a resolved mapping.
+    const usedDependenciesFactory = vi.fn(() => () => ({
+      external: new Set(['keep']),
+      internal: { '/ws/libs/ui/x.ts': '@org/ui/x' },
+    }));
+
+    const result = await normalizeFederationOptionsCore(
+      { io, loadConfig: loaderFor(config), usedDependenciesFactory },
+      baseOptions,
+      cache
+    );
+
+    expect(usedDependenciesFactory).toHaveBeenCalledWith('/ws', undefined);
+    expect(Object.keys(result.config.shared)).toEqual(['keep']);
+    expect(result.config.sharedMappings).toEqual({ '/ws/libs/ui/x.ts': '@org/ui/x' });
+    expect(info).toHaveBeenCalled();
+    info.mockRestore();
+  });
+
   it('drops wildcard shared mappings and warns when ignoreUnusedDeps is off', async () => {
     const io = createMemoryIo().setFile(CONFIG_PATH, '');
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);

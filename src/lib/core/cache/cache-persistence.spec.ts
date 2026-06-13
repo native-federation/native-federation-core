@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as crypto from 'crypto';
 import { cacheEntryCore, getChecksumCore, getFilename, type CacheMetadata } from './cache-persistence.js';
-import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
-import { logger } from '../utils/logger.js';
-import type { NormalizedExternalConfig } from '../domain/config/external-config.contract.js';
+import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
+import { logger } from '../../utils/logger.js';
+import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
 
 const ext = (version?: string) => ({ version }) as NormalizedExternalConfig;
 

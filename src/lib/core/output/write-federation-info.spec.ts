@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { writeFederationInfoCore } from './write-federation-info.js';
-import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
-import type { FederationInfo } from '../domain/core/federation-info.contract.js';
-import type { FederationOptions } from '../domain/core/federation-options.contract.js';
+import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
+import type { FederationInfo } from '../../domain/core/federation-info.contract.js';
+import type { FederationOptions } from '../../domain/core/federation-options.contract.js';
 
 const info = (): FederationInfo => ({
   name: 'remote',

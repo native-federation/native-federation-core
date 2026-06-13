@@ -1,6 +1,3 @@
-// Shared path/wildcard helpers for single-`*` subpath patterns (Node "exports"
-// subpaths, tsconfig path mappings).
-
 export const toPosix = (p: string): string => p.replace(/\\/g, '/');
 
 export interface WildcardPattern {
@@ -15,7 +12,6 @@ export function parseWildcard(pattern: string): WildcardPattern {
   return { prefix: pattern.slice(0, i), suffix: pattern.slice(i + 1), hasWildcard: true };
 }
 
-/** Prefix(+optional suffix) match; exact equality without a `*`. */
 export function matchesWildcard(value: string, pattern: string): boolean {
   const { prefix, suffix, hasWildcard } = parseWildcard(pattern);
   if (!hasWildcard) return value === pattern;

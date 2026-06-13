@@ -1,16 +1,16 @@
 import type { FederationInfo } from '../domain/core/federation-info.contract.js';
 import { getConfigContext, usePackageJson, useWorkspace } from '../config/configuration-context.js';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
-import { getBuildAdapter, setBuildAdapter } from './build-adapter.js';
-import { buildForFederation } from './build-for-federation.js';
+import { getBuildAdapter, setBuildAdapter } from './build/build-adapter.js';
+import { buildForFederation } from './build/build-for-federation.js';
 import {
   type FederationOptions,
   type NormalizedFederationOptions,
 } from '../domain/core/federation-options.contract.js';
-import { getExternals } from './get-externals.js';
+import { getExternals } from './build/get-externals.js';
 import { normalizeFederationOptions } from './normalize-options.js';
 import type { NFBuildAdapter } from '../domain/core/build-adapter.contract.js';
-import { rebuildForFederation } from './rebuild-for-federation.js';
+import { rebuildForFederation } from './build/rebuild-for-federation.js';
 
 export interface BuildHelperParams {
   options: FederationOptions;

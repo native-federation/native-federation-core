@@ -8,8 +8,6 @@ import type {
   WatchHandle,
 } from '../../domain/utils/io-port.contract.js';
 
-// The only module in src/lib/utils allowed to import fs/crypto/fast-glob;
-// every other util goes through this port so it stays testable.
 export const nodeIo: IoPort = {
   readText(path) {
     return fs.readFileSync(path, 'utf-8');

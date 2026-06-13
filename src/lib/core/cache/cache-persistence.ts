@@ -1,17 +1,17 @@
 import path from 'path';
-import type { NormalizedExternalConfig } from '../domain/config/external-config.contract.js';
+import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
 import type {
   ChunkInfo,
   IntegrityMap,
   SharedInfo,
-} from '../domain/core/federation-info.contract.js';
+} from '../../domain/core/federation-info.contract.js';
 import type {
   FileReaderPort,
   FileWriterPort,
   HashPort,
-} from '../domain/utils/io-port.contract.js';
-import { nodeIo } from '../utils/io/node-io-adapter.js';
-import { logger } from '../utils/logger.js';
+} from '../../domain/utils/io-port.contract.js';
+import { nodeIo } from '../../utils/io/node-io-adapter.js';
+import { logger } from '../../utils/logger.js';
 
 export const getDefaultCachePath = (workspaceRoot: string) =>
   path.join(workspaceRoot, 'node_modules/.cache/native-federation');

@@ -1,13 +1,12 @@
 import * as path from 'path';
-import type { IoPort } from '../../domain/utils/io-port.contract.js';
+import type { IoPort } from '../../../domain/utils/io-port.contract.js';
 import type {
   NFBuildAdapter,
   NFBuildAdapterOptions,
   NFBuildAdapterResult,
-} from '../../domain/core/build-adapter.contract.js';
+} from '../../../domain/core/build-adapter.contract.js';
 
 export interface FakeBuildAdapter extends NFBuildAdapter {
-  /** Recorded invocations, in call order, for assertions. */
   readonly calls: {
     setup: Array<{ name: string; options: NFBuildAdapterOptions }>;
     build: Array<{ name: string; modifiedFiles?: string[] }>;
@@ -17,12 +16,8 @@ export interface FakeBuildAdapter extends NFBuildAdapter {
 
 type ResultsFor = NFBuildAdapterResult[] | ((name: string) => NFBuildAdapterResult[]);
 
-// In-memory NFBuildAdapter for unit tests. Every call is recorded on `calls`.
-//
 // When `results` is omitted, `build()` echoes the most recent `setup()` for that
-// name: one result per entry point, at `<outdir>/<outName>` — mirroring how a real
-// bundler emits a file per entry. When `io` is provided, those echoed files are
-// also written (so downstream readers like rewriteChunkImports / copyFiles work).
+// name (one result per entry point); with `io`, those files are also written.
 export function createFakeBuildAdapter(
   options: { io?: IoPort; results?: ResultsFor } = {}
 ): FakeBuildAdapter {

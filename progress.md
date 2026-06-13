@@ -38,7 +38,7 @@ scoped `no-restricted-imports` ESLint rule. Committed in `ecc6f0f` (core) and
 `compute-integrity.ts` DRYs the SRI loop, and `getMappingVersion` switched from an
 `err.code === 'ENOENT'` check to `io.isFile()`.
 
-## DONE this session — `IoPort` through `config` + barrel cleanup (working tree only, NOT committed)
+## DONE — `IoPort` through `config` + barrel cleanup (committed `71c224a`)
 
 `config/share-utils.ts` was the last non-spec file importing `fs` directly. Now
 converted. Files changed:
@@ -64,7 +64,7 @@ converted. Files changed:
 · `npm run lint` (0 errors; 8 pre-existing warnings) · `grep` gate confirms `config`
 is fs/crypto-free.
 
-## DONE — `package-resolution` repository seam through `share*` (working tree, NOT committed)
+## DONE — `package-resolution` repository seam through `share*` (committed `71c224a`)
 
 `shareCore`/`shareAllCore` are now end-to-end testable. They previously threaded
 `io` for directory-walking but their three `package-resolution` calls
@@ -85,7 +85,7 @@ real-fs `defaultRepo`. Now a `PackageJsonRepository` is threaded through:
 **Verification (all green):** `npm test -- --run` → 165 passed · `npm run typecheck`
 · `npm run lint` (0 errors; 8 pre-existing warnings).
 
-## DONE — `BuildAdapter` / `ConfigLoader` seam through the bundler orchestrators (working tree, NOT committed)
+## DONE — `BuildAdapter` / `ConfigLoader` seam through the bundler orchestrators (committed `bde931f`)
 
 `normalizeFederationOptions`, `bundleExposedAndMappings`, and `bundleShared` are now
 end-to-end testable. Each public fn is an unchanged thin wrapper delegating to a new
@@ -111,30 +111,81 @@ internal modules gained additive `*Core` exports (not re-exported anywhere publi
 **Verification (all green):** `npm test -- --run` → 174 passed · `npm run typecheck`
 · `npm run lint` (0 errors; 8 pre-existing warnings).
 
-## Caveat / known gap
+## DONE — `getUsedDependenciesFactory` seam → `ignoreUnusedDeps` branch testable (uncommitted)
 
-`normalizeFederationOptions`'s `ignoreUnusedDeps` branch is still not unit-testable
-fs-free: `getUsedDependenciesFactory` (`config/get-used-dependencies.ts`) calls
-`getPackageInfo` against the process-wide `defaultRepo`. Threading `repo` through that
-factory would close it (small, same pattern as the share seam).
+The last fs-bound gap is closed. `getUsedDependenciesFactory` had three impure
+collaborators — `getProjectData` (sheriff, reads disk via `cwd()`), `getPackageInfo`
+(→ process-wide `defaultRepo`), and `getExternalImports` (→ `nodeIo`). All three are
+now injected via a `*Core(deps, ...)` seam. Files changed:
+
+- **`config/get-used-dependencies.ts`** — new `UsedDependenciesDeps { io, repo,
+  getProjectData }` + `GetProjectData` type; `getUsedDependenciesFactoryCore(deps, ...)`
+  holds the logic, public `getUsedDependenciesFactory` is a thin wrapper over
+  `defaultDeps` (`{ nodeIo, defaultRepo, sheriffGetProjectData }`). `addTransientDeps`
+  takes `deps` and uses `getPackageInfo(..., repo)` + `getExternalImportsCore(io, ...)`.
+- **`core/normalize-options.ts`** — `NormalizeFederationDeps` gains optional
+  `usedDependenciesFactory` (defaults to the real factory). The factory is now built
+  lazily *inside* the `ignoreUnusedDeps` branch (not built when the feature is off).
+
+**Tests added:** `get-used-dependencies.spec.ts` (5 cases for `…FactoryCore` driven by
+`createMemoryIo()` + `createPackageJsonRepository(io)` + a canned `getProjectData`:
+external/unresolved collection, transient peer discovery through repo+io, internal
+mapping resolution, entry-point fallback, missing-entrypoint throw) and
+`normalize-options.spec.ts` (1 case: `ignoreUnusedDeps: true` with an injected fake
+factory prunes `shared` + sets `sharedMappings`, logs info).
+
+**Public API unchanged:** only `normalizeFederationOptions` is re-exported (signature
+untouched); the new `*Core`/deps symbols are internal.
+
+**Verification (all green):** `npm test -- --run` → 180 passed · `npm run typecheck`
+· `npm run lint` (0 errors; 8 pre-existing warnings).
+
+## DONE — `core` subfolder reorg (uncommitted, move-only)
+
+`src/lib/core` is split into three subfolders; `git mv` preserved history as renames.
+Pure moves + import-path rewrites — no logic or public-API changes.
+
+- **`core/build/`** — build-adapter, build-for-federation, rebuild-for-federation,
+  bundle-exposed-and-mappings, bundle-shared, build-result-map, rewrite-chunk-imports,
+  compute-integrity, default-external-list, get-externals, + `__test-helpers__/`.
+- **`core/cache/`** — cache-persistence, federation-cache.
+- **`core/output/`** — write-federation-info, write-import-map.
+- **root** (unchanged location) — federation-builder, normalize-options, rebuild-queue.
+
+Import rewrites: moved files' cross-layer `../…` → `../../…` (the test-helper, two
+levels deep, → `../../../…`); cross-folder intra-core edges retargeted (e.g.
+`build-for-federation` → `../output/…`, `../cache/…`; `federation-builder` →
+`./build/…`; `normalize-options` → `./cache/…`). `src/index.ts` + `src/internal.ts`
+barrels repointed — diffs are path-string-only, every exported symbol/type unchanged.
+⚠ No `core/package-resolution` — that layer already lives at `src/lib/package-resolution`.
+
+**Verification (all green):** `npm run typecheck` · `npm test -- --run` → 180 passed
+· `npm run lint` (0 errors; 8 pre-existing warnings) · recursive grep gate confirms
+`core` stays fs/crypto/glob-free.
+
+**Not committed** (per user). Note: `normalize-options.ts` carries both the reorg
+path edits *and* the uncommitted `getUsedDependenciesFactory` content edits, so a
+strictly "moves-only" commit isn't separable from this state.
+
+## DONE — comment trim (uncommitted)
+
+Aggressive pass over comments *added on this branch only*: removed
+refactor/history-narration ("replaces the previous…"), dependency-injection plumbing
+notes ("tests inject a fake"), and comments restating the code. Kept only comments
+explaining genuinely non-obvious behavior or gotchas.
 
 ## Next / deferred (decided with user)
 
-1. **`core` subfolder reorg — DEFERRED.** Do as a separate move-only commit so it
-   doesn't tangle with content diffs. Proposed grouping if/when done:
-   `core/build/` (build/rebuild/bundle/result-map/rewrite/adapter/externals),
-   `core/cache/` (cache-persistence, federation-cache), `core/output/` (write-*),
-   with `normalize-options`/`rebuild-queue`/`federation-builder` at root.
-   ⚠ Do NOT create `core/package-resolution` — that layer already exists at
-   `src/lib/package-resolution`; a copy in core would be confusing.
+1. **`core` subfolder reorg — DONE** (see section above, uncommitted move-only).
 
 2. **`package-resolution` IoPort/repository seam — DONE** (see section above).
    Remaining: the boundary ESLint rule could be extended to `package-resolution`
    (already fs-free) and `utils` outside the adapter.
 
-3. **`BuildAdapter` / `ConfigLoader` seam — DONE** (see section above). Remaining:
-   thread `repo` through `getUsedDependenciesFactory` to cover the `ignoreUnusedDeps`
-   branch of `normalizeFederationOptions`.
+3. **`BuildAdapter` / `ConfigLoader` seam — DONE** (see section above).
+
+4. **`getUsedDependenciesFactory` seam — DONE** (see section above). The
+   `ignoreUnusedDeps` branch of `normalizeFederationOptions` is now fs-free testable.
 
 ## Architecture review findings still open (lower priority)
 
@@ -149,5 +200,5 @@ factory would close it (small, same pattern as the share seam).
 - Test once: `npm test -- --run`   (watch: `npm test`)
 - Typecheck: `npm run typecheck`
 - Lint: `npm run lint`
-- Check core/config stay clean:
-  `grep -rn "from 'fs'\|from 'crypto'" src/lib/core/*.ts src/lib/config/*.ts | grep -v spec`
+- Check core/config stay clean (recursive — core now has subfolders):
+  `grep -rn "from 'fs'\|from 'crypto'" src/lib/core src/lib/config --include='*.ts' | grep -v spec`
