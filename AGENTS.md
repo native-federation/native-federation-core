@@ -41,8 +41,6 @@ This is an **Nx monorepo** with three main packages:
 ```
 packages/
 ├── core/              → @softarc/native-federation
-├── runtime/           → @softarc/native-federation-runtime
-└── node/              → @softarc/native-federation-node
 ```
 
 ### Package Breakdown
@@ -83,109 +81,6 @@ packages/
 
 **Build Adapter Pattern**:
 The core library is build-tool agnostic. It expects a `NFBuildAdapter` that implements bundling logic. Reference implementations use esbuild (see `@softarc/native-federation-esbuild` package, separate repo).
-
-#### 2. `@softarc/native-federation-runtime` (runtime)
-
-**Purpose**: Runtime functionality for loading federated modules in the browser
-
-**Key exports**:
-
-- `initFederation()` - Initialize federation runtime, load remoteEntry.json files
-- `loadRemoteModule()` - Dynamically load a module from a remote
-- `watchFederationBuildCompletion()` - Watch for remote build notifications during development
-
-**Core responsibilities**:
-
-- Fetch and parse `remoteEntry.json` metadata from host and remotes
-- Construct ES Module import maps with proper scoping
-- Inject import maps into the DOM (uses `es-module-shims` polyfill)
-- Manage version matching for shared dependencies
-- Handle remote module loading with proper error handling
-- Support hot-reload / live-reload during development
-
-**Important files**:
-
-- `src/lib/init-federation.ts` - Main entry point for federation initialization
-- `src/lib/load-remote-module.ts` - Dynamic remote module loading
-- `src/lib/model/import-map.ts` - Import map construction and merging
-- `src/lib/model/remotes.ts` - Remote registration and management
-- `src/lib/model/externals.ts` - External dependency resolution
-- `src/lib/utils/add-import-map.ts` - DOM injection of import maps
-- `src/lib/watch-federation-build.ts` - Development mode file watching
-
-**Import Map Structure**:
-
-```typescript
-{
-  imports: {
-    // Host shared deps at root level
-    "react": "./shared/react.js",
-    // Exposed modules from remotes
-    "mfe1/Component": "http://localhost:3001/exposed/Component.js"
-  },
-  scopes: {
-    // Remote-specific shared deps (for version isolation)
-    "http://localhost:3001/": {
-      "react": "http://localhost:3001/shared/react.js"
-    }
-  }
-}
-```
-
-#### 3. `@softarc/native-federation-node` (node)
-
-**Purpose**: Node.js-specific federation support (SSR, testing)
-
-**Key exports**:
-
-- `initNodeFederation()` - Initialize federation in Node.js context
-
-**Core responsibilities**:
-
-- Provide Node.js-compatible federation initialization
-- Custom loader hooks for Node.js module resolution
-- Support for server-side rendering scenarios
-
-**Important files**:
-
-- `src/lib/node/init-node-federation.ts` - Node.js federation init
-- `src/lib/utils/fstart.ts` - Federation start utilities
-
-## Key Workflows
-
-### Build-Time Workflow (using `@softarc/native-federation`)
-
-1. **Initialize**: `federationBuilder.init({ options, adapter })`
-   - Parses `federation.config.js`
-   - Normalizes configuration (resolves `auto` versions, etc.)
-   - Determines externals list
-
-2. **Main Application Build**: User's build tool bundles the app
-   - Must respect `federationBuilder.externals` (exclude them from main bundle)
-
-3. **Federation Build**: `federationBuilder.build()`
-   - Bundles shared dependencies (with caching)
-   - Bundles exposed modules
-   - Bundles shared mappings (monorepo libs)
-   - Generates `remoteEntry.json` metadata
-   - Writes import map for development
-
-4. **Watch Mode**: `federationBuilder.build({ modifiedFiles })`
-   - Incrementally rebuilds only changed modules
-   - Uses federation cache to skip unchanged dependencies
-
-### Runtime Workflow (using `@softarc/native-federation-runtime`)
-
-1. **Initialize**: `await initFederation({ mfe1: 'http://localhost:3001/remoteEntry.json' })`
-   - Loads host's `remoteEntry.json`
-   - Loads each remote's `remoteEntry.json`
-   - Merges import maps
-   - Injects `<script type="importmap-shim">` into DOM
-
-2. **Load Remote**: `await loadRemoteModule({ remoteName: 'mfe1', exposedModule: './Component' })`
-   - Resolves module URL via import map
-   - Uses dynamic `import()` to load the module
-   - Returns the module exports
 
 ## Configuration
 
