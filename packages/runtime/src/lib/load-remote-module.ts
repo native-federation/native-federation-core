@@ -86,8 +86,14 @@ export type LoadRemoteModuleOptions<T = any> = {
  * @throws Error if exposed module doesn't exist and no fallback is provided
  * @throws Error if module import fails and no fallback is provided
  *
+ * @deprecated This package has reached end-of-life and is no longer maintained.
+ *   Please switch over to the @softarc/native-federation-orchestrator library.
  */
 export async function loadRemoteModule<T = any>(options: LoadRemoteModuleOptions): Promise<T>;
+/**
+ * @deprecated This package has reached end-of-life and is no longer maintained.
+ *   Please switch over to the @softarc/native-federation-orchestrator library.
+ */
 export async function loadRemoteModule<T = any>(
   remoteName: string,
   exposedModule: string

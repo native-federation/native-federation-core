@@ -10,6 +10,10 @@ export type ImportMap = {
   integrity?: Integrity;
 };
 
+/**
+ * @deprecated This package has reached end-of-life and is no longer maintained.
+ *   Please switch over to the @softarc/native-federation-orchestrator library.
+ */
 export function mergeImportMaps(map1: ImportMap, map2: ImportMap): ImportMap {
   const merged: ImportMap = {
     imports: { ...map1.imports, ...map2.imports },

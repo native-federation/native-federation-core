@@ -1,5 +1,9 @@
 # node
 
+> [!WARNING]
+> **End of life:** `@softarc/native-federation-node` has reached end-of-life and is no longer maintained.
+> Please switch over to the [`@softarc/native-federation-orchestrator`](https://www.npmjs.com/package/@softarc/native-federation-orchestrator) library.
+
 This library was generated with [Nx](https://nx.dev).
 
 ## Building

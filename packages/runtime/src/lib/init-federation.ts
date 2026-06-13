@@ -41,6 +41,8 @@ import { watchFederationBuildCompletion } from './watch-federation-build.js';
  *
  * @returns The final merged ImportMap that was injected into the DOM
  *
+ * @deprecated This package has reached end-of-life and is no longer maintained.
+ *   Please switch over to the @softarc/native-federation-orchestrator library.
  */
 export async function initFederation(
   remotesOrManifestUrl: Record<string, string> | string = {},
@@ -139,6 +141,8 @@ function handleRemoteLoadError(
  *
  * @returns Merged import map containing all remotes' contributions
  *
+ * @deprecated This package has reached end-of-life and is no longer maintained.
+ *   Please switch over to the @softarc/native-federation-orchestrator library.
  */
 export async function fetchAndRegisterRemotes(
   remotes: Record<string, string>,
@@ -169,7 +173,9 @@ export async function fetchAndRegisterRemotes(
 }
 
 /**
- * @deprecated Use `fetchAndRegisterRemotes` instead.
+ * @deprecated This package has reached end-of-life and is no longer maintained.
+ *   Please switch over to the @softarc/native-federation-orchestrator library.
+ *   (Previously: use `fetchAndRegisterRemotes` instead.)
  * @param remotes
  * @param options
  * @returns
@@ -207,6 +213,9 @@ export async function processRemoteInfos(
  * //   scopes: { 'http://localhost:3000/mfe1/': { 'lodash': '...' } }
  * // }
  * ```
+ *
+ * @deprecated This package has reached end-of-life and is no longer maintained.
+ *   Please switch over to the @softarc/native-federation-orchestrator library.
  */
 export async function fetchAndRegisterRemote(
   federationInfoUrl: string,
@@ -415,6 +424,9 @@ function processExposed(
  * @param relBundlesPath - Relative path to the host's bundle directory (default: './')
  *
  * @returns Import map with host's shared dependencies in root imports
+ *
+ * @deprecated This package has reached end-of-life and is no longer maintained.
+ *   Please switch over to the @softarc/native-federation-orchestrator library.
  */
 export async function processHostInfo(
   hostInfo: FederationInfo,

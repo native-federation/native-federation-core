@@ -26,6 +26,10 @@ const defaultOptions: InitNodeFederationOptions = {
   throwIfRemoteNotFound: false,
 };
 
+/**
+ * @deprecated This package has reached end-of-life and is no longer maintained.
+ *   Please switch over to the @softarc/native-federation-orchestrator library.
+ */
 export async function initNodeFederation(
   options: Partial<InitNodeFederationOptions>
 ): Promise<void> {
