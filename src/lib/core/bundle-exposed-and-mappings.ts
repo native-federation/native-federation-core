@@ -1,4 +1,3 @@
-import fs from 'fs';
 import path from 'path';
 
 import type {
@@ -8,11 +7,13 @@ import type {
   IntegrityMap,
   SharedInfo,
 } from '../domain/core/federation-info.contract.js';
-import { integrityForFile } from '../utils/hash-file.js';
+import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
 import { createBuildResultMap, popFromResultMap } from './build-result-map.js';
+import { computeIntegrityMap } from './compute-integrity.js';
 import { logger } from '../utils/logger.js';
 import { normalize } from '../utils/normalize.js';
+import { nodeIo } from '../utils/io/node-io-adapter.js';
 import { type NormalizedFederationOptions } from '../domain/core/federation-options.contract.js';
 import { AbortedError } from '../utils/errors.js';
 import type { EntryPoint } from './../domain/core/build-adapter.contract.js';
@@ -137,14 +138,10 @@ export async function bundleExposedAndMappings(
   }
 
   // Must run after rewriteChunkImports so SRI matches the final on-disk bytes.
-  let integrity: IntegrityMap | undefined;
-  if (config.features.integrityHashes) {
-    integrity = {};
-    for (const filePath of [...entryFiles, ...chunkPaths]) {
-      if (!fs.existsSync(filePath)) continue;
-      integrity[path.basename(filePath)] = integrityForFile(filePath);
-    }
-  }
+  // Paths are already absolute, so the baseDir is empty.
+  const integrity: IntegrityMap | undefined = config.features.integrityHashes
+    ? computeIntegrityMap([...entryFiles, ...chunkPaths], '')
+    : undefined;
 
   return { mappings: sharedResult, exposes: exposedResult, chunks: exportedChunks, integrity };
 }
@@ -214,17 +211,23 @@ function toSharedMappingInfo(
   };
 }
 
-export function getMappingVersion(fileName: string, workspaceRoot: string): string {
+export function getMappingVersionCore(
+  io: FileReaderPort,
+  fileName: string,
+  workspaceRoot: string
+): string {
   const resolvedRoot = path.resolve(workspaceRoot);
   let dir = path.dirname(path.resolve(fileName));
 
   while (true) {
     const candidate = path.join(dir, 'package.json');
-    try {
-      const json = JSON.parse(fs.readFileSync(candidate, 'utf-8'));
-      if (typeof json.version === 'string' && json.version) return json.version;
-    } catch (err: unknown) {
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+    // io.isFile replaces the previous ENOENT errno check: a missing file is
+    // simply skipped, while a malformed (but present) package.json still warns.
+    if (io.isFile(candidate)) {
+      try {
+        const json = JSON.parse(io.readText(candidate));
+        if (typeof json.version === 'string' && json.version) return json.version;
+      } catch (err: unknown) {
         logger.warn(`[getMappingVersion] Failed to parse ${candidate}: ${(err as Error).message}`);
       }
     }
@@ -232,4 +235,8 @@ export function getMappingVersion(fileName: string, workspaceRoot: string): stri
     if (dir === resolvedRoot || parent === dir) return '';
     dir = parent;
   }
+}
+
+export function getMappingVersion(fileName: string, workspaceRoot: string): string {
+  return getMappingVersionCore(nodeIo, fileName, workspaceRoot);
 }

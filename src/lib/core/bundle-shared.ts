@@ -1,5 +1,4 @@
 import * as path from 'path';
-import * as fs from 'fs';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
 import { getPackageInfo, type PackageInfo } from '../package-resolution/package-info.js';
 import type {
@@ -7,18 +6,19 @@ import type {
   IntegrityMap,
   SharedInfo,
 } from '../domain/core/federation-info.contract.js';
+import type { HashPort } from '../domain/utils/io-port.contract.js';
 import { type NormalizedFederationOptions } from '../domain/core/federation-options.contract.js';
 import { logger } from '../utils/logger.js';
-import crypto from 'crypto';
+import { nodeIo } from '../utils/io/node-io-adapter.js';
 import { DEFAULT_EXTERNAL_LIST } from './default-external-list.js';
 import { isSourceFile, rewriteChunkImports } from './rewrite-chunk-imports.js';
 import { toChunkImport } from '../domain/core/chunk.js';
 import { cacheEntry, getChecksum, getFilename } from './cache-persistence.js';
+import { computeIntegrityMap } from './compute-integrity.js';
 import { fileURLToPath } from 'url';
 import type { NormalizedExternalConfig } from '../domain/config/external-config.contract.js';
 import type { EntryPoint, NFBuildAdapterResult } from '../domain/core/build-adapter.contract.js';
 import { getBuildAdapter } from './build-adapter.js';
-import { integrityForFile } from '../utils/hash-file.js';
 
 export async function bundleShared(
   sharedBundles: Record<string, NormalizedExternalConfig>,
@@ -49,7 +49,7 @@ export async function bundleShared(
       bundleCache.copyFiles(path.join(fedOptions.workspaceRoot, fedOptions.outputPath));
       let integrity = cacheMetadata.integrity;
       if (config.features.integrityHashes && !integrity) {
-        integrity = computeIntegrityForFiles(
+        integrity = computeIntegrityMap(
           cacheMetadata.files,
           fedOptions.federationCache.cachePath
         );
@@ -82,7 +82,7 @@ export async function bundleShared(
 
   const configState =
     'BUNDLER_CHUNKS' + // TODO: Replace this with lib version
-    fs.readFileSync(path.join(path.dirname(__filename), '../../../package.json')) +
+    nodeIo.readText(path.join(path.dirname(__filename), '../../../package.json')) +
     JSON.stringify(config);
 
   const allEntryPoints: EntryPoint[] = packageInfos.map(pi => {
@@ -95,7 +95,7 @@ export async function bundleShared(
 
   const expectedResults = allEntryPoints.map(ep => path.join(fullOutputPath, ep.outName));
   const entryPoints = allEntryPoints.filter(
-    ep => !fs.existsSync(path.join(fedOptions.federationCache.cachePath, ep.outName))
+    ep => !nodeIo.exists(path.join(fedOptions.federationCache.cachePath, ep.outName))
   );
 
   // If we build for the browser and don't remote unused deps from the shared config,
@@ -186,7 +186,7 @@ export async function bundleShared(
 
   // Must run after rewriteImports so SRI matches the bytes copied to dist.
   const integrity = config.features.integrityHashes
-    ? computeIntegrityForFiles(persistedFiles, fedOptions.federationCache.cachePath)
+    ? computeIntegrityMap(persistedFiles, fedOptions.federationCache.cachePath)
     : undefined;
 
   bundleCache.persist({
@@ -200,17 +200,6 @@ export async function bundleShared(
   bundleCache.copyFiles(path.join(fedOptions.workspaceRoot, fedOptions.outputPath));
 
   return { externals: result, chunks: exportedChunks, integrity };
-}
-
-function computeIntegrityForFiles(files: string[], baseDir: string): IntegrityMap {
-  const integrity: IntegrityMap = {};
-  for (const file of files) {
-    if (file.endsWith('.map')) continue;
-    const fullPath = path.join(baseDir, file);
-    if (!fs.existsSync(fullPath)) continue;
-    integrity[path.basename(file)] = integrityForFile(fullPath);
-  }
-  return integrity;
 }
 
 function rewriteImports(cachedFiles: string[], cachePath: string) {
@@ -229,7 +218,7 @@ function createOutName(
   encName: string
 ) {
   const hashBase = pi.version + '_' + pi.entryPoint + '_' + configState;
-  const hash = calcHash(hashBase);
+  const hash = calcHashCore(nodeIo, hashBase);
 
   const outName = fedOptions.dev ? `${encName}.${hash}-dev.js` : `${encName}.${hash}.js`;
   return outName;
@@ -291,14 +280,12 @@ function addChunksToResult(chunks: NFBuildAdapterResult[], result: SharedInfo[])
   }
 }
 
-function calcHash(hashBase: string) {
-  const hash = crypto
-    .createHash('sha256')
-    .update(hashBase)
-    .digest('base64')
+export function calcHashCore(hash: HashPort, hashBase: string) {
+  return hash
+    .hash('sha256', hashBase)
+    .base64()
     .replace(/\//g, '_')
     .replace(/\+/g, '-')
     .replace(/=/g, '')
     .substring(0, 10);
-  return hash;
 }

@@ -1,14 +1,16 @@
 import * as path from 'path';
-import * as fs from 'fs';
 import type {
   ChunkInfo,
   IntegrityMap,
   SharedInfo,
 } from '../domain/core/federation-info.contract.js';
+import type { FileWriterPort } from '../domain/utils/io-port.contract.js';
 import type { FederationOptions } from '../domain/core/federation-options.contract.js';
 import { toChunkImport } from '../domain/core/chunk.js';
+import { nodeIo } from '../utils/io/node-io-adapter.js';
 
-export function writeImportMap(
+export function writeImportMapCore(
+  io: FileWriterPort,
   sharedInfo: { externals: SharedInfo[]; chunks?: ChunkInfo },
   fedOption: FederationOptions,
   fileIntegrity?: IntegrityMap
@@ -45,5 +47,13 @@ export function writeImportMap(
   }
 
   const importMapPath = path.join(fedOption.workspaceRoot, fedOption.outputPath, 'importmap.json');
-  fs.writeFileSync(importMapPath, JSON.stringify(importMap, null, 2));
+  io.writeText(importMapPath, JSON.stringify(importMap, null, 2));
+}
+
+export function writeImportMap(
+  sharedInfo: { externals: SharedInfo[]; chunks?: ChunkInfo },
+  fedOption: FederationOptions,
+  fileIntegrity?: IntegrityMap
+) {
+  writeImportMapCore(nodeIo, sharedInfo, fedOption, fileIntegrity);
 }

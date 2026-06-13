@@ -4,8 +4,8 @@ import type {
   NormalizedFederationOptions,
 } from '../domain/core/federation-options.contract.js';
 import * as path from 'path';
-import * as fs from 'fs';
 import { pathToFileURL } from 'url';
+import { nodeIo } from '../utils/io/node-io-adapter.js';
 import { removeUnusedDeps } from '../config/remove-unused-deps.js';
 import { type FederationCache } from '../../domain.js';
 import { createFederationCache } from './federation-cache.js';
@@ -38,7 +38,9 @@ export async function normalizeFederationOptions<TBundlerCache = undefined>(
   const fullConfigPath = path.join(options.workspaceRoot, options.federationConfig);
   const getUsedDeps = getUsedDependenciesFactory(options.workspaceRoot, options.entryPoints);
 
-  if (!fs.existsSync(fullConfigPath)) {
+  // NOTE: the config module itself is loaded via dynamic import() below, which
+  // is a module-loader concern outside IoPort; only the existence check is ported.
+  if (!nodeIo.exists(fullConfigPath)) {
     throw new Error('Expected ' + fullConfigPath);
   }
 

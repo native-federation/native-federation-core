@@ -36,4 +36,31 @@ export default [
     },
     languageOptions: { globals: { ...globals.browser, ...globals.node } },
   },
+  {
+    // Layer boundary: core must reach the filesystem / crypto / glob through
+    // IoPort (the nodeIo adapter), never the Node built-ins directly. Specs may
+    // still use them to assert against real implementations.
+    files: ['src/lib/core/**/*.ts'],
+    ignores: ['src/lib/core/**/*.spec.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            'fs',
+            'node:fs',
+            'fs/promises',
+            'node:fs/promises',
+            'crypto',
+            'node:crypto',
+            'fast-glob',
+          ].map(name => ({
+            name,
+            message:
+              'Do not import this in src/lib/core. Use IoPort (nodeIo) from utils/io instead.',
+          })),
+        },
+      ],
+    },
+  },
 ];

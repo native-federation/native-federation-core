@@ -3,7 +3,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { getMappingVersion } from './bundle-exposed-and-mappings.js';
+import { getMappingVersion, getMappingVersionCore } from './bundle-exposed-and-mappings.js';
+import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
 import { logger } from '../utils/logger.js';
 
 describe('getMappingVersion', () => {
@@ -86,5 +87,43 @@ describe('getMappingVersion', () => {
     } finally {
       fs.rmSync(outer, { recursive: true, force: true });
     }
+  });
+});
+
+describe('getMappingVersionCore', () => {
+  it('returns the version from the nearest package.json walking up', () => {
+    const io = createMemoryIo()
+      .setFile('/ws/libs/shared/package.json', JSON.stringify({ version: '1.2.3' }))
+      .setFile('/ws/libs/shared/src/lib/index.ts', '');
+    expect(getMappingVersionCore(io, '/ws/libs/shared/src/lib/index.ts', '/ws')).toBe('1.2.3');
+  });
+
+  it('skips a package.json without a version and keeps walking up', () => {
+    const io = createMemoryIo()
+      .setFile('/ws/libs/shared/package.json', JSON.stringify({ name: 'shared' }))
+      .setFile('/ws/package.json', JSON.stringify({ version: '7.0.0' }))
+      .setFile('/ws/libs/shared/src/index.ts', '');
+    expect(getMappingVersionCore(io, '/ws/libs/shared/src/index.ts', '/ws')).toBe('7.0.0');
+  });
+
+  it('returns "" when no package.json exists at or above the entry', () => {
+    const io = createMemoryIo().setFile('/ws/libs/shared/src/index.ts', '');
+    expect(getMappingVersionCore(io, '/ws/libs/shared/src/index.ts', '/ws')).toBe('');
+  });
+
+  it('does not walk above workspaceRoot', () => {
+    const io = createMemoryIo()
+      .setFile('/outer/package.json', JSON.stringify({ version: 'should-not-be-used' }))
+      .setFile('/outer/ws/libs/shared/src/index.ts', '');
+    expect(getMappingVersionCore(io, '/outer/ws/libs/shared/src/index.ts', '/outer/ws')).toBe('');
+  });
+
+  it('warns and returns "" when a present package.json is malformed', () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const io = createMemoryIo()
+      .setFile('/ws/libs/shared/package.json', '{ not json')
+      .setFile('/ws/libs/shared/src/index.ts', '');
+    expect(getMappingVersionCore(io, '/ws/libs/shared/src/index.ts', '/ws')).toBe('');
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to parse'));
   });
 });
