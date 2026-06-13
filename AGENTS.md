@@ -1,17 +1,3 @@
-<!-- nx configuration start-->
-<!-- Leave the start & end comments to automatically receive updates. -->
-
-# General Guidelines for working with Nx
-
-- When running tasks (for example build, lint, test, e2e, etc.), always prefer running the task through `nx` (i.e. `nx run`, `nx run-many`, `nx affected`) instead of using the underlying tooling directly
-- You have access to the Nx MCP server and its tools, use them to help the user
-- When answering questions about the repository, use the `nx_workspace` tool first to gain an understanding of the workspace architecture where applicable.
-- When working in individual projects, use the `nx_project_details` mcp tool to analyze and understand the specific project structure and dependencies
-- For questions around nx configuration, best practices or if you're unsure, use the `nx_docs` tool to get relevant, up-to-date docs. Always use this instead of assuming things about nx configuration
-- If the user needs help with an Nx configuration or project graph error, use the `nx_workspace` tool to get any errors
-
-<!-- nx configuration end-->
-
 # Native Federation Core - AI Assistant Guide
 
 ## Project Overview
@@ -29,34 +15,48 @@
 ### Technology Stack
 
 - Written in TypeScript with ES Modules (`.js` extensions in imports)
-- Uses esbuild for bundling (via adapters)
-- Built with Nx monorepo tooling
-- Uses pnpm workspaces
-- Testing with Vitest (including browser tests with Playwright)
+- Provides build-time helpers for federating apps via a build-tool adapter (e.g. esbuild)
+- **Built with raw esbuild** (`esbuild.config.mjs`) for JS, plus `tsc` for `.d.ts` declarations
+- Single package published from the repository root; managed with pnpm
+- Testing with Vitest (currently not wired into CI)
 
 ## Repository Structure
 
-This is an **Nx monorepo** with three main packages:
+This is a **single-package repository** published as `@softarc/native-federation`.
 
 ```
-packages/
-├── core/              → @softarc/native-federation
+/
+├── package.json          → @softarc/native-federation (exports → ./dist/*)
+├── esbuild.config.mjs    → raw esbuild build (1:1 transpile, bundle: false)
+├── tsconfig.json         → base compiler options
+├── tsconfig.build.json   → emitDeclarationOnly → dist
+├── tsconfig.spec.json    → test typings
+├── eslint.config.mts
+├── vite.config.ts        → vitest config
+├── src/                  → library source
+└── dist/                 → build output (gitignored)
 ```
 
-### Package Breakdown
+### Build
 
-#### 1. `@softarc/native-federation` (core)
+- `pnpm build` → runs `node esbuild.config.mjs` (transpiles every `src/**/*.ts`
+  to a mirrored `dist/**/*.js`, preserving `./*.js` import specifiers) then
+  `tsc -p tsconfig.build.json` (emits matching `.d.ts` files only).
+- `pnpm typecheck` → `tsc -p tsconfig.build.json --noEmit`.
+- `pnpm lint` → `eslint src`.
+- `pnpm test` → `vitest` (left as-is; not part of CI).
 
-**Purpose**: Build-time functionality for configuring and bundling federated applications
+esbuild does **not** emit declarations, so `tsc` owns `.d.ts` generation. Both
+write into `dist/` with `rootDir: src`, so JS and types land side by side.
 
-**Key exports** (via `package.json` exports):
+### Package exports (via `package.json` exports)
 
 - `.` - Main build API: `federationBuilder`, `buildForFederation`, etc.
 - `./config` - Configuration utilities: `withNativeFederation`, `shareAll`, `share`
 - `./domain` - Type definitions and contracts
 - `./internal` - Internal utilities (generally not for public use)
 
-**Core responsibilities**:
+### Core responsibilities
 
 - Parse and normalize federation configuration from `federation.config.js`
 - Determine externals (dependencies that should not be bundled with main app)
@@ -65,7 +65,6 @@ packages/
 - Handle shared mappings (monorepo-internal libraries)
 - Generate `remoteEntry.json` metadata files
 - Manage federation cache for performance
-- Support both browser and Node.js platforms
 
 **Important files**:
 
@@ -135,19 +134,18 @@ export default withNativeFederation({
 The library supports **watch mode** for development:
 
 1. **Build notifications**: During development builds, the build process can optionally emit notifications
-2. **Runtime watching**: `watchFederationBuildCompletion()` can listen for these notifications
-3. **Live reload**: When a remote rebuilds, the runtime can reload the affected modules
+2. **Incremental rebuilds**: `rebuildForFederation()` re-bundles only what changed
 
 **Key files**:
 
-- `packages/core/src/lib/domain/core/build-notification-options.contract.ts` - Contract for notifications
-- `packages/runtime/src/lib/watch-federation-build.ts` - Runtime watcher implementation
+- `src/lib/domain/core/build-notification-options.contract.ts` - Contract for notifications
+- `src/lib/core/rebuild-for-federation.ts` - Incremental rebuild logic
 
 ## Caching System
 
 Native Federation uses an intelligent caching system to speed up builds:
 
-**Federation Cache** (`packages/core/src/lib/core/federation-cache.ts`):
+**Federation Cache** (`src/lib/core/federation-cache.ts`):
 
 - Caches built shared dependencies by content hash
 - Reuses cached bundles when dependencies haven't changed
@@ -162,31 +160,10 @@ Native Federation uses an intelligent caching system to speed up builds:
 
 ## Testing
 
-### Unit Tests
-
-- Use Vitest
-- Run with: `nx test <package-name>`
-- Located alongside source files (`.spec.ts`)
-
-### Integration Tests
-
-- Browser-based tests using Vitest + Playwright
-- Located in `packages/runtime/src/lib/*.integration.spec.ts`
-- Test actual federation scenarios with MSW (Mock Service Worker)
-- Run with: `nx test:integration runtime`
-
-### E2E Tests
-
-- Full end-to-end tests in `packages/runtime`
-- Run with: `pnpm test:e2e:runtime`
-- Uses real browser environments
-
-**Test helpers** in `packages/runtime/src/lib/__test-helpers__/`:
-
-- `federation-fixtures.ts` - Mock remoteEntry.json data
-- `module-fixtures.ts` - Mock module content
-- `msw-handlers.ts` - MSW request handlers
-- `dom-helpers.ts` - DOM manipulation utilities
+- Unit tests use Vitest and live alongside source files (`.spec.ts`).
+- Run with `pnpm test` (`vitest`).
+- Tests are **not currently part of CI** and the test config has only been
+  de-Nx'd, not fully verified after the build migration.
 
 ## Common Patterns & Conventions
 
@@ -194,31 +171,31 @@ Native Federation uses an intelligent caching system to speed up builds:
 
 - **Always use `.js` extensions** in imports, even for `.ts` files (ESM requirement)
 - Relative imports for same-package files: `'./utils/logger.js'`
-- Cross-package imports use the package name: `'@softarc/native-federation/domain'`
+- Consumers import via the package name: `'@softarc/native-federation/domain'`
 
 ### Contracts (Domain Types)
 
-- Type definitions are in `packages/core/src/lib/domain/`
+- Type definitions are in `src/lib/domain/`
 - Organized by concern: `core/`, `config/`, `utils/`
 - Files named `*.contract.ts` contain interfaces and types
-- Exported via `packages/core/src/domain.ts`
+- Exported via `src/domain.ts`
 
 ### Error Handling
 
-- Custom errors in `packages/core/src/lib/utils/errors.ts`
+- Custom errors in `src/lib/utils/errors.ts`
 - `AbortedError` for cancellation scenarios
 - Descriptive error messages with context
 
 ### Logging
 
-- Centralized logger in `packages/core/src/lib/utils/logger.ts`
+- Centralized logger in `src/lib/utils/logger.ts`
 - Levels: `info`, `notice`, `warning`, `error`, `debug`
 - Performance measurements with `logger.measure(start, message)`
 
 ### File Naming
 
 - Source files: lowercase with hyphens (e.g., `build-for-federation.ts`)
-- Test files: same name with `.spec.ts` or `.integration.spec.ts`
+- Test files: same name with `.spec.ts`
 - Contract files: `*.contract.ts`
 - Utility files grouped in `utils/` directories
 
@@ -226,13 +203,12 @@ Native Federation uses an intelligent caching system to speed up builds:
 
 ### Adding a New Feature
 
-1. Determine which package it belongs to (core = build-time, runtime = runtime, node = Node.js)
-2. Add implementation files in `packages/<pkg>/src/lib/`
-3. Export from appropriate entry point (`index.ts`, `config.ts`, etc.)
-4. Add tests alongside implementation
-5. Update types in `domain/` if needed
-6. Run `nx lint <package>` and fix issues
-7. Test with `nx test <package>`
+1. Add implementation files in `src/lib/`
+2. Export from appropriate entry point (`index.ts`, `config.ts`, etc.)
+3. Add tests alongside implementation
+4. Update types in `domain/` if needed
+5. Run `pnpm lint` and fix issues
+6. Run `pnpm build` to verify it compiles and emits declarations
 
 ### Debugging Build Issues
 
@@ -243,49 +219,31 @@ Native Federation uses an intelligent caching system to speed up builds:
 5. Look at generated `remoteEntry.json` files
 6. Check the import map in browser DevTools
 
-### Debugging Runtime Issues
-
-1. Inspect injected import map: `document.querySelector('script[type="importmap-shim"]')`
-2. Check browser console for failed module loads
-3. Verify `remoteEntry.json` is accessible and valid
-4. Check CORS headers for cross-origin remotes
-5. Verify version matching for shared dependencies
-6. Enable debugging: `localStorage.setItem('debug', 'nf:*')`
-
 ### Understanding the Build Flow
 
-1. Start at `packages/core/src/lib/core/federation-builder.ts`
+1. Start at `src/lib/core/federation-builder.ts`
 2. Follow `buildForFederation()` for initial build
 3. Follow `rebuildForFederation()` for incremental builds
 4. Check `bundleShared()` for shared dependency bundling
 5. Check `bundleExposedAndMappings()` for exposed module bundling
 6. See `writeFederationInfo()` for remoteEntry.json generation
 
-### Understanding the Runtime Flow
-
-1. Start at `packages/runtime/src/lib/init-federation.ts`
-2. Follow `loadFederationInfo()` to see how remoteEntry.json is loaded
-3. Check `processHostInfo()` for host-side processing
-4. Check `fetchAndRegisterRemotes()` for remote-side processing
-5. See `mergeImportMaps()` for import map construction
-6. Check `loadRemoteModule()` for dynamic loading
-
 ## Version Management
 
-- Versions are managed in individual `package.json` files
-- Core and runtime should stay in sync (both currently `4.0.0`)
+- Version is managed in the root `package.json`
 - Uses conventional commits for changelog generation
-- Release process: update versions, build, publish to npm
+- Release process: update version, build, publish to npm (published from root, `files: ["dist"]`)
 
 ## External Dependencies & Ecosystem
 
 This core library is designed to work with:
 
+- **[@softarc/native-federation-orchestrator](https://github.com/native-federation/orchestrator)** - Runtime orchestrator that loads the `remoteEntry.json` output of this library into a host page (replaces the former `@softarc/native-federation-runtime`/`-node` packages)
 - **[@softarc/native-federation-esbuild](https://github.com/native-federation/esbuild-adapter)** - esbuild adapter (separate repo)
 - **[@angular-architects/native-federation](https://www.npmjs.com/package/@angular-architects/native-federation)** - Angular-specific integration
 - **[@gioboa/vite-module-federation](https://www.npmjs.com/package/@gioboa/vite-module-federation)** - Vite plugin
 
-The core library is intentionally low-level and agnostic; higher-level integrations provide framework-specific conveniences.
+This package covers the **build side** only; runtime loading of remotes is handled by the orchestrator. The core library is intentionally low-level and agnostic; higher-level integrations provide framework-specific conveniences.
 
 ## Key Architectural Decisions
 
@@ -294,13 +252,11 @@ The core library is intentionally low-level and agnostic; higher-level integrati
 3. **Browser standards**: Leverages Import Maps and ES Modules instead of custom loaders
 4. **Caching**: Aggressive caching of shared dependencies for performance
 5. **Type safety**: Full TypeScript support with proper contract definitions
-6. **Monorepo structure**: Separation of concerns (build vs. runtime vs. Node.js)
 
 ## Code Quality & Best Practices
 
-- **Always run tests** before committing: `nx affected:test`
-- **Lint code**: `nx affected:lint` (uses ESLint with TypeScript rules)
-- **Type check**: Build process validates types
+- **Lint code**: `pnpm lint` (uses ESLint with TypeScript rules)
+- **Type check**: `pnpm typecheck`
 - **Conventional commits**: Use `feat:`, `fix:`, `docs:`, etc.
 - **Keep PRs focused**: One feature or fix per PR
 - **Update docs**: Keep README.md and AGENTS.md in sync with code changes
