@@ -26,7 +26,6 @@ export default [
         },
       ],
 
-      // General rules
       'no-console': ['warn', { allow: ['warn', 'error'] }],
       eqeqeq: ['error', 'always'],
       'no-unused-expressions': 'error',
@@ -37,11 +36,11 @@ export default [
     languageOptions: { globals: { ...globals.browser, ...globals.node } },
   },
   {
-    // Layer boundary: core must reach the filesystem / crypto / glob through
-    // IoPort (the nodeIo adapter), never the Node built-ins directly. Specs may
-    // still use them to assert against real implementations.
-    files: ['src/lib/core/**/*.ts'],
-    ignores: ['src/lib/core/**/*.spec.ts'],
+    // Layer boundary: core/config must reach the filesystem / crypto / glob
+    // through IoPort (the nodeIo adapter), never the Node built-ins directly.
+    // Specs may still use them to assert against real implementations.
+    files: ['src/lib/core/**/*.ts', 'src/lib/config/**/*.ts'],
+    ignores: ['src/lib/core/**/*.spec.ts', 'src/lib/config/**/*.spec.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -57,7 +56,7 @@ export default [
           ].map(name => ({
             name,
             message:
-              'Do not import this in src/lib/core. Use IoPort (nodeIo) from utils/io instead.',
+              'Do not import this in src/lib/core or src/lib/config. Use IoPort (nodeIo) from utils/io instead.',
           })),
         },
       ],

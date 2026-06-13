@@ -88,6 +88,14 @@ export function createMemoryIo(): MemoryIo {
     isDirectory(p) {
       return dirs.has(toKey(p));
     },
+    readDir(p) {
+      const key = toKey(p);
+      const names = new Set<string>();
+      for (const entry of [...files.keys(), ...dirs]) {
+        if (path.posix.dirname(entry) === key) names.add(path.posix.basename(entry));
+      }
+      return [...names];
+    },
     writeText(p, data) {
       const key = toKey(p);
       files.set(key, encode(data));

@@ -18,7 +18,7 @@ export {
 
 // Process-wide repository, preserving the cross-call package.json caching the
 // library relied on previously. Tests pass their own repository instead.
-const defaultRepo = createPackageJsonRepository();
+export const defaultRepo = createPackageJsonRepository();
 
 export function getPackageInfo(
   packageName: string,

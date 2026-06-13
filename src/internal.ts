@@ -7,12 +7,6 @@ export { logger, setLogLevel } from './lib/utils/logger.js';
 export type { PathToImport } from './lib/domain/utils/mapped-path.contract.js';
 export { RebuildQueue, type TrackResult } from './lib/core/rebuild-queue.js';
 
-export { AbortedError } from './lib/utils/errors.js';
-export {
-  createBuildResultMap,
-  lookupInResultMap,
-  popFromResultMap,
-} from './lib/core/build-result-map.js';
 export { writeImportMap } from './lib/core/write-import-map.js';
 
 export type {

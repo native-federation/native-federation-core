@@ -34,6 +34,13 @@ export const nodeIo: IoPort = {
       return false;
     }
   },
+  readDir(path) {
+    try {
+      return fs.readdirSync(path);
+    } catch {
+      return [];
+    }
+  },
   writeText(path, data) {
     fs.writeFileSync(path, data, 'utf-8');
   },

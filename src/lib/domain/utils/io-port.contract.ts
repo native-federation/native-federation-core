@@ -17,6 +17,8 @@ export interface FileReaderPort {
   isFile(path: string): boolean;
   /** False on ENOENT, never throws. */
   isDirectory(path: string): boolean;
+  /** Immediate child entry names (not full paths). Empty array on ENOENT, never throws. */
+  readDir(path: string): string[];
 }
 
 export interface FileWriterPort {
