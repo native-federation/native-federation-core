@@ -1,4 +1,4 @@
-import { getRawMappedPaths } from '../utils/mapped-paths.js';
+import { getRawMappedPaths } from './mapped-paths.js';
 import { shareAll, findRootTsConfigJson } from './share-utils.js';
 import type {
   ExposeEntry,

@@ -1,13 +1,15 @@
 import * as path from 'path';
-import * as fs from 'fs';
 import { cwd } from 'process';
 import { DEFAULT_SKIP_LIST, isInSkipList, prepareSkipList } from './default-skip-list.js';
 import { type SkipList, type PreparedSkipList } from '../domain/config/skip-list.contract.js';
-import { findDepPackageJson, getVersionMaps, type VersionMap } from '../utils/package-info.js';
+import { sharedPackageJsonRepository, findDepPackageJson, getVersionMaps, type VersionMap } from '../utils/package/package-info.js';
+import type { PackageJsonRepository } from '../domain/utils/package-json.contract.js';
 import { getConfigContext } from './configuration-context.js';
 import { logger } from '../utils/logger.js';
+import { nodeIo } from '../utils/io/node-io-adapter.js';
+import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
 
-import { resolvePackageJsonExportsWildcard } from '../utils/resolve-wildcard-keys.js';
+import { resolvePackageJsonExportsWildcard } from '../utils/package/resolve-wildcard-keys.js';
 import type {
   ExternalConfig,
   IncludeSecondariesOptions,
@@ -20,27 +22,31 @@ import type { KeyValuePair } from '../domain/utils/keyvaluepair.contract.js';
 let inferVersion = false;
 
 export function findRootTsConfigJson(): string {
-  const packageJson = findPackageJson(cwd());
+  return findRootTsConfigJsonCore(nodeIo);
+}
+
+export function findRootTsConfigJsonCore(io: FileReaderPort): string {
+  const packageJson = findPackageJson(io, cwd());
   const projectRoot = path.dirname(packageJson);
   const tsConfigBaseJson = path.join(projectRoot, 'tsconfig.base.json');
   const tsConfigJson = path.join(projectRoot, 'tsconfig.json');
 
-  if (fs.existsSync(tsConfigBaseJson)) {
+  if (io.exists(tsConfigBaseJson)) {
     return tsConfigBaseJson;
-  } else if (fs.existsSync(tsConfigJson)) {
+  } else if (io.exists(tsConfigJson)) {
     return tsConfigJson;
   }
 
   throw new Error('Neither a tsconfig.json nor a tsconfig.base.json was found');
 }
 
-function findPackageJson(folder: string): string {
-  while (!fs.existsSync(path.join(folder, 'package.json')) && path.dirname(folder) !== folder) {
+function findPackageJson(io: FileReaderPort, folder: string): string {
+  while (!io.exists(path.join(folder, 'package.json')) && path.dirname(folder) !== folder) {
     folder = path.dirname(folder);
   }
 
   const filePath = path.join(folder, 'package.json');
-  if (fs.existsSync(filePath)) {
+  if (io.exists(filePath)) {
     return filePath;
   }
 
@@ -49,8 +55,8 @@ function findPackageJson(folder: string): string {
   );
 }
 
-function lookupVersion(key: string, workspaceRoot: string): string {
-  const versionMaps = getVersionMaps(workspaceRoot, workspaceRoot);
+function lookupVersion(key: string, workspaceRoot: string, repo: PackageJsonRepository): string {
+  const versionMaps = getVersionMaps(workspaceRoot, workspaceRoot, repo);
 
   for (const versionMap of versionMaps) {
     const version = lookupVersionInMap(key, versionMap);
@@ -80,20 +86,21 @@ function lookupVersionInMap(key: string, versions: VersionMap): string | null {
 }
 
 function _findSecondaries(
+  io: FileReaderPort,
   libPath: string,
   excludes: string[],
   shareObject: ExternalConfig,
   acc: SharedExternalsConfig,
   preparedSkipList: PreparedSkipList
 ): void {
-  const files = fs.readdirSync(libPath);
+  const files = io.readDir(libPath);
 
   const secondaries = files
     .map(f => path.join(libPath, f))
-    .filter(f => fs.lstatSync(f).isDirectory() && !f.endsWith('node_modules'));
+    .filter(f => io.isDirectory(f) && !f.endsWith('node_modules'));
 
   for (const s of secondaries) {
-    if (fs.existsSync(path.join(s, 'package.json'))) {
+    if (io.exists(path.join(s, 'package.json'))) {
       const secondaryLibName = s.replace(/\\/g, '/').replace(/^.*node_modules[/]/, '');
 
       const inCustomSkipList = excludes.some(
@@ -109,22 +116,24 @@ function _findSecondaries(
       acc[secondaryLibName] = { ...shareObject };
     }
 
-    _findSecondaries(s, excludes, shareObject, acc, preparedSkipList);
+    _findSecondaries(io, s, excludes, shareObject, acc, preparedSkipList);
   }
 }
 
 function findSecondaries(
+  io: FileReaderPort,
   libPath: string,
   excludes: string[],
   shareObject: ExternalConfig,
   preparedSkipList: PreparedSkipList
 ): SharedExternalsConfig {
   const acc = {} as SharedExternalsConfig;
-  _findSecondaries(libPath, excludes, shareObject, acc, preparedSkipList);
+  _findSecondaries(io, libPath, excludes, shareObject, acc, preparedSkipList);
   return acc;
 }
 
-function getSecondaries(
+export function getSecondaries(
+  io: FileReaderPort,
   includeSecondaries: IncludeSecondariesOptions,
   libPath: string,
   key: string,
@@ -145,11 +154,12 @@ function getSecondaries(
 
   // const libPath = path.join(path.dirname(packagePath), 'node_modules', key);
 
-  if (!fs.existsSync(libPath)) {
+  if (!io.exists(libPath)) {
     return {};
   }
 
   const configured = readConfiguredSecondaries(
+    io,
     key,
     libPath,
     exclude,
@@ -162,11 +172,12 @@ function getSecondaries(
   }
 
   // Fallback: Search folders
-  const secondaries = findSecondaries(libPath, exclude, shareObject, preparedSkipList);
+  const secondaries = findSecondaries(io, libPath, exclude, shareObject, preparedSkipList);
   return secondaries;
 }
 
 function readConfiguredSecondaries(
+  io: FileReaderPort,
   parent: string,
   libPath: string,
   exclude: string[],
@@ -176,11 +187,11 @@ function readConfiguredSecondaries(
 ): SharedExternalsConfig | null {
   const libPackageJson = path.join(libPath, 'package.json');
 
-  if (!fs.existsSync(libPackageJson)) {
+  if (!io.exists(libPackageJson)) {
     return null;
   }
 
-  const packageJson = JSON.parse(fs.readFileSync(libPackageJson, 'utf-8'));
+  const packageJson = JSON.parse(io.readText(libPackageJson));
 
   const version = packageJson['version'] as string;
   const esm = packageJson['type'] === 'module';
@@ -332,6 +343,19 @@ export function shareAll(
     overrides?: ShareExternalsOptions;
   } = {}
 ): ShareExternalsOptions | null {
+  return shareAllCore(nodeIo, config, opts);
+}
+
+export function shareAllCore(
+  io: FileReaderPort,
+  config: ShareAllExternalsOptions,
+  opts: {
+    skipList?: SkipList;
+    projectPath?: string;
+    overrides?: ShareExternalsOptions;
+  } = {},
+  repo: PackageJsonRepository = sharedPackageJsonRepository
+): ShareExternalsOptions | null {
   // let workspacePath: string | undefined = undefined;
   const projectPath = inferProjectPath(opts.projectPath);
 
@@ -341,7 +365,7 @@ export function shareAll(
   //   workspacePath = projectPath;
   // }
 
-  const versionMaps = getVersionMaps(projectPath, projectPath);
+  const versionMaps = getVersionMaps(projectPath, projectPath, repo);
   const sharedExternals: ShareExternalsOptions = {};
   const skipList = opts.skipList ?? DEFAULT_SKIP_LIST;
 
@@ -364,8 +388,8 @@ export function shareAll(
   }
 
   return {
-    ...share(sharedExternals, opts.projectPath, skipList),
-    ...(!opts.overrides ? {} : share(opts.overrides, opts.projectPath, skipList)),
+    ...shareCore(io, sharedExternals, opts.projectPath, skipList, repo),
+    ...(!opts.overrides ? {} : shareCore(io, opts.overrides, opts.projectPath, skipList, repo)),
   };
 }
 
@@ -393,8 +417,18 @@ export function share(
   projectPath = '',
   skipList = DEFAULT_SKIP_LIST
 ): ShareExternalsOptions {
+  return shareCore(nodeIo, configuredShareObjects, projectPath, skipList);
+}
+
+export function shareCore(
+  io: FileReaderPort,
+  configuredShareObjects: ShareExternalsOptions,
+  projectPath = '',
+  skipList = DEFAULT_SKIP_LIST,
+  repo: PackageJsonRepository = sharedPackageJsonRepository
+): ShareExternalsOptions {
   projectPath = inferProjectPath(projectPath);
-  const packagePath = findPackageJson(projectPath);
+  const packagePath = findPackageJson(io, projectPath);
 
   const preparedSkipList = prepareSkipList(skipList);
 
@@ -412,7 +446,7 @@ export function share(
       (inferVersion && typeof shareObject.requiredVersion === 'undefined') ||
       shareObject.requiredVersion.length < 1
     ) {
-      const version = lookupVersion(key, projectPath);
+      const version = lookupVersion(key, projectPath, repo);
 
       shareObject.requiredVersion = version;
       shareObject.version = version.replace(/^\D*/, '');
@@ -431,7 +465,7 @@ export function share(
     result[key] = shareObject;
 
     if (includeSecondaries) {
-      const libPackageJson = findDepPackageJson(key, path.dirname(packagePath));
+      const libPackageJson = findDepPackageJson(key, path.dirname(packagePath), repo);
 
       if (!libPackageJson) {
         logger.error('Could not find folder containing dep ' + key);
@@ -441,6 +475,7 @@ export function share(
       const libPath = path.dirname(libPackageJson);
 
       const secondaries = getSecondaries(
+        io,
         includeSecondaries,
         libPath,
         key,

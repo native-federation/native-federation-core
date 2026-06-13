@@ -1,0 +1,13 @@
+/**
+ * Classify a package.json `exports` condition key as ESM (`true`), CJS (`false`),
+ * or ambiguous (`undefined`).
+ */
+export const isESMExport = (e: string): boolean | undefined => {
+  if (e === 'import' || e === 'module-sync') return true;
+  if (e === 'module' || e === 'esm' || /^es20\d{2}$/.test(e)) return true;
+
+  if (e === 'require') return false;
+  if (e === 'cjs' || e === 'commonjs') return false;
+
+  return undefined;
+};

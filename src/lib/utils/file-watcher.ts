@@ -1,13 +1,20 @@
-import { logger } from '@softarc/native-federation/internal';
-import { watch, statSync, type FSWatcher } from 'fs';
 import { join } from 'path';
+import type { WatchHandle, WatchPort, FileReaderPort } from '../domain/utils/io-port.contract.js';
 import type { NfFileWatcher, NfFileWatcherOptions } from '../domain/utils/file-watcher.contract.js';
-
-const toUnix = (p: string) => p.replace(/\\/g, '/');
+import { nodeIo } from './io/node-io-adapter.js';
+import { logger } from './logger.js';
+import { toPosix } from './path-patterns.js';
 
 export function createNfWatcher(options: NfFileWatcherOptions = {}): NfFileWatcher {
+  return createNfWatcherCore(nodeIo, options);
+}
+
+export function createNfWatcherCore(
+  io: WatchPort & FileReaderPort,
+  options: NfFileWatcherOptions = {}
+): NfFileWatcher {
   const { onChange } = options;
-  const watchers = new Map<string, FSWatcher>();
+  const watchers = new Map<string, WatchHandle>();
   const dirtyPaths = new Set<string>();
 
   const notify = (path: string) => {
@@ -21,13 +28,13 @@ export function createNfWatcher(options: NfFileWatcherOptions = {}): NfFileWatch
       for (const p of list) {
         if (watchers.has(p)) continue;
         try {
-          const isDir = statSync(p).isDirectory();
-          const w = isDir
-            ? watch(p, { recursive: true }, (_, filename) => {
-                if (filename) notify(toUnix(join(p, filename)));
+          const isDir = io.isDirectory(p);
+          const handle = isDir
+            ? io.watch(p, { recursive: true }, filename => {
+                if (filename) notify(toPosix(join(p, filename)));
               })
-            : watch(p, () => notify(toUnix(p)));
-          watchers.set(p, w);
+            : io.watch(p, { recursive: false }, () => notify(toPosix(p)));
+          watchers.set(p, handle);
         } catch {
           logger.debug(`Could not watch path '${p}'.`);
         }
@@ -39,8 +46,8 @@ export function createNfWatcher(options: NfFileWatcherOptions = {}): NfFileWatch
     mutate: fn => fn(dirtyPaths),
 
     async close() {
-      for (const w of watchers.values()) {
-        w.close();
+      for (const handle of watchers.values()) {
+        handle.close();
       }
       watchers.clear();
     },

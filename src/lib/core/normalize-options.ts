@@ -4,16 +4,28 @@ import type {
   NormalizedFederationOptions,
 } from '../domain/core/federation-options.contract.js';
 import * as path from 'path';
-import * as fs from 'fs';
 import { pathToFileURL } from 'url';
+import { nodeIo } from '../utils/io/node-io-adapter.js';
+import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
 import { removeUnusedDeps } from '../config/remove-unused-deps.js';
 import { type FederationCache } from '../../domain.js';
-import { createFederationCache } from './federation-cache.js';
-import { getDefaultCachePath } from '../utils/cache-persistence.js';
-import { getUsedDependenciesFactory } from '../utils/get-used-dependencies.js';
+import { createFederationCache } from './cache/federation-cache.js';
+import { getDefaultCachePath } from './cache/cache-persistence.js';
+import { getUsedDependenciesFactory } from '../config/get-used-dependencies.js';
 import { logger } from '../utils/logger.js';
 import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { normalizePackageName } from '../utils/normalize.js';
+
+type ConfigLoader = (fullConfigPath: string) => Promise<NormalizedFederationConfig>;
+
+const defaultConfigLoader: ConfigLoader = async fullConfigPath =>
+  (await import(pathToFileURL(fullConfigPath).href))?.default;
+
+interface NormalizeFederationDeps {
+  io: FileReaderPort;
+  loadConfig: ConfigLoader;
+  usedDependenciesFactory?: typeof getUsedDependenciesFactory;
+}
 
 export function normalizeFederationOptions(
   options: FederationOptions
@@ -32,18 +44,31 @@ export async function normalizeFederationOptions<TBundlerCache = undefined>(
   config: NormalizedFederationConfig;
   options: NormalizedFederationOptions<TBundlerCache>;
 }> {
+  return normalizeFederationOptionsCore(
+    { io: nodeIo, loadConfig: defaultConfigLoader },
+    options,
+    cache
+  );
+}
+
+export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
+  deps: NormalizeFederationDeps,
+  options: FederationOptions,
+  cache?: FederationCache<TBundlerCache>
+): Promise<{
+  config: NormalizedFederationConfig;
+  options: NormalizedFederationOptions<TBundlerCache>;
+}> {
   /**
    * Step 1: normalizing config
    */
   const fullConfigPath = path.join(options.workspaceRoot, options.federationConfig);
-  const getUsedDeps = getUsedDependenciesFactory(options.workspaceRoot, options.entryPoints);
 
-  if (!fs.existsSync(fullConfigPath)) {
+  if (!deps.io.exists(fullConfigPath)) {
     throw new Error('Expected ' + fullConfigPath);
   }
 
-  let config: NormalizedFederationConfig = (await import(pathToFileURL(fullConfigPath).href))
-    ?.default;
+  let config: NormalizedFederationConfig = await deps.loadConfig(fullConfigPath);
 
   /**
    * Step 2: normalizing options
@@ -67,6 +92,10 @@ export async function normalizeFederationOptions<TBundlerCache = undefined>(
    */
 
   if (config.features.ignoreUnusedDeps) {
+    const getUsedDeps = (deps.usedDependenciesFactory ?? getUsedDependenciesFactory)(
+      options.workspaceRoot,
+      options.entryPoints
+    );
     config = removeUnusedDeps(getUsedDeps(config), config);
     logger.info('Removed unused dependencies.');
     logger.debug(

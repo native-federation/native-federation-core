@@ -1,20 +1,22 @@
-import * as crypto from 'crypto';
-import * as fs from 'fs';
-
-export function hashFile(fileName: string): string {
-  const fileBuffer = fs.readFileSync(fileName);
-  const hashSum = crypto.createHash('md5');
-  hashSum.update(fileBuffer);
-  return hashSum.digest('hex');
-}
+import { nodeIo } from './io/node-io-adapter.js';
+import type { FileReaderPort, HashPort } from '../domain/utils/io-port.contract.js';
 
 export type SriAlgorithm = 'sha256' | 'sha384' | 'sha512';
 
-export function integrityForFile(
+type HashDeps = FileReaderPort & HashPort;
+
+export function hashFile(fileName: string): string {
+  return hashFileCore(nodeIo, fileName);
+}
+
+export function hashFileCore(io: HashDeps, fileName: string): string {
+  return io.hash('md5', io.readBytes(fileName)).hex();
+}
+
+export function integrityForFileCore(
+  io: HashDeps,
   fileName: string,
   algorithm: SriAlgorithm = 'sha384'
 ): string {
-  const fileBuffer = fs.readFileSync(fileName);
-  const hash = crypto.createHash(algorithm).update(fileBuffer).digest('base64');
-  return `${algorithm}-${hash}`;
+  return `${algorithm}-${io.hash(algorithm, io.readBytes(fileName)).base64()}`;
 }

@@ -1,0 +1,293 @@
+import type {
+  ChunkInfo,
+  FederationInfo,
+  IntegrityMap,
+  SharedInfo,
+} from '../../domain/core/federation-info.contract.js';
+import {
+  bundleExposedAndMappings,
+  describeExposed,
+  describeSharedMappings,
+} from './bundle-exposed-and-mappings.js';
+import { bundleShared } from './bundle-shared.js';
+import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
+import { writeFederationInfo } from '../output/write-federation-info.js';
+import { writeImportMap } from '../output/write-import-map.js';
+import { logger } from '../../utils/logger.js';
+import { normalizePackageName } from '../../utils/normalize.js';
+import { AbortedError } from '../../utils/errors.js';
+import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
+import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
+import { addExternalsToCache } from '../cache/federation-cache.js';
+import path from 'path';
+
+export async function buildForFederation(
+  config: NormalizedFederationConfig,
+  fedOptions: NormalizedFederationOptions,
+  externals: string[],
+  signal?: AbortSignal
+): Promise<FederationInfo> {
+  // 1. Setup
+  fedOptions.federationCache.cachePath = path.join(
+    fedOptions.federationCache.cachePath,
+    fedOptions.projectName
+  );
+  logger.info('Building federation artifacts');
+  logger.notice("Skip packages you don't want to share in your federation config");
+
+  // 2. Externals
+  if (fedOptions.federationCache.externals.length > 0) {
+    logger.info('Checksum matched, re-using cached externals.');
+  }
+
+  if (fedOptions.federationCache.externals.length === 0) {
+    const { sharedBrowser, sharedServer, separateBrowser, separateServer } = splitShared(
+      config.shared
+    );
+
+    if (Object.keys(sharedBrowser).length > 0) {
+      logger.info(`Bundling external npm packages with bundle type 'browser-shared'`);
+      const start = process.hrtime();
+
+      const sharedPackageInfoBrowser = await bundleShared(
+        sharedBrowser,
+        config,
+        fedOptions,
+        externals,
+        { platform: 'browser', bundleName: 'browser-shared', chunks: config.chunks }
+      );
+
+      logger.measure(start, 'Step 2.1) Bundling all shared browser externals');
+
+      addExternalsToCache(fedOptions.federationCache, sharedPackageInfoBrowser);
+
+      if (signal?.aborted)
+        throw new AbortedError('[buildForFederation] After shared-browser bundle');
+    }
+
+    if (Object.keys(sharedServer).length > 0) {
+      logger.info(`Bundling external npm packages with bundle type 'server-shared'`);
+      const start = process.hrtime();
+
+      const sharedPackageInfoServer = await bundleShared(
+        sharedServer,
+        config,
+        fedOptions,
+        externals,
+        { platform: 'node', bundleName: 'node-shared', chunks: config.chunks }
+      );
+      logger.measure(start, 'Step 2.1) Bundling all shared node externals');
+
+      addExternalsToCache(fedOptions.federationCache, sharedPackageInfoServer);
+
+      if (signal?.aborted) throw new AbortedError('[buildForFederation] After shared-node bundle');
+    }
+
+    if (Object.keys(separateBrowser).length > 0) {
+      logger.info(`Bundling external npm packages with bundle type 'browser-separate'`);
+
+      const start = process.hrtime();
+      const separatePackageInfoBrowser = await bundleSeparatePackages(
+        separateBrowser,
+        externals,
+        config,
+        fedOptions,
+        { platform: 'browser' }
+      );
+      logger.measure(start, 'Step 2.2) Bundling all separate browser external packages');
+      addExternalsToCache(fedOptions.federationCache, separatePackageInfoBrowser);
+      if (signal?.aborted)
+        throw new AbortedError('[buildForFederation] After separate-browser bundle');
+    }
+
+    if (Object.keys(separateServer).length > 0) {
+      logger.info(`Bundling external npm packages with bundle type 'node-separate'`);
+
+      const start = process.hrtime();
+      const separatePackageInfoServer = await bundleSeparatePackages(
+        separateServer,
+        externals,
+        config,
+        fedOptions,
+        { platform: 'node' }
+      );
+
+      logger.measure(start, 'Step 2.2) Bundling all separate node external packages');
+      addExternalsToCache(fedOptions.federationCache, separatePackageInfoServer);
+    }
+
+    if (signal?.aborted) throw new AbortedError('[buildForFederation] After separate-node bundle');
+  }
+
+  // 2. Shared mappings and exposed modules
+  const start = process.hrtime();
+
+  const artifactInfo = await bundleExposedAndMappings(
+    config,
+    fedOptions,
+    externals,
+    undefined,
+    signal
+  );
+  logger.measure(start, 'Step 3) Bundling all internal libraries and exposed modules.');
+
+  if (signal?.aborted)
+    throw new AbortedError('[buildForFederation] After exposed-and-mappings bundle');
+
+  const exposedInfo = !artifactInfo ? describeExposed(config, fedOptions) : artifactInfo.exposes;
+
+  const sharedMappingInfo = !artifactInfo
+    ? describeSharedMappings(config, fedOptions)
+    : artifactInfo.mappings;
+
+  const sharedExternals = [...fedOptions.federationCache.externals, ...sharedMappingInfo];
+
+  if (config?.shareScope) {
+    Object.values(sharedExternals).forEach(external => {
+      if (!external.shareScope) external.shareScope = config.shareScope;
+    });
+  }
+
+  const buildNotificationsEndpoint =
+    fedOptions.buildNotifications?.enable && fedOptions.dev
+      ? fedOptions.buildNotifications?.endpoint
+      : undefined;
+  const federationInfo: FederationInfo = {
+    name: config.name,
+    shared: sharedExternals,
+    exposes: exposedInfo,
+    buildNotificationsEndpoint,
+  };
+  if (fedOptions.federationCache.chunks) {
+    federationInfo.chunks = fedOptions.federationCache.chunks;
+  }
+  if (artifactInfo?.chunks) {
+    federationInfo.chunks = { ...(federationInfo.chunks ?? {}), ...artifactInfo?.chunks };
+  }
+
+  if (config.features.integrityHashes) {
+    federationInfo.integrity = {
+      ...(fedOptions.federationCache.integrity ?? {}),
+      ...(artifactInfo?.integrity ?? {}),
+    };
+  }
+
+  writeFederationInfo(federationInfo, fedOptions);
+  writeImportMap(fedOptions.federationCache, fedOptions, federationInfo.integrity);
+
+  return federationInfo;
+}
+
+type SplitSharedResult = {
+  sharedServer: Record<string, NormalizedExternalConfig>;
+  sharedBrowser: Record<string, NormalizedExternalConfig>;
+  separateBrowser: Record<string, NormalizedExternalConfig>;
+  separateServer: Record<string, NormalizedExternalConfig>;
+};
+
+function inferPackageFromSecondary(secondary: string): string {
+  const parts = secondary.split('/');
+  if (secondary.startsWith('@') && parts.length >= 2) {
+    return parts[0] + '/' + parts[1];
+  }
+  return parts[0]!;
+}
+
+async function bundleSeparatePackages(
+  separateBrowser: Record<string, NormalizedExternalConfig>,
+  externals: string[],
+  config: NormalizedFederationConfig,
+  fedOptions: NormalizedFederationOptions,
+  buildOptions: { platform: 'browser' | 'node' }
+) {
+  const groupedByPackage: Record<
+    string,
+    {
+      entries: Record<string, NormalizedExternalConfig>;
+      chunks: boolean;
+    }
+  > = {};
+
+  for (const [key, shared] of Object.entries(separateBrowser)) {
+    const packageName = shared.build === 'separate' ? key : inferPackageFromSecondary(key);
+    if (!groupedByPackage[packageName]) {
+      groupedByPackage[packageName] = {
+        chunks: shared.chunks,
+        entries: {},
+      };
+    }
+    groupedByPackage[packageName].entries[key] = shared;
+  }
+
+  const bundlePromises = Object.entries(groupedByPackage).map(
+    async ([packageName, packageConfig]) => {
+      return bundleShared(
+        packageConfig.entries,
+        config,
+        fedOptions,
+        externals.filter(e => !e.startsWith(packageName)),
+        {
+          platform: buildOptions.platform,
+          chunks: packageConfig.chunks,
+          bundleName: `${buildOptions.platform}-${normalizePackageName(packageName)}`,
+        }
+      );
+    }
+  );
+
+  const buildResults = await Promise.all(bundlePromises);
+  return buildResults.reduce(
+    (acc, r) => {
+      let chunks = acc.chunks;
+      if (r.chunks) {
+        chunks = { ...(acc.chunks ?? {}), ...r.chunks };
+      }
+      let integrity = acc.integrity;
+      if (r.integrity) {
+        integrity = { ...(acc.integrity ?? {}), ...r.integrity };
+      }
+      return {
+        externals: [...acc.externals, ...r.externals],
+        chunks,
+        integrity,
+      };
+    },
+    { externals: [] } as {
+      externals: SharedInfo[];
+      chunks?: ChunkInfo;
+      integrity?: IntegrityMap;
+    }
+  );
+}
+
+function splitShared(shared: Record<string, NormalizedExternalConfig>): SplitSharedResult {
+  const sharedServer: Record<string, NormalizedExternalConfig> = {};
+  const sharedBrowser: Record<string, NormalizedExternalConfig> = {};
+  const separateBrowser: Record<string, NormalizedExternalConfig> = {};
+  const separateServer: Record<string, NormalizedExternalConfig> = {};
+
+  for (const key in shared) {
+    const obj = shared[key];
+
+    if (obj?.platform === 'node') {
+      if (obj.build === 'default') {
+        sharedServer[key] = obj;
+      } else {
+        separateServer[key] = obj;
+      }
+    } else if (obj?.platform === 'browser') {
+      if (obj.build === 'default') {
+        sharedBrowser[key] = obj;
+      } else {
+        separateBrowser[key] = obj;
+      }
+    }
+  }
+
+  return {
+    sharedBrowser,
+    sharedServer,
+    separateBrowser,
+    separateServer,
+  };
+}
