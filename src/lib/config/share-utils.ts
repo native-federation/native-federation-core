@@ -3,11 +3,11 @@ import * as fs from 'fs';
 import { cwd } from 'process';
 import { DEFAULT_SKIP_LIST, isInSkipList, prepareSkipList } from './default-skip-list.js';
 import { type SkipList, type PreparedSkipList } from '../domain/config/skip-list.contract.js';
-import { findDepPackageJson, getVersionMaps, type VersionMap } from '../utils/package-info.js';
+import { findDepPackageJson, getVersionMaps, type VersionMap } from '../package-resolution/package-info.js';
 import { getConfigContext } from './configuration-context.js';
 import { logger } from '../utils/logger.js';
 
-import { resolvePackageJsonExportsWildcard } from '../utils/resolve-wildcard-keys.js';
+import { resolvePackageJsonExportsWildcard } from '../package-resolution/resolve-wildcard-keys.js';
 import type {
   ExternalConfig,
   IncludeSecondariesOptions,

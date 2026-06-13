@@ -1,10 +1,18 @@
 import * as ts from 'typescript';
-import * as fs from 'fs';
 import * as path from 'path';
+import type { FileReaderPort, FileWriterPort } from '../domain/utils/io-port.contract.js';
+import { nodeIo } from '../utils/io/node-io-adapter.js';
 import { toChunkImport } from '../domain/core/chunk.js';
 
-export function rewriteChunkImports(filePath: string) {
-  const sourceCode = fs.readFileSync(filePath, 'utf-8');
+export function rewriteChunkImports(filePath: string): void {
+  rewriteChunkImportsCore(nodeIo, filePath);
+}
+
+export function rewriteChunkImportsCore(
+  io: FileReaderPort & FileWriterPort,
+  filePath: string
+): void {
+  const sourceCode = io.readText(filePath);
 
   const sourceFile = ts.createSourceFile(
     path.basename(filePath),
@@ -69,7 +77,7 @@ export function rewriteChunkImports(filePath: string) {
 
   const result = printer.printFile(updatedSourceFile as ts.SourceFile);
 
-  fs.writeFileSync(filePath, result, 'utf-8');
+  io.writeText(filePath, result);
 }
 
 export function isSourceFile(fileName: string): boolean {

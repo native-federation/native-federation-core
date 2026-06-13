@@ -1,10 +1,11 @@
 import { getProjectData, type ProjectData } from '@softarc/sheriff-core';
 import { cwd } from 'process';
-import { getPackageInfo } from './package-info.js';
+import { getPackageInfo } from '../package-resolution/package-info.js';
 import { getExternalImports as extractExternalImports } from './get-external-imports.js';
 import { type PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { type UsedDependencies } from '../domain/utils/used-dependencies.contract.js';
 import { type ExposeEntry } from '../domain/config/federation-config.contract.js';
+import { parseWildcard, substituteWildcard, toPosix } from '../utils/path-patterns.js';
 import * as path from 'path';
 
 export function getUsedDependenciesFactory(
@@ -107,11 +108,10 @@ function resolveUsedMappings(
   return usedMappings;
 }
 
-function isSharedMapping(filePath: string, sharedMappings: PathToImport): boolean {
+export function isSharedMapping(filePath: string, sharedMappings: PathToImport): boolean {
   for (const sharedPath of Object.keys(sharedMappings)) {
-    const asteriskIndex = sharedPath.indexOf('*');
-    if (asteriskIndex !== -1) {
-      const prefix = sharedPath.substring(0, asteriskIndex);
+    const { prefix, hasWildcard } = parseWildcard(sharedPath);
+    if (hasWildcard) {
       if (filePath.startsWith(prefix)) return true;
     } else if (filePath.startsWith(sharedPath + path.sep) || filePath === sharedPath) {
       return true;
@@ -120,18 +120,17 @@ function isSharedMapping(filePath: string, sharedMappings: PathToImport): boolea
   return false;
 }
 
-function matchMapping(filePath: string, sharedMappings: PathToImport): string | null {
+export function matchMapping(filePath: string, sharedMappings: PathToImport): string | null {
   for (const [sharedPath, sharedImport] of Object.entries(sharedMappings)) {
-    const asteriskIndex = sharedPath.indexOf('*');
-    if (asteriskIndex !== -1) {
-      const prefix = sharedPath.substring(0, asteriskIndex);
-      const suffix = sharedPath.substring(asteriskIndex + 1);
+    const { prefix, suffix, hasWildcard } = parseWildcard(sharedPath);
+    if (hasWildcard) {
       if (!filePath.startsWith(prefix)) continue;
       if (suffix && !filePath.includes(suffix)) continue;
+      // First-occurrence capture: the path may contain the suffix more than once.
       const captured = suffix
         ? filePath.slice(prefix.length, filePath.indexOf(suffix, prefix.length))
         : filePath.slice(prefix.length);
-      return sharedImport.replace('*', toImportPath(captured));
+      return substituteWildcard(sharedImport, toImportPath(captured));
     } else if (filePath === sharedPath || isIndexOf(filePath, sharedPath)) {
       return sharedImport;
     }
@@ -150,6 +149,6 @@ function isIndexOf(filePath: string, dirPath: string): boolean {
 
 function toImportPath(filePath: string): string {
   const withoutExt = filePath.replace(/\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/, '');
-  const normalized = withoutExt.replace(/\\/g, '/');
+  const normalized = toPosix(withoutExt);
   return normalized.endsWith('/index') ? normalized.slice(0, -6) : normalized;
 }

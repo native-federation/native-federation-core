@@ -1,5 +1,7 @@
+import { toPosix } from './path-patterns.js';
+
 export function normalize(path: string, trailingSlash?: boolean): string {
-  let cand = path.replace(/\\/g, '/');
+  let cand = toPosix(path);
 
   if (typeof trailingSlash === 'undefined') {
     return cand;

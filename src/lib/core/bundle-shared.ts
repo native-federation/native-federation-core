@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
-import { getPackageInfo, type PackageInfo } from '../utils/package-info.js';
+import { getPackageInfo, type PackageInfo } from '../package-resolution/package-info.js';
 import type {
   ChunkInfo,
   IntegrityMap,
@@ -11,9 +11,9 @@ import { type NormalizedFederationOptions } from '../domain/core/federation-opti
 import { logger } from '../utils/logger.js';
 import crypto from 'crypto';
 import { DEFAULT_EXTERNAL_LIST } from './default-external-list.js';
-import { isSourceFile, rewriteChunkImports } from '../utils/rewrite-chunk-imports.js';
+import { isSourceFile, rewriteChunkImports } from './rewrite-chunk-imports.js';
 import { toChunkImport } from '../domain/core/chunk.js';
-import { cacheEntry, getChecksum, getFilename } from '../utils/cache-persistence.js';
+import { cacheEntry, getChecksum, getFilename } from './cache-persistence.js';
 import { fileURLToPath } from 'url';
 import type { NormalizedExternalConfig } from '../domain/config/external-config.contract.js';
 import type { EntryPoint, NFBuildAdapterResult } from '../domain/core/build-adapter.contract.js';

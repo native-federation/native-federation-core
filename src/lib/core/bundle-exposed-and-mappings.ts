@@ -10,13 +10,13 @@ import type {
 } from '../domain/core/federation-info.contract.js';
 import { integrityForFile } from '../utils/hash-file.js';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
-import { createBuildResultMap, popFromResultMap } from '../utils/build-result-map.js';
+import { createBuildResultMap, popFromResultMap } from './build-result-map.js';
 import { logger } from '../utils/logger.js';
 import { normalize } from '../utils/normalize.js';
 import { type NormalizedFederationOptions } from '../domain/core/federation-options.contract.js';
 import { AbortedError } from '../utils/errors.js';
 import type { EntryPoint } from './../domain/core/build-adapter.contract.js';
-import { rewriteChunkImports } from '../utils/rewrite-chunk-imports.js';
+import { rewriteChunkImports } from './rewrite-chunk-imports.js';
 import { getBuildAdapter } from './build-adapter.js';
 
 export async function bundleExposedAndMappings(
