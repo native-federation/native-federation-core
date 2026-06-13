@@ -105,7 +105,7 @@ export async function bundleShared(
 
   const additionalExternals = useDefaultExternalList ? DEFAULT_EXTERNAL_LIST : [];
 
-  let bundleResult: NFBuildAdapterResult[] | null = null;
+  let bundleResult: NFBuildAdapterResult[];
 
   try {
     await getBuildAdapter().setup(buildOptions.bundleName, {
