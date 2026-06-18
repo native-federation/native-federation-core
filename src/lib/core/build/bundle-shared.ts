@@ -12,7 +12,7 @@ import { type NormalizedFederationOptions } from '../../domain/core/federation-o
 import { logger } from '../../utils/logger.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import { DEFAULT_EXTERNAL_LIST } from './default-external-list.js';
-import { isSourceFile, rewriteChunkImportsCore } from './rewrite-chunk-imports.js';
+import { isSourceFile, transformChunkImports } from './rewrite-chunk-imports.js';
 import { toChunkImport } from '../../domain/core/chunk.js';
 import { cacheEntryCore, getChecksumCore, getFilename } from '../cache/cache-persistence.js';
 import { computeIntegrityMapCore } from './compute-integrity.js';
@@ -128,7 +128,6 @@ export async function bundleSharedCore(
 
   const fullOutputPath = path.join(fedOptions.workspaceRoot, fedOptions.outputPath);
 
-  const expectedResults = allEntryPoints.map(ep => path.join(fullOutputPath, ep.outName));
   const entryPoints = allEntryPoints.filter(
     ep => !deps.io.exists(path.join(fedOptions.federationCache.cachePath, ep.outName))
   );
@@ -163,7 +162,18 @@ export async function bundleSharedCore(
     await deps.adapter.dispose(buildOptions.bundleName);
 
     const cachedFiles = bundleResult.map(br => path.basename(br.fileName));
-    rewriteImports(deps.io, cachedFiles, fedOptions.federationCache.cachePath);
+    // Re-key entry files (version-based names) to a hash of their final content, so a
+    // changed bundle always gets a new name and never reuses a stale cached one.
+    const hashEntries = fedOptions.dev
+      ? new Set<string>()
+      : new Set(allEntryPoints.map(ep => ep.outName));
+    const renamed = rewriteImports(
+      deps.io,
+      cachedFiles,
+      fedOptions.federationCache.cachePath,
+      hashEntries
+    );
+    applyRenames(bundleResult, allEntryPoints, renamed);
   } catch (e) {
     logger.error('Error bundling shared npm package ');
     if (e instanceof Error) {
@@ -192,7 +202,7 @@ export async function bundleSharedCore(
     throw e;
   }
 
-  const outFileNames = [...expectedResults];
+  const outFileNames = allEntryPoints.map(ep => path.join(fullOutputPath, ep.outName));
 
   const result = buildResult(packageInfos, sharedBundles, outFileNames);
 
@@ -237,12 +247,46 @@ export async function bundleSharedCore(
   return { externals: result, chunks: exportedChunks, integrity };
 }
 
-function rewriteImports(io: IoPort, cachedFiles: string[], cachePath: string) {
-  const newSourceFiles = cachedFiles.filter(cf => isSourceFile(cf));
+function rewriteImports(
+  io: IoPort,
+  cachedFiles: string[],
+  cachePath: string,
+  hashEntries: Set<string>
+): Map<string, string> {
+  const renamed = new Map<string, string>();
 
-  for (const sourceFile of newSourceFiles) {
-    const sourceFilePath = path.join(cachePath, sourceFile);
-    rewriteChunkImportsCore(io, sourceFilePath);
+  for (const file of cachedFiles.filter(isSourceFile)) {
+    const filePath = path.join(cachePath, file);
+    const rewritten = transformChunkImports(io.readText(filePath), file);
+
+    if (hashEntries.has(file)) {
+      const hashedName = `${file.split('.')[0]}.${calcHashCore(io, rewritten)}.js`;
+      io.writeText(path.join(cachePath, hashedName), rewritten);
+      io.remove(filePath);
+      renamed.set(file, hashedName);
+    } else {
+      io.writeText(filePath, rewritten);
+    }
+  }
+
+  return renamed;
+}
+
+function applyRenames(
+  bundleResult: NFBuildAdapterResult[],
+  allEntryPoints: EntryPoint[],
+  renamed: Map<string, string>
+): void {
+  if (renamed.size === 0) return;
+
+  for (const br of bundleResult) {
+    const next = renamed.get(path.basename(br.fileName));
+    if (next) br.fileName = path.join(path.dirname(br.fileName), next);
+  }
+
+  for (const ep of allEntryPoints) {
+    const next = renamed.get(ep.outName);
+    if (next) ep.outName = next;
   }
 }
 
