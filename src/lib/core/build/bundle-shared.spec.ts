@@ -7,6 +7,8 @@ import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
 import { createFakeBuildAdapter } from './__test-helpers__/fake-build-adapter.js';
 import { prepareSkipList } from '../../config/default-skip-list.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
+import type { IoPort } from '../../domain/utils/io-port.contract.js';
+import type { NFBuildAdapter } from '../../domain/core/build-adapter.contract.js';
 import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
@@ -164,5 +166,57 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
 
     expect(result.externals).toHaveLength(1);
     expect(result.externals[0]).toMatchObject({ packageName: 'foo', version: '2.0.0' });
+  });
+
+  it('names a shared entry by its content, so the name changes when the bundle changes', async () => {
+    const sharedBundles: Record<string, NormalizedExternalConfig> = {
+      foo: {
+        singleton: true,
+        strictVersion: false,
+        requiredVersion: '^1.0.0',
+        version: '1.0.0',
+        chunks: false,
+        platform: 'browser',
+        build: 'default',
+        packageInfo: { entryPoint: 'foo/index.js', version: '1.0.0', esm: true },
+      },
+    };
+
+    // Adapter that writes a given body as the entry's bundled content.
+    const writingAdapter = (io: IoPort, body: string): NFBuildAdapter => {
+      let outdir = '';
+      let outName = '';
+      return {
+        async setup(_name, opts) {
+          outdir = opts.outdir;
+          outName = opts.entryPoints[0]!.outName;
+        },
+        async build() {
+          io.writeText(path.join(outdir, outName), body);
+          return [{ fileName: path.join(outdir, outName) }];
+        },
+        async dispose() {},
+      };
+    };
+
+    const build = async (body: string) => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const result = await bundleSharedCore(
+        { io: mem, repo: emptyRepo, adapter: writingAdapter(mem, body) },
+        sharedBundles,
+        makeConfig(),
+        makeFedOptions(),
+        [],
+        BUILD_OPTIONS
+      );
+      return result.externals[0]!.outFileName;
+    };
+
+    const a = await build('export const x = 1;\n');
+    const b = await build('export const x = 2;\n');
+
+    expect(a).toMatch(/^foo\..{10}\.js$/);
+    expect(a).toBe(await build('export const x = 1;\n')); // stable for identical content
+    expect(a).not.toBe(b); // changes when content changes
   });
 });

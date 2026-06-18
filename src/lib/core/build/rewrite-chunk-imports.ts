@@ -12,10 +12,12 @@ export function rewriteChunkImportsCore(
   io: FileReaderPort & FileWriterPort,
   filePath: string
 ): void {
-  const sourceCode = io.readText(filePath);
+  io.writeText(filePath, transformChunkImports(io.readText(filePath), path.basename(filePath)));
+}
 
+export function transformChunkImports(sourceCode: string, fileName: string): string {
   const sourceFile = ts.createSourceFile(
-    path.basename(filePath),
+    fileName,
     sourceCode,
     ts.ScriptTarget.ESNext,
     true,
@@ -75,9 +77,7 @@ export function rewriteChunkImportsCore(
   const transformed = ts.transform(sourceFile, [_ => node => ts.visitNode(node as any, visit)]);
   const updatedSourceFile = transformed.transformed[0];
 
-  const result = printer.printFile(updatedSourceFile as ts.SourceFile);
-
-  io.writeText(filePath, result);
+  return printer.printFile(updatedSourceFile as ts.SourceFile);
 }
 
 export function isSourceFile(fileName: string): boolean {
