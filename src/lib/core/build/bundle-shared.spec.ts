@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import * as crypto from 'crypto';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { bundleSharedCore, calcHashCore } from './bundle-shared.js';
+import {
+  bundleSharedCore,
+  calcHashCore,
+  parseBuilderVersion,
+  readBuilderPackageJson,
+} from './bundle-shared.js';
 import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
 import { createFakeBuildAdapter } from './__test-helpers__/fake-build-adapter.js';
 import { prepareSkipList } from '../../config/default-skip-list.js';
@@ -45,8 +50,64 @@ describe('calcHashCore', () => {
   });
 });
 
-// bundle-shared reads the lib's own package.json (../../../package.json relative
-// to the module) for the cache config-state; this spec sits in the same folder.
+describe('readBuilderPackageJson', () => {
+  it('walks up to the nearest package.json regardless of file depth', () => {
+    const mem = createMemoryIo().setFile('/pkg/package.json', '{"version":"9.9.9"}');
+    expect(readBuilderPackageJson(mem, '/pkg/dist/lib/core/build/bundle-shared.js')).toBe(
+      '{"version":"9.9.9"}'
+    );
+  });
+
+  it('returns the closest package.json when several exist on the path', () => {
+    const mem = createMemoryIo()
+      .setFile('/pkg/package.json', '{"version":"1.0.0"}')
+      .setFile('/pkg/dist/package.json', '{"version":"2.0.0"}');
+    expect(readBuilderPackageJson(mem, '/pkg/dist/lib/x.js')).toBe('{"version":"2.0.0"}');
+  });
+
+  it('falls back to "{}" when no package.json is found', () => {
+    const mem = createMemoryIo();
+    expect(readBuilderPackageJson(mem, '/nowhere/lib/x.js')).toBe('{}');
+  });
+
+  it('finds the builder package.json when installed under node_modules', () => {
+    const mem = createMemoryIo().setFile(
+      '/app/node_modules/@softarc/native-federation/package.json',
+      '{"version":"4.1.3"}'
+    );
+    expect(
+      readBuilderPackageJson(
+        mem,
+        '/app/node_modules/@softarc/native-federation/dist/lib/core/build/bundle-shared.js'
+      )
+    ).toBe('{"version":"4.1.3"}');
+  });
+
+  it('does not ascend past node_modules into an unrelated package.json', () => {
+    const mem = createMemoryIo().setFile('/app/package.json', '{"version":"7.7.7"}');
+    expect(
+      readBuilderPackageJson(mem, '/app/node_modules/@softarc/native-federation/dist/lib/x.js')
+    ).toBe('{}');
+  });
+});
+
+describe('parseBuilderVersion', () => {
+  it('extracts the version field', () => {
+    expect(parseBuilderVersion('{"version":"4.1.3"}')).toBe('4.1.3');
+  });
+
+  it('returns "" when version is absent', () => {
+    expect(parseBuilderVersion('{}')).toBe('');
+  });
+
+  it('returns "" on invalid JSON instead of throwing', () => {
+    expect(parseBuilderVersion('')).toBe('');
+    expect(parseBuilderVersion('not json')).toBe('');
+  });
+});
+
+// bundleSharedCore walks up to the nearest package.json; this spec shares its folder, so the
+// walk-up resolves the ROOT_PKG seeded below.
 const ROOT_PKG = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../../package.json');
 
 const BUILD_OPTIONS = { platform: 'browser' as const, bundleName: 'shared', chunks: false };
