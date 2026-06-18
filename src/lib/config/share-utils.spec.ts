@@ -59,6 +59,39 @@ describe('getSecondaries', () => {
     expect(result!['mylib/sub']).toMatchObject({ singleton: true });
   });
 
+  it('resolves a glob whose pattern has no JS extension and filters non-JS files', () => {
+    const io = createMemoryIo()
+      .setFile(
+        path.join(LIB, 'package.json'),
+        JSON.stringify({
+          version: '1.2.3',
+          type: 'module',
+          exports: {
+            '.': './index.js',
+            './components/*': './components/*',
+          },
+        })
+      )
+      .setFile(path.join(LIB, 'components', 'button.js'), '')
+      .setFile(path.join(LIB, 'components', 'icon.mjs'), '')
+      .setFile(path.join(LIB, 'components', 'styles.css'), '')
+      .setFile(path.join(LIB, 'components', 'logo.svg'), '');
+
+    const result = getSecondaries(
+      io,
+      { skip: [], resolveGlob: true },
+      LIB,
+      'mylib',
+      shareObject,
+      EMPTY_SKIP
+    );
+
+    expect(Object.keys(result!).sort()).toEqual([
+      'mylib/components/button.js',
+      'mylib/components/icon.mjs',
+    ]);
+  });
+
   it('falls back to walking subfolders (readDir) when there is no exports map', () => {
     const io = createMemoryIo()
       .setFile(path.join(LIB, 'sub', 'package.json'), '{}')
