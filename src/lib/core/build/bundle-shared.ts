@@ -1,6 +1,10 @@
 import * as path from 'path';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
-import { sharedPackageJsonRepository, getPackageInfo, type PackageInfo } from '../../utils/package/package-info.js';
+import {
+  sharedPackageJsonRepository,
+  getPackageInfo,
+  type PackageInfo,
+} from '../../utils/package/package-info.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
 import type {
   ChunkInfo,
@@ -64,7 +68,16 @@ export async function bundleSharedCore(
   chunks?: Record<string, string[]>;
   integrity?: IntegrityMap;
 }> {
-  const checksum = getChecksumCore(deps.io, sharedBundles, fedOptions.dev ? '1' : '0');
+  // Walk up to the nearest package.json: the file's depth differs across src/dist/test layouts.
+  const builderPackageJson = readBuilderPackageJson(deps.io, fileURLToPath(import.meta.url));
+  const builderVersion = parseBuilderVersion(builderPackageJson);
+
+  const checksum = getChecksumCore(
+    deps.io,
+    sharedBundles,
+    fedOptions.dev ? '1' : '0',
+    builderVersion
+  );
 
   const folder = fedOptions.packageJson
     ? path.dirname(fedOptions.packageJson)
@@ -79,7 +92,7 @@ export async function bundleSharedCore(
   if (fedOptions?.cacheExternalArtifacts) {
     const cacheMetadata = bundleCache.getMetadata(checksum);
     if (cacheMetadata) {
-      logger.debug(`Checksum of ${buildOptions.bundleName} matched, Skipped artifact bundling`);
+      logger.info(`Checksum of ${buildOptions.bundleName} matched, re-using cached externals.`);
       bundleCache.copyFiles(path.join(fedOptions.workspaceRoot, fedOptions.outputPath));
       let integrity = cacheMetadata.integrity;
       if (config.features.integrityHashes && !integrity) {
@@ -113,24 +126,15 @@ export async function bundleSharedCore(
 
   const packageInfos = [...inferredPackageInfos, ...configuredPackageInfos];
 
-  const __filename = fileURLToPath(import.meta.url);
+  const configState = `BUNDLER_CHUNKS;${builderVersion};${JSON.stringify(config)}`;
 
-  const configState =
-    'BUNDLER_CHUNKS' + // TODO: Replace this with lib version
-    deps.io.readText(path.join(path.dirname(__filename), '../../../package.json')) +
-    JSON.stringify(config);
-
-  const allEntryPoints: EntryPoint[] = packageInfos.map(pi => {
+  const entryPoints: EntryPoint[] = packageInfos.map(pi => {
     const encName = pi.packageName.replace(/[^A-Za-z0-9]/g, '_');
     const outName = createOutName(deps.io, pi, configState, fedOptions, encName);
     return { fileName: pi.entryPoint, outName };
   });
 
   const fullOutputPath = path.join(fedOptions.workspaceRoot, fedOptions.outputPath);
-
-  const entryPoints = allEntryPoints.filter(
-    ep => !deps.io.exists(path.join(fedOptions.federationCache.cachePath, ep.outName))
-  );
 
   // If we build for the browser and don't remote unused deps from the shared config,
   // we need to exclude typical node libs to avoid compilation issues
@@ -166,14 +170,14 @@ export async function bundleSharedCore(
     // changed bundle always gets a new name and never reuses a stale cached one.
     const hashEntries = fedOptions.dev
       ? new Set<string>()
-      : new Set(allEntryPoints.map(ep => ep.outName));
+      : new Set(entryPoints.map(ep => ep.outName));
     const renamed = rewriteImports(
       deps.io,
       cachedFiles,
       fedOptions.federationCache.cachePath,
       hashEntries
     );
-    applyRenames(bundleResult, allEntryPoints, renamed);
+    applyRenames(bundleResult, entryPoints, renamed);
   } catch (e) {
     logger.error('Error bundling shared npm package ');
     if (e instanceof Error) {
@@ -202,7 +206,7 @@ export async function bundleSharedCore(
     throw e;
   }
 
-  const outFileNames = allEntryPoints.map(ep => path.join(fullOutputPath, ep.outName));
+  const outFileNames = entryPoints.map(ep => path.join(fullOutputPath, ep.outName));
 
   const result = buildResult(packageInfos, sharedBundles, outFileNames);
 
@@ -262,6 +266,7 @@ function rewriteImports(
     if (hashEntries.has(file)) {
       const hashedName = `${file.split('.')[0]}.${calcHashCore(io, rewritten)}.js`;
       io.writeText(path.join(cachePath, hashedName), rewritten);
+      // Cache hygiene: drop the version-named intermediate (untracked by metadata, so clear() can't reap it).
       io.remove(filePath);
       renamed.set(file, hashedName);
     } else {
@@ -274,7 +279,7 @@ function rewriteImports(
 
 function applyRenames(
   bundleResult: NFBuildAdapterResult[],
-  allEntryPoints: EntryPoint[],
+  entryPoints: EntryPoint[],
   renamed: Map<string, string>
 ): void {
   if (renamed.size === 0) return;
@@ -284,7 +289,7 @@ function applyRenames(
     if (next) br.fileName = path.join(path.dirname(br.fileName), next);
   }
 
-  for (const ep of allEntryPoints) {
+  for (const ep of entryPoints) {
     const next = renamed.get(ep.outName);
     if (next) ep.outName = next;
   }
@@ -357,6 +362,27 @@ function addChunksToResult(chunks: NFBuildAdapterResult[], result: SharedInfo[])
       //       entryPoint: normalize(fileName),
       //     },
     });
+  }
+}
+
+export function readBuilderPackageJson(io: IoPort, fromFile: string): string {
+  let dir = path.dirname(fromFile);
+  for (;;) {
+    const candidate = path.join(dir, 'package.json');
+    if (io.exists(candidate)) return io.readText(candidate);
+    const parent = path.dirname(dir);
+    // Stop at the package boundary: terminate at the filesystem root, and never ascend past a
+    // node_modules dir into an unrelated (consumer / monorepo-root) package.json.
+    if (parent === dir || path.basename(parent) === 'node_modules') return '{}';
+    dir = parent;
+  }
+}
+
+export function parseBuilderVersion(packageJson: string): string {
+  try {
+    return JSON.parse(packageJson).version ?? '';
+  } catch {
+    return '';
   }
 }
 

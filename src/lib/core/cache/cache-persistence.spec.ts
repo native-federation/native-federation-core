@@ -44,12 +44,19 @@ describe('getChecksumCore', () => {
     );
   });
 
+  it('changes when the builder version changes', () => {
+    const base = { react: ext('18') };
+    expect(getChecksumCore(io, base, '0', '1.0.0')).not.toBe(
+      getChecksumCore(io, base, '0', '1.0.1')
+    );
+  });
+
   it('matches a hand-computed sha256', () => {
     const expected = crypto
       .createHash('sha256')
-      .update('deps:react@18:dev=0')
+      .update('deps:react@18:dev=0:builder=2.0.0')
       .digest('hex');
-    expect(getChecksumCore(io, { react: ext('18') }, '0')).toBe(expected);
+    expect(getChecksumCore(io, { react: ext('18') }, '0', '2.0.0')).toBe(expected);
   });
 });
 

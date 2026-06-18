@@ -36,88 +36,81 @@ export async function buildForFederation(
   logger.notice("Skip packages you don't want to share in your federation config");
 
   // 2. Externals
-  if (fedOptions.federationCache.externals.length > 0) {
-    logger.info('Checksum matched, re-using cached externals.');
-  }
+  const { sharedBrowser, sharedServer, separateBrowser, separateServer } = splitShared(
+    config.shared
+  );
 
-  if (fedOptions.federationCache.externals.length === 0) {
-    const { sharedBrowser, sharedServer, separateBrowser, separateServer } = splitShared(
-      config.shared
+  if (Object.keys(sharedBrowser).length > 0) {
+    logger.info(`Bundling external npm packages with bundle type 'browser-shared'`);
+    const start = process.hrtime();
+
+    const sharedPackageInfoBrowser = await bundleShared(
+      sharedBrowser,
+      config,
+      fedOptions,
+      externals,
+      { platform: 'browser', bundleName: 'browser-shared', chunks: config.chunks }
     );
 
-    if (Object.keys(sharedBrowser).length > 0) {
-      logger.info(`Bundling external npm packages with bundle type 'browser-shared'`);
-      const start = process.hrtime();
+    logger.measure(start, 'Step 2.1) Bundling all shared browser externals');
 
-      const sharedPackageInfoBrowser = await bundleShared(
-        sharedBrowser,
-        config,
-        fedOptions,
-        externals,
-        { platform: 'browser', bundleName: 'browser-shared', chunks: config.chunks }
-      );
+    addExternalsToCache(fedOptions.federationCache, sharedPackageInfoBrowser);
 
-      logger.measure(start, 'Step 2.1) Bundling all shared browser externals');
-
-      addExternalsToCache(fedOptions.federationCache, sharedPackageInfoBrowser);
-
-      if (signal?.aborted)
-        throw new AbortedError('[buildForFederation] After shared-browser bundle');
-    }
-
-    if (Object.keys(sharedServer).length > 0) {
-      logger.info(`Bundling external npm packages with bundle type 'server-shared'`);
-      const start = process.hrtime();
-
-      const sharedPackageInfoServer = await bundleShared(
-        sharedServer,
-        config,
-        fedOptions,
-        externals,
-        { platform: 'node', bundleName: 'node-shared', chunks: config.chunks }
-      );
-      logger.measure(start, 'Step 2.1) Bundling all shared node externals');
-
-      addExternalsToCache(fedOptions.federationCache, sharedPackageInfoServer);
-
-      if (signal?.aborted) throw new AbortedError('[buildForFederation] After shared-node bundle');
-    }
-
-    if (Object.keys(separateBrowser).length > 0) {
-      logger.info(`Bundling external npm packages with bundle type 'browser-separate'`);
-
-      const start = process.hrtime();
-      const separatePackageInfoBrowser = await bundleSeparatePackages(
-        separateBrowser,
-        externals,
-        config,
-        fedOptions,
-        { platform: 'browser' }
-      );
-      logger.measure(start, 'Step 2.2) Bundling all separate browser external packages');
-      addExternalsToCache(fedOptions.federationCache, separatePackageInfoBrowser);
-      if (signal?.aborted)
-        throw new AbortedError('[buildForFederation] After separate-browser bundle');
-    }
-
-    if (Object.keys(separateServer).length > 0) {
-      logger.info(`Bundling external npm packages with bundle type 'node-separate'`);
-
-      const start = process.hrtime();
-      const separatePackageInfoServer = await bundleSeparatePackages(
-        separateServer,
-        externals,
-        config,
-        fedOptions,
-        { platform: 'node' }
-      );
-
-      logger.measure(start, 'Step 2.2) Bundling all separate node external packages');
-      addExternalsToCache(fedOptions.federationCache, separatePackageInfoServer);
-    }
-
-    if (signal?.aborted) throw new AbortedError('[buildForFederation] After separate-node bundle');
+    if (signal?.aborted) throw new AbortedError('[buildForFederation] After shared-browser bundle');
   }
+
+  if (Object.keys(sharedServer).length > 0) {
+    logger.info(`Bundling external npm packages with bundle type 'server-shared'`);
+    const start = process.hrtime();
+
+    const sharedPackageInfoServer = await bundleShared(
+      sharedServer,
+      config,
+      fedOptions,
+      externals,
+      { platform: 'node', bundleName: 'node-shared', chunks: config.chunks }
+    );
+    logger.measure(start, 'Step 2.1) Bundling all shared node externals');
+
+    addExternalsToCache(fedOptions.federationCache, sharedPackageInfoServer);
+
+    if (signal?.aborted) throw new AbortedError('[buildForFederation] After shared-node bundle');
+  }
+
+  if (Object.keys(separateBrowser).length > 0) {
+    logger.info(`Bundling external npm packages with bundle type 'browser-separate'`);
+
+    const start = process.hrtime();
+    const separatePackageInfoBrowser = await bundleSeparatePackages(
+      separateBrowser,
+      externals,
+      config,
+      fedOptions,
+      { platform: 'browser' }
+    );
+    logger.measure(start, 'Step 2.2) Bundling all separate browser external packages');
+    addExternalsToCache(fedOptions.federationCache, separatePackageInfoBrowser);
+    if (signal?.aborted)
+      throw new AbortedError('[buildForFederation] After separate-browser bundle');
+  }
+
+  if (Object.keys(separateServer).length > 0) {
+    logger.info(`Bundling external npm packages with bundle type 'node-separate'`);
+
+    const start = process.hrtime();
+    const separatePackageInfoServer = await bundleSeparatePackages(
+      separateServer,
+      externals,
+      config,
+      fedOptions,
+      { platform: 'node' }
+    );
+
+    logger.measure(start, 'Step 2.2) Bundling all separate node external packages');
+    addExternalsToCache(fedOptions.federationCache, separatePackageInfoServer);
+  }
+
+  if (signal?.aborted) throw new AbortedError('[buildForFederation] After separate-node bundle');
 
   // 2. Shared mappings and exposed modules
   const start = process.hrtime();
