@@ -12,9 +12,9 @@ import type { PackageJsonRepository } from '../domain/utils/package-json.contrac
 import { getConfigContext } from './configuration-context.js';
 import { logger } from '../utils/logger.js';
 import { nodeIo } from '../utils/io/node-io-adapter.js';
-import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
+import type { FileReaderPort, GlobPort } from '../domain/utils/io-port.contract.js';
 
-import { resolvePackageJsonExportsWildcard } from '../utils/package/resolve-wildcard-keys.js';
+import { resolvePackageJsonExportsWildcardCore } from '../utils/package/resolve-wildcard-keys.js';
 import type {
   ExternalConfig,
   IncludeSecondariesOptions,
@@ -138,7 +138,7 @@ function findSecondaries(
 }
 
 export function getSecondaries(
-  io: FileReaderPort,
+  io: FileReaderPort & GlobPort,
   includeSecondaries: IncludeSecondariesOptions,
   libPath: string,
   key: string,
@@ -185,7 +185,7 @@ export function getSecondaries(
 }
 
 function readConfiguredSecondaries(
-  io: FileReaderPort,
+  io: FileReaderPort & GlobPort,
   parent: string,
   libPath: string,
   exclude: string[],
@@ -240,11 +240,12 @@ function readConfiguredSecondaries(
       continue;
     }
 
-    if (!entry?.endsWith('.js') && !entry?.endsWith('.mjs') && !entry?.endsWith('.cjs')) {
+    if (!key.includes('*') && !isJsFile(entry)) {
       continue;
     }
 
     const items = resolveGlobSecondaries(
+      io,
       key,
       libPath,
       parent,
@@ -277,6 +278,7 @@ function readConfiguredSecondaries(
 }
 
 function resolveGlobSecondaries(
+  io: GlobPort,
   key: string,
   libPath: string,
   parent: string,
@@ -288,13 +290,16 @@ function resolveGlobSecondaries(
   let items: Array<string | KeyValuePair> = [];
   if (key.includes('*')) {
     if (!resolveGlob) return items;
-    const expanded = resolvePackageJsonExportsWildcard(key, entry, libPath);
+    const expanded = resolvePackageJsonExportsWildcardCore(io, key, entry, libPath);
     items = expanded
       .map(e => ({
         key: path.join(parent, e.key),
         value: path.join(libPath, e.value),
       }))
       .filter(i => {
+        if (!isJsFile(i.value)) {
+          return false;
+        }
         if (
           excludes.skip.some(e =>
             e.endsWith('*') ? i.key.startsWith(e.slice(0, -1)) : e === i.key
@@ -311,6 +316,10 @@ function resolveGlobSecondaries(
     items = [secondaryName];
   }
   return items;
+}
+
+function isJsFile(file: string): boolean {
+  return file.endsWith('.js') || file.endsWith('.mjs') || file.endsWith('.cjs');
 }
 
 function getDefaultEntry(exports: Record<string, Record<string, string>>, key: string) {
@@ -355,7 +364,7 @@ export function shareAll(
 }
 
 export function shareAllCore(
-  io: FileReaderPort,
+  io: FileReaderPort & GlobPort,
   config: ShareAllExternalsOptions,
   opts: {
     skipList?: SkipList;
@@ -429,7 +438,7 @@ export function share(
 }
 
 export function shareCore(
-  io: FileReaderPort,
+  io: FileReaderPort & GlobPort,
   configuredShareObjects: ShareExternalsOptions,
   projectPath = '',
   skipList = DEFAULT_SKIP_LIST,
