@@ -2,7 +2,12 @@ import * as path from 'path';
 import { cwd } from 'process';
 import { DEFAULT_SKIP_LIST, isInSkipList, prepareSkipList } from './default-skip-list.js';
 import { type SkipList, type PreparedSkipList } from '../domain/config/skip-list.contract.js';
-import { sharedPackageJsonRepository, findDepPackageJson, getVersionMaps, type VersionMap } from '../utils/package/package-info.js';
+import {
+  sharedPackageJsonRepository,
+  findDepPackageJson,
+  getVersionMaps,
+  type VersionMap,
+} from '../utils/package/package-info.js';
 import type { PackageJsonRepository } from '../domain/utils/package-json.contract.js';
 import { getConfigContext } from './configuration-context.js';
 import { logger } from '../utils/logger.js';
@@ -144,11 +149,14 @@ export function getSecondaries(
 
   let resolveGlob = false;
   if (typeof includeSecondaries === 'object') {
-    if (Array.isArray(includeSecondaries.skip)) {
-      exclude = includeSecondaries.skip;
-    } else if (typeof includeSecondaries.skip === 'string') {
-      exclude = [includeSecondaries.skip];
+    if (includeSecondaries.skip) {
+      if (Array.isArray(includeSecondaries.skip)) {
+        exclude = includeSecondaries.skip;
+      } else if (typeof includeSecondaries.skip === 'string') {
+        exclude = [includeSecondaries.skip];
+      }
     }
+
     resolveGlob = !!includeSecondaries.resolveGlob;
   }
 
@@ -444,7 +452,7 @@ export function shareCore(
     if (
       shareObject.requiredVersion === 'auto' ||
       (inferVersion && typeof shareObject.requiredVersion === 'undefined') ||
-      shareObject.requiredVersion.length < 1
+      shareObject.requiredVersion?.length < 1
     ) {
       const version = lookupVersion(key, projectPath, repo);
 

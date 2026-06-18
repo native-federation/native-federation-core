@@ -33,14 +33,14 @@ export interface NormalizedExternalConfig {
 }
 
 export type IncludeSecondariesOptions =
-  | { skip: string | string[]; resolveGlob?: boolean; keepAll?: boolean }
+  | { skip?: string | string[]; resolveGlob?: boolean; keepAll?: boolean }
   | boolean;
 
 export type SharedExternalsConfig = Record<string, ExternalConfig>;
 
 export type NormalizedSharedExternalsConfig = Record<string, NormalizedExternalConfig>;
 
-export type ShareAllExternalsOptions = ExternalConfig & {
+export type ShareAllExternalsOptions = Omit<ExternalConfig, 'includeSecondaries'> & {
   includeSecondaries?: IncludeSecondariesOptions;
 };
 
