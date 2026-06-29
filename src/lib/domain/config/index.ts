@@ -1,6 +1,8 @@
 export type {
   ExternalConfig,
   IncludeSecondariesOptions,
+  ResolvedExternalConfig,
+  ResolvedSharedExternalsConfig,
   SharedExternalsConfig,
   ShareAllExternalsOptions,
   ShareExternalsOptions,

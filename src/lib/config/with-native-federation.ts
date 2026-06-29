@@ -85,7 +85,10 @@ function normalizeShared(
       strictVersion: sharedConfig.strictVersion ?? false,
       version: sharedConfig.version,
       chunks: sharedConfig.chunks ?? chunks,
-      includeSecondaries: sharedConfig.includeSecondaries,
+      includeSecondaries:
+        typeof sharedConfig.includeSecondaries === 'object'
+          ? !!sharedConfig.includeSecondaries.keepAll
+          : sharedConfig.includeSecondaries,
       packageInfo: sharedConfig.packageInfo as NormalizedExternalConfig['packageInfo'],
       platform: sharedConfig.platform ?? config.platform ?? 'browser',
       build: sharedConfig.build ?? 'default',
