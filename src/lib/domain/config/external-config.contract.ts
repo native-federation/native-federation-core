@@ -1,9 +1,13 @@
+export type IncludeSecondariesOptions =
+  | { skip?: string | string[]; resolveGlob?: boolean; keepAll?: boolean }
+  | boolean;
+
 export interface ExternalConfig {
   singleton?: boolean;
   strictVersion?: boolean;
   requiredVersion?: string;
   version?: string;
-  includeSecondaries?: boolean;
+  includeSecondaries?: IncludeSecondariesOptions;
   platform?: 'browser' | 'node';
   build?: 'separate' | 'package';
   chunks?: boolean;
@@ -32,16 +36,16 @@ export interface NormalizedExternalConfig {
   };
 }
 
-export type IncludeSecondariesOptions =
-  | { skip?: string | string[]; resolveGlob?: boolean; keepAll?: boolean }
-  | boolean;
-
 export type SharedExternalsConfig = Record<string, ExternalConfig>;
 
 export type NormalizedSharedExternalsConfig = Record<string, NormalizedExternalConfig>;
 
-export type ShareAllExternalsOptions = Omit<ExternalConfig, 'includeSecondaries'> & {
-  includeSecondaries?: IncludeSecondariesOptions;
+export type ShareAllExternalsOptions = ExternalConfig;
+
+export type ShareExternalsOptions = SharedExternalsConfig;
+
+export type ResolvedExternalConfig = Omit<ExternalConfig, 'includeSecondaries'> & {
+  includeSecondaries?: boolean;
 };
 
-export type ShareExternalsOptions = Record<string, ShareAllExternalsOptions>;
+export type ResolvedSharedExternalsConfig = Record<string, ResolvedExternalConfig>;

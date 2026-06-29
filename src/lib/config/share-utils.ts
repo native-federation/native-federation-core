@@ -18,6 +18,7 @@ import { resolvePackageJsonExportsWildcardCore } from '../utils/package/resolve-
 import type {
   ExternalConfig,
   IncludeSecondariesOptions,
+  ResolvedSharedExternalsConfig,
   ShareAllExternalsOptions,
   SharedExternalsConfig,
   ShareExternalsOptions,
@@ -359,7 +360,7 @@ export function shareAll(
     projectPath?: string;
     overrides?: ShareExternalsOptions;
   } = {}
-): ShareExternalsOptions | null {
+): ResolvedSharedExternalsConfig | null {
   return shareAllCore(nodeIo, config, opts);
 }
 
@@ -372,7 +373,7 @@ export function shareAllCore(
     overrides?: ShareExternalsOptions;
   } = {},
   repo: PackageJsonRepository = sharedPackageJsonRepository
-): ShareExternalsOptions | null {
+): ResolvedSharedExternalsConfig | null {
   // let workspacePath: string | undefined = undefined;
   const projectPath = inferProjectPath(opts.projectPath);
 
@@ -433,7 +434,7 @@ export function share(
   configuredShareObjects: ShareExternalsOptions,
   projectPath = '',
   skipList = DEFAULT_SKIP_LIST
-): ShareExternalsOptions {
+): ResolvedSharedExternalsConfig {
   return shareCore(nodeIo, configuredShareObjects, projectPath, skipList);
 }
 
@@ -443,7 +444,7 @@ export function shareCore(
   projectPath = '',
   skipList = DEFAULT_SKIP_LIST,
   repo: PackageJsonRepository = sharedPackageJsonRepository
-): ShareExternalsOptions {
+): ResolvedSharedExternalsConfig {
   projectPath = inferProjectPath(projectPath);
   const packagePath = findPackageJson(io, projectPath);
 
