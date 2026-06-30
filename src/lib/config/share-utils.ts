@@ -360,7 +360,7 @@ export function shareAll(
     projectPath?: string;
     overrides?: ShareExternalsOptions;
   } = {}
-): ResolvedSharedExternalsConfig | null {
+): ResolvedSharedExternalsConfig {
   return shareAllCore(nodeIo, config, opts);
 }
 
@@ -373,7 +373,7 @@ export function shareAllCore(
     overrides?: ShareExternalsOptions;
   } = {},
   repo: PackageJsonRepository = sharedPackageJsonRepository
-): ResolvedSharedExternalsConfig | null {
+): ResolvedSharedExternalsConfig {
   // let workspacePath: string | undefined = undefined;
   const projectPath = inferProjectPath(opts.projectPath);
 
