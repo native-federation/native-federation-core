@@ -83,7 +83,7 @@ The core library is build-tool agnostic. It expects a `NFBuildAdapter` that impl
 
 ## Configuration
 
-### `federation.config.js` Structure
+### `federation.config.mjs` Structure
 
 ```javascript
 import { withNativeFederation, shareAll } from '@softarc/native-federation/config';
@@ -209,6 +209,7 @@ Native Federation uses an intelligent caching system to speed up builds:
 4. Update types in `domain/` if needed
 5. Run `pnpm lint` and fix issues
 6. Run `pnpm build` to verify it compiles and emits declarations
+7. Comments are fine but be very conservative. Only comment what's really important (the why).
 
 ### Debugging Build Issues
 
@@ -241,7 +242,6 @@ This core library is designed to work with:
 - **[@softarc/native-federation-orchestrator](https://github.com/native-federation/orchestrator)** - Runtime orchestrator that loads the `remoteEntry.json` output of this library into a host page (replaces the former `@softarc/native-federation-runtime`/`-node` packages)
 - **[@softarc/native-federation-esbuild](https://github.com/native-federation/esbuild-adapter)** - esbuild adapter (separate repo)
 - **[@angular-architects/native-federation](https://www.npmjs.com/package/@angular-architects/native-federation)** - Angular-specific integration
-- **[@gioboa/vite-module-federation](https://www.npmjs.com/package/@gioboa/vite-module-federation)** - Vite plugin
 
 This package covers the **build side** only; runtime loading of remotes is handled by the orchestrator. The core library is intentionally low-level and agnostic; higher-level integrations provide framework-specific conveniences.
 
@@ -263,7 +263,7 @@ This package covers the **build side** only; runtime loading of remotes is handl
 
 ## Resources
 
-- Main README: `/README.md` - User-facing documentation
+- Main README: `/README.md` - User-facing documentation or the documentation website: https://native-federation.com/llms.txt
 - Contributing guide: `/CONTRIBUTING.md` - Contribution guidelines
 - Examples: See README for links to example repositories
 - Angular blog: https://www.angulararchitects.io (articles on Module Federation)

@@ -1,6 +1,6 @@
 # @softarc/native-federation
 
-Native Federation is a "browser-native" implementation of the successful mental model behind wepback Module Federation for building Micro Frontends and plugin-based solutions. It can be **used with any framework and build tool** for implementing **Micro Frontends** and plugin-based architectures.
+Native Federation is a "browser-native" implementation of the successful mental model behind webpack Module Federation. It can be **used with any framework and build tool** for implementing **Micro Frontends** and plugin-based architectures.
 
 > [!WARNING]
 > **This is our v4 version**. For the v3 version, check out the [module-federation-plugin repository](https://github.com/angular-architects/module-federation-plugin/tree/main/libs/native-federation-core).
@@ -35,7 +35,7 @@ For this, the mental model introduces several concepts:
 
 - **Remote:** The remote is a separately built and deployed application. It can **expose EcmaScript** modules that can be loaded into other applications.
 - **Host:** The host loads one or several remotes on demand. For your framework's perspective, this looks like traditional lazy loading. The big difference is that the host doesn't know the remotes at compilation time.
-- **Shared Dependencies:** If a several remotes and the host use the same library, you might not want to download it several times. Instead, you might want to just download it once and share it at runtime. For this use case, the mental model allows for defining such shared dependencies.
+- **Shared Dependencies:** If several remotes and the host use the same library, you might not want to download it several times. Instead, you might want to just download it once and share it at runtime. For this use case, the mental model allows for defining such shared dependencies.
 - **Version Mismatch:** If two or more applications use a different version of the same shared library, we need to prevent a version mismatch. To deal with it, the mental model defines several strategies, like falling back to another version that fits the application, using a different compatible one (according to semantic versioning) or throwing an error.
 
 ## Example
@@ -52,8 +52,8 @@ For this, the mental model introduces several concepts:
 Big thanks to:
 
 - [Zack Jackson](https://twitter.com/ScriptedAlchemy) for originally coming up with the great idea of Module Federation and its successful mental model
-- [Florian Rappl](https://twitter.com/FlorianRappl) for an good discussion about these topics during a speakers dinner in Nuremberg
-- [Michael Egger-Zikes](https://twitter.com/MikeZks) for contributing to our Module Federation efforts and brining in valuable feedback
+- [Florian Rappl](https://twitter.com/FlorianRappl) for a good discussion about these topics during a speakers dinner in Nuremberg
+- [Michael Egger-Zikes](https://twitter.com/MikeZks) for contributing to our Module Federation efforts and bringing in valuable feedback
 - The Angular CLI-Team, esp. [Alan Agius](https://twitter.com/AlanAgius4) and [Charles Lyding](https://twitter.com/charleslyding), for working on the experimental esbuild builder for Angular
 
 ## Using this Library
@@ -145,7 +145,7 @@ The method `federationBuilder.build` bundles the shared and exposed parts of you
 
 The `withNativeFederation` function sets up a configuration for your applications. This is an example configuration for a host:
 
-The `shareAll` helper shares all your dependencies defined in your `package.json`. The `package.json` is look up as described above:
+The `shareAll` helper shares all your dependencies defined in your `package.json`:
 
 ```typescript
 // shell/federation.config.js
@@ -168,9 +168,9 @@ export default withNativeFederation({
 
 The options passed to shareAll are applied to all dependencies found in your `package.json`.
 
-This might come in handy in an mono repo scenario and when doing some experiments/ trouble shooting.
+This might come in handy in a monorepo scenario and when doing some experiments / troubleshooting.
 
-> Since v21.1 it's also possible to add overrides to the shareAll for specific packages.
+You can also add overrides to `shareAll` for specific packages:
 
 ```typescript
 // shell/federation.config.js
@@ -226,17 +226,17 @@ shared: share({
 })
 ```
 
-The added options are `requireVersion: 'auto'` and `includeSecondaries`.
+The added options are `requiredVersion: 'auto'` and `includeSecondaries`.
 
-#### requireVersion: 'auto'
+#### requiredVersion: 'auto'
 
-If you set `requireVersion` to `'auto'`, the helper takes the version defined in your `package.json`.
+If you set `requiredVersion` to `'auto'`, the helper takes the version defined in your `package.json`.
 
-This helps to solve issues with not (fully) met peer dependencies and secondary entry points (see Pitfalls section below).
+This helps to solve issues with not (fully) met peer dependencies and secondary entry points.
 
-By default, it takes the `package.json` that is closest to the caller (normally the `webpack.config.js`). However, you can pass the path to an other `package.json` using the second optional parameter. Also, you need to define the shared libray within the node dependencies in your `package.json`.
+By default, it takes the `package.json` that is closest to the caller (normally the `federation.config.js`). However, you can pass the path to another `package.json` using the second optional parameter. Also, you need to define the shared library within the dependencies in your `package.json`.
 
-Instead of setting requireVersion to auto time and again, you can also skip this option and call `setInferVersion(true)` before:
+Instead of setting `requiredVersion` to `auto` time and again, you can also skip this option and call `setInferVersion(true)` before:
 
 ```typescript
 setInferVersion(true);
@@ -268,7 +268,7 @@ shared: share({
 })
 ```
 
-By default, all entrypoints of a package are considered, you can disable expensive glob resolves using the `globResolve` property:
+Wildcard (`*`) export entry points are not expanded by default. To resolve them into concrete secondary entry points, enable the `resolveGlob` property:
 
 ```typescript
 shared: share({
@@ -282,7 +282,7 @@ shared: share({
 })
 ```
 
-This is enabled by default but might not always desirable since it will create a bundle of every valid exported file it finds, **Therefore it is recommended not to disable the `ignoreUnusedDeps` feature**. If you want to specifically skip certain parts of the glob export, you can also use the wildcard in the skip section:
+Resolving globs can create a bundle for every valid exported file it finds, **so it is recommended to keep the `ignoreUnusedDeps` feature enabled** (it is on by default) to drop the ones you don't use. If you want to specifically skip certain parts of the glob export, you can also use the wildcard in the skip section:
 
 ```typescript
 shared: share({
@@ -296,7 +296,7 @@ shared: share({
 })
 ```
 
-Finally, it's also possible to break out of the "removeUnusedDep" feature for specific externals if desired, for example when sharing a whole suite of interconnected external dependencies like @angular/core. This can be handy when you want to avoid the chance of cross-version secondary entrypoints being used by the different micro frontends. E.g. mfe1 uses @angular/core v20.1.0 and mfe2 uses @angular/core/rxjs-interop v20.0.8, then you might want to use consistent use of v20.1.0 so rxjs-interop should be exported by mfe1. The "keepAll" prop allows you to enforce this:
+Finally, it's also possible to break out of the `ignoreUnusedDeps` feature for specific externals if desired, for example when sharing a whole suite of interconnected external dependencies like @angular/core. This can be handy when you want to avoid the chance of cross-version secondary entrypoints being used by the different micro frontends. E.g. mfe1 uses @angular/core v20.1.0 and mfe2 uses @angular/core/rxjs-interop v20.0.8, then you might want consistent use of v20.1.0 so rxjs-interop should be exported by mfe1. The `keepAll` prop allows you to enforce this:
 
 ```typescript
 shared: share({
@@ -310,14 +310,13 @@ shared: share({
 })
 ```
 
-The API for configuring and using Native Federation is very similar to the one provided by our Module Federation plugin [@angular-architects/module-federation](https://www.npmjs.com/package/@angular-architects/native-federation). Hence, most the articles on it are also valid for Native Federation.
+The API for configuring and using Native Federation is very similar to the one provided by our Module Federation plugin [@angular-architects/module-federation](https://www.npmjs.com/package/@angular-architects/module-federation). Hence, most of the articles on it are also valid for Native Federation.
 
 ### Sharing
 
 The `shareAll`-helper used here shares all dependencies found in your `package.json`. Hence, they only need to be loaded once (instead of once per remote and host). If you don't want to share all of them, you can opt-out of sharing by using the `skip` option:
 
 ```typescript
-n
 export default withNativeFederation({
   [...]
 
@@ -332,7 +331,7 @@ export default withNativeFederation({
 
 ### Sharing Mapped Paths (Monorepo-internal Libraries)
 
-Paths mapped in your `tsconfig.json` are shared by default too. While they are part of your (mono) repository, they are treaded like libraries:
+Paths mapped in your `tsconfig.json` are shared by default too. While they are part of your (mono) repository, they are treated like libraries:
 
 ```json
 {
@@ -349,7 +348,7 @@ Paths mapped in your `tsconfig.json` are shared by default too. While they are p
 
 If you don't want to share (all of) them, put their names into the skip array (see above).
 
-### Detemining which internal libraries are shared
+### Determining which internal libraries are shared
 
 In Nx/monorepo setups, Native Federation shares all libraries from your `tsconfig` path mappings by default.
 
@@ -376,7 +375,9 @@ Notes:
 - Mapped paths are read from the workspace root tsconfig file: `tsconfig.base.json` if present, otherwise `tsconfig.json`.
 - The workspace root is detected by searching upward from the current working directory until a `package.json` is found.
 
-If you don't want to share libraries within a monorepo and also distribute them as built libraries with a version, disable the `mappingVersion` feature flag in your `federation.config.js`. This ensures that the corresponding versions from your buildable libraries are used.
+The `mappingVersion` feature flag controls whether mapped paths get a version. It is **enabled by default**: Native Federation reads the version from the mapped library's nearest `package.json` and shares it with strict versioning, just like a published library.
+
+If your mapped paths point at plain internal source that isn't distributed as a versioned, buildable library, you can disable it. The mapped paths are then shared without a version constraint.
 
 ```js
 module.exports = withNativeFederation({
@@ -394,11 +395,9 @@ module.exports = withNativeFederation({
 });
 ```
 
-If enabled, Native Federation tries to read the version from the mapped library's nearest `package.json`. By default this feature is set to `false`.
-
 ### Code-Splitting for Shared Dependencies
 
-By default, Native Federation enables code-splitting (chunking) for shared dependencies. This means large libraries can be split into smaller chunks which reduces the overal size, improving initial load times.
+By default, Native Federation enables code-splitting (chunking) for shared dependencies. This means large libraries can be split into smaller chunks which reduces the overall size, improving initial load times.
 
 You can configure code-splitting at two levels:
 
@@ -436,18 +435,19 @@ module.exports = withNativeFederation({
         strictVersion: true,
         requiredVersion: 'auto',
       },
-      overrides: {
-        'large-lib': {
-          singleton: true,
-          strictVersion: true,
-          requiredVersion: 'auto',
-          chunks: false,
-          build: 'package' // necessary for isolated bundles
+      {
+        overrides: {
+          // Disable code-splitting for a specific package
+          'large-lib': {
+            singleton: true,
+            strictVersion: true,
+            requiredVersion: 'auto',
+            chunks: false,
+            build: 'package', // necessary for isolated bundles
+          },
         },
       }
     ),
-    // Disable code-splitting for a specific package
-
   },
 });
 ```
@@ -597,11 +597,11 @@ const { loadRemoteModule } = await initFederation(manifest, {
 
 ## React and Other CommonJS Libs
 
-Native Federation uses Web Standards like EcmaScript Modules. Most libs and frameworks support them meanwhile. Unfortunately, React still uses CommonJS (und UMD). We do our best to convert these libs to EcmaScript Modules. In the case of React there are some challenges due to the dynamic way the React bundles use the `exports` object.
+Native Federation uses Web Standards like EcmaScript Modules. Most libs and frameworks support them meanwhile. Unfortunately, React still uses CommonJS (and UMD). We do our best to convert these libs to EcmaScript Modules. In the case of React there are some challenges due to the dynamic way the React bundles use the `exports` object.
 
-As the community is moving to EcmaScrpt Modules, we expect that these issues will vanish over time. In between, we provide some solutions for dealing with CommonJS-based libraries using `exports` in a dynamic way.
+As the community is moving to EcmaScript Modules, we expect that these issues will vanish over time. In between, we provide some solutions for dealing with CommonJS-based libraries using `exports` in a dynamic way.
 
-One of them is `fileReplacemnts`:
+One of them is `fileReplacements`:
 
 ```javascript
 import { reactReplacements } from '@softarc/native-federation-esbuild/src/lib/react-replacements';

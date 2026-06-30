@@ -10,6 +10,11 @@
   "minimumReleaseAge": "3 days",
   "packageRules": [
     {
+      "description": "Disable pin/pinDigest dependency updates",
+      "matchUpdateTypes": ["pin", "pinDigest"],
+      "enabled": false
+    },
+    {
       "description": "Group the eslint/prettier toolchain into one PR",
       "groupName": "linting",
       "matchPackageNames": [
@@ -36,7 +41,7 @@
     {
       "description": "Automerge GitHub Actions digest/minor/patch updates",
       "matchManagers": ["github-actions"],
-      "matchUpdateTypes": ["minor", "patch", "pin", "pinDigest", "digest"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
       "automerge": true
     },
     {
