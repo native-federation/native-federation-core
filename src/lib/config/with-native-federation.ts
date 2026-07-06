@@ -1,5 +1,6 @@
 import { getRawMappedPaths } from './mapped-paths.js';
-import { shareAll, findRootTsConfigJson } from './share-utils.js';
+import { fromPackageJson } from './share-utils.js';
+import { findRootTsConfigJson } from './project-paths.js';
 import type {
   ExposeEntry,
   FederationConfig,
@@ -40,9 +41,7 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
   return normalized;
 }
 
-function normalizeExposes(
-  exposes: FederationConfig['exposes']
-): Record<string, ExposeEntry> {
+function normalizeExposes(exposes: FederationConfig['exposes']): Record<string, ExposeEntry> {
   if (!exposes) return {};
   return Object.fromEntries(
     Object.entries(exposes).map(([key, value]) => [
@@ -61,12 +60,12 @@ function normalizeShared(
 
   const shared =
     config.shared ??
-    (shareAll({
+    (fromPackageJson({
       singleton: true,
       strictVersion: true,
       requiredVersion: 'auto',
       platform: 'browser',
-    }) as NormalizedSharedExternalsConfig);
+    }).get() as NormalizedSharedExternalsConfig);
 
   result = Object.keys(shared).reduce<NormalizedSharedExternalsConfig>((acc, cur) => {
     const key = cur.replace(/\\/g, '/');

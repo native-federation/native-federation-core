@@ -1,13 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// with-native-federation reaches the filesystem through share-utils and
+// with-native-federation reaches the filesystem through share/project-paths and
 // mapped-paths; stub those so the normalization logic can be tested in isolation.
 const shareAll = vi.fn();
 const findRootTsConfigJson = vi.fn();
 const getRawMappedPaths = vi.fn();
 
 vi.mock('./share-utils.js', () => ({
-  shareAll: (...args: unknown[]) => shareAll(...args),
+  fromPackageJson: (...args: unknown[]) => ({ get: () => shareAll(...args) }),
+}));
+
+vi.mock('./project-paths.js', () => ({
   findRootTsConfigJson: (...args: unknown[]) => findRootTsConfigJson(...args),
 }));
 
