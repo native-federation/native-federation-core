@@ -92,6 +92,7 @@ function normalizeShared(
       platform: sharedConfig.platform ?? config.platform ?? 'browser',
       build: sharedConfig.build ?? 'default',
       ...(sharedConfig.shareScope && { shareScope: sharedConfig.shareScope }),
+      ...(sharedConfig.pool && { pool: sharedConfig.pool }),
     };
     return {
       ...acc,
