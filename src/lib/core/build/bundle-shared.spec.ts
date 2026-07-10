@@ -134,6 +134,7 @@ function makeConfig(): NormalizedFederationConfig {
       mappingVersion: false,
       ignoreUnusedDeps: false,
       denseChunking: false,
+      denseExternals: false,
       integrityHashes: false,
     },
   };
@@ -339,5 +340,38 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     expect(a).toMatch(/^foo\..{10}\.js$/);
     expect(a).toBe(await build('export const x = 1;\n')); // stable for identical content
     expect(a).not.toBe(b); // changes when content changes
+  });
+
+  it('reuses the bundle cache when denseExternals is toggled (same output name)', async () => {
+    const sharedBundles: Record<string, NormalizedExternalConfig> = {
+      foo: {
+        singleton: true,
+        strictVersion: false,
+        requiredVersion: '^1.0.0',
+        version: '1.0.0',
+        chunks: false,
+        platform: 'browser',
+        build: 'default',
+        packageInfo: { entryPoint: 'foo/index.js', version: '1.0.0', esm: true },
+      },
+    };
+
+    const buildWith = async (denseExternals: boolean) => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const config = makeConfig();
+      config.features.denseExternals = denseExternals;
+      const result = await bundleSharedCore(
+        { io: mem, repo: emptyRepo, adapter: createFakeBuildAdapter({ io: mem }) },
+        sharedBundles,
+        config,
+        makeFedOptions(),
+        [],
+        BUILD_OPTIONS
+      );
+      return result.externals[0]!.outFileName;
+    };
+
+    // denseExternals must not participate in the bundler cache key: identical output name.
+    expect(await buildWith(false)).toBe(await buildWith(true));
   });
 });

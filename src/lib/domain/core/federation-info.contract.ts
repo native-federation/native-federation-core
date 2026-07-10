@@ -1,11 +1,13 @@
 export interface FederationInfo {
   name: string;
   exposes: ExposesInfo[];
-  shared: SharedInfo[];
+  shared: Array<SharedInfo | DenseSharedInfo>;
   chunks?: Record<string, string[]>;
   integrity?: IntegrityMap;
   buildNotificationsEndpoint?: string;
 }
+
+export type DenseSharedInfo = Omit<SharedInfo, 'outFileName'> & { entries: Record<string, string> };
 
 export type SharedInfo = {
   singleton: boolean;

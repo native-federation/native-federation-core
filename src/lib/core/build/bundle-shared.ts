@@ -339,14 +339,12 @@ function addChunksToResult(chunks: NFBuildAdapterResult[], result: SharedInfo[])
     result.push({
       singleton: false,
       strictVersion: false,
-      // Here, the version does not matter because
+      // Here, the version, singleton and strictversion
+      // do not matter because
       // a) a chunk split off by the bundler does
       // not have a version and b) it gets a hash
       // code as part of the file name to be unique
       // when requested via a _versioned_ package.
-      //
-      // For the same reason, we don't need to
-      // take care of singleton and strictVersion.
       version: '0.0.0',
       requiredVersion: '0.0.0',
       packageName: toChunkImport(fileName),

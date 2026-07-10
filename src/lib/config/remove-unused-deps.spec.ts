@@ -29,6 +29,7 @@ const makeConfig = (
     mappingVersion: true,
     ignoreUnusedDeps: true,
     denseChunking: false,
+    denseExternals: false,
     integrityHashes: false,
   },
 });

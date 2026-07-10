@@ -33,6 +33,7 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
       mappingVersion: config.features?.mappingVersion ?? true,
       ignoreUnusedDeps: config.features?.ignoreUnusedDeps ?? true,
       denseChunking: config.features?.denseChunking ?? false,
+      denseExternals: config.features?.denseExternals ?? false,
       integrityHashes: config.features?.integrityHashes ?? false,
     },
     ...(config.shareScope && { shareScope: config.shareScope }),

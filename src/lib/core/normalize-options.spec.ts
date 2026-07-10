@@ -38,6 +38,7 @@ function makeConfig(
       mappingVersion: false,
       ignoreUnusedDeps: false,
       denseChunking: false,
+      denseExternals: false,
       integrityHashes: false,
     },
     ...overrides,

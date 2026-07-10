@@ -49,6 +49,7 @@ describe('withNativeFederation', () => {
         mappingVersion: true,
         ignoreUnusedDeps: true,
         denseChunking: false,
+        denseExternals: false,
         integrityHashes: false,
       },
     });
@@ -195,13 +196,14 @@ describe('withNativeFederation', () => {
 
   it('respects explicit feature flags', () => {
     const result = withNativeFederation({
-      features: { mappingVersion: false, denseChunking: true },
+      features: { mappingVersion: false, denseChunking: true, denseExternals: true },
     });
 
     expect(result.features).toEqual({
       mappingVersion: false,
       ignoreUnusedDeps: true,
       denseChunking: true,
+      denseExternals: true,
       integrityHashes: false,
     });
   });

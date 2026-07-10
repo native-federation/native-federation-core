@@ -150,6 +150,7 @@ function makeConfig(overrides: Partial<NormalizedFederationConfig> = {}): Normal
       mappingVersion: false,
       ignoreUnusedDeps: false,
       denseChunking: false,
+      denseExternals: false,
       integrityHashes: false,
     },
     ...overrides,
