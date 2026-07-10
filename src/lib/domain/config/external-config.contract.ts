@@ -1,6 +1,5 @@
 export type IncludeSecondariesOptions =
-  | { skip?: string | string[]; resolveGlob?: boolean; keepAll?: boolean }
-  | boolean;
+  { skip?: string | string[]; resolveGlob?: boolean; keepAll?: boolean } | boolean;
 
 export interface ExternalConfig {
   singleton?: boolean;
@@ -10,6 +9,7 @@ export interface ExternalConfig {
   includeSecondaries?: IncludeSecondariesOptions;
   platform?: 'browser' | 'node';
   build?: 'separate' | 'package';
+  pool?: string;
   chunks?: boolean;
   shareScope?: string;
   packageInfo?: {
@@ -26,6 +26,7 @@ export interface NormalizedExternalConfig {
   version?: string;
   includeSecondaries?: boolean;
   shareScope?: string;
+  pool?: string;
   chunks: boolean;
   platform: 'browser' | 'node';
   build: 'default' | 'separate' | 'package';

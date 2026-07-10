@@ -324,12 +324,7 @@ function buildResult(
       strictVersion: shared?.strictVersion,
       version: pi.version,
       ...(shared?.shareScope && { shareScope: shared.shareScope }),
-      // TODO: Decide whether/when we need debug infos
-      // dev: !fedOptions.dev
-      //   ? undefined
-      //   : {
-      //       entryPoint: normalize(pi.entryPoint),
-      //     },
+      ...(shared?.pool && { pool: shared.pool }),
     } as SharedInfo;
   });
 }
