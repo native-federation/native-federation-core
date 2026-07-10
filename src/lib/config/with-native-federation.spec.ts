@@ -161,6 +161,23 @@ describe('withNativeFederation', () => {
     expect(result.shared['react'].shareScope).toBe('isolated');
   });
 
+  it('passes a per-external pool through normalization', () => {
+    const result = withNativeFederation({
+      shared: { react: { pool: 'critical' } },
+    });
+
+    expect(result.shared['react'].pool).toBe('critical');
+  });
+
+  it('omits pool when it is not configured', () => {
+    const result = withNativeFederation({
+      shared: { react: {} },
+    });
+
+    expect(result.shared['react'].pool).toBeUndefined();
+    expect(result.shared['react']).not.toHaveProperty('pool');
+  });
+
   it('builds shared mappings from the resolved tsconfig, filtering the skip list', () => {
     getRawMappedPaths.mockReturnValue({
       '/ws/libs/ui/index.ts': '@org/ui',

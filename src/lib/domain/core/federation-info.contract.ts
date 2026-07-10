@@ -16,6 +16,7 @@ export type SharedInfo = {
   version?: string;
   packageName: string;
   shareScope?: string;
+  pool?: string;
   bundle?: string;
   outFileName: string;
   dev?: {
