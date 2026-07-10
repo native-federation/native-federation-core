@@ -1,5 +1,6 @@
 export type {
   SharedInfo,
+  DenseSharedInfo,
   FederationInfo,
   ExposesInfo,
   ArtifactInfo,
