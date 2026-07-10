@@ -475,6 +475,27 @@ module.exports = withNativeFederation({
 
 When enabled, instead of listing each chunk as a separate shared dependency, chunks are grouped by bundle name in a dedicated `chunks` object. Each shared dependency gets a `bundle` property linking it to its chunk bundle. This results in a smaller `remoteEntry.json` and allows chunks to be skipped if the dependency is not used in the final import map.
 
+#### Dense Externals
+
+The `denseExternals` feature flag reshapes the `shared` array in `remoteEntry.json` so that all entrypoints of a shared external (its primary import plus every secondary and shared mapping) are grouped under a single object:
+
+```js
+module.exports = withNativeFederation({
+  shared: {
+    ...shareAll({
+      singleton: true,
+      strictVersion: true,
+      requiredVersion: 'auto',
+    }),
+  },
+  features: {
+    denseExternals: true,
+  },
+});
+```
+
+When enabled, instead of one flat entry per entrypoint, each package becomes one object whose `entries` map keys the full import name to its output file (e.g. `{ "@angular/common": "...", "@angular/common/http": "..." }`). Entrypoints whose sharing metadata (`singleton`, `strictVersion`, `requiredVersion`, `version`, `shareScope`) diverges are split into separate groups. Bundler chunks stay flat, and `importmap.json` is unaffected. The flag is opt-in and fully backward compatible: the runtime auto-detects each entry by shape, so old and new `remoteEntry.json` both load.
+
 ### Configuring Remotes
 
 When configuring a remote, you can expose files that can be loaded into the shell at runtime:

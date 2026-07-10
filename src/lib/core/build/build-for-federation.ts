@@ -11,10 +11,11 @@ import {
 } from './bundle-exposed-and-mappings.js';
 import { bundleShared } from './bundle-shared.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
+import { densifyExternals } from '../output/densify-externals.js';
 import { writeFederationInfo } from '../output/write-federation-info.js';
 import { writeImportMap } from '../output/write-import-map.js';
 import { logger } from '../../utils/logger.js';
-import { normalizePackageName } from '../../utils/normalize.js';
+import { inferPackageFromSecondary, normalizePackageName } from '../../utils/normalize.js';
 import { AbortedError } from '../../utils/errors.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
@@ -141,13 +142,17 @@ export async function buildForFederation(
     });
   }
 
+  const shared = config.features.denseExternals
+    ? densifyExternals(sharedExternals)
+    : sharedExternals;
+
   const buildNotificationsEndpoint =
     fedOptions.buildNotifications?.enable && fedOptions.dev
       ? fedOptions.buildNotifications?.endpoint
       : undefined;
   const federationInfo: FederationInfo = {
     name: config.name,
-    shared: sharedExternals,
+    shared,
     exposes: exposedInfo,
     buildNotificationsEndpoint,
   };
@@ -177,14 +182,6 @@ type SplitSharedResult = {
   separateBrowser: Record<string, NormalizedExternalConfig>;
   separateServer: Record<string, NormalizedExternalConfig>;
 };
-
-function inferPackageFromSecondary(secondary: string): string {
-  const parts = secondary.split('/');
-  if (secondary.startsWith('@') && parts.length >= 2) {
-    return parts[0] + '/' + parts[1];
-  }
-  return parts[0]!;
-}
 
 async function bundleSeparatePackages(
   separateBrowser: Record<string, NormalizedExternalConfig>,

@@ -21,6 +21,10 @@ export {
   type ExportEntry,
 } from './lib/utils/package/package-info.js';
 export { isInSkipList, prepareSkipList } from './lib/config/default-skip-list.js';
+export { densifyExternals } from './lib/core/output/densify-externals.js';
 
-export type { NfFileWatcher, NfFileWatcherOptions } from './lib/domain/utils/file-watcher.contract.js';
+export type {
+  NfFileWatcher,
+  NfFileWatcherOptions,
+} from './lib/domain/utils/file-watcher.contract.js';
 export { syncNfFileWatcher, createNfWatcher } from './lib/utils/file-watcher.js';
