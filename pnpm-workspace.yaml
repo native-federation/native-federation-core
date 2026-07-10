@@ -3,3 +3,4 @@ allowBuilds:
   msw: true
 onlyBuiltDependencies:
   - esbuild
+minimumReleaseAge: 4320

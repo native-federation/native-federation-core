@@ -143,9 +143,78 @@ The method `federationBuilder.build` bundles the shared and exposed parts of you
 
 ### Configuring Hosts
 
-The `withNativeFederation` function sets up a configuration for your applications. This is an example configuration for a host:
+The `withNativeFederation` function sets up a configuration for your applications. This is an example configuration for a host.
 
-The `shareAll` helper shares all your dependencies defined in your `package.json`:
+#### The `fromPackageJson` helper (recommended)
+
+`fromPackageJson` is the recommended way to share your dependencies. It shares **all** dependencies found in your `package.json` and exposes a small fluent builder so you can fine-tune the result. The base options you pass are applied to every shared dependency; you then chain `.skip(...)`, `.override(...)` and `.patch(...)` as needed and finish with `.get()`:
+
+```typescript
+// shell/federation.config.js
+
+import { withNativeFederation, fromPackageJson } from '@softarc/native-federation/config';
+
+export default withNativeFederation({
+  name: 'host',
+
+  shared: fromPackageJson({
+    singleton: true,
+    strictVersion: true,
+    requiredVersion: 'auto',
+    includeSecondaries: false,
+  }).get(),
+});
+```
+
+> [!TIP]
+> If you omit the `shared` property entirely, Native Federation applies exactly this `fromPackageJson` configuration for you (with `singleton`, `strictVersion` and `requiredVersion: 'auto'`). So the snippet above is also a good description of the default behavior.
+
+The builder returned by `fromPackageJson` offers three chainable methods, each of which returns the builder so you can combine them:
+
+- **`.skip(externals)`** — exclude packages from sharing (added on top of the [default skip list](#sharing)).
+- **`.override(externals)`** — replace the configuration for specific packages entirely. Use this when a package needs a completely different set of options.
+- **`.patch(externals, cfg)`** — merge a partial configuration onto specific shared externals, keeping the base options for everything you don't touch.
+
+```typescript
+// shell/federation.config.js
+
+import { withNativeFederation, fromPackageJson } from '@softarc/native-federation/config';
+
+export default withNativeFederation({
+  name: 'host',
+
+  shared: fromPackageJson({
+    singleton: true,
+    strictVersion: true,
+    requiredVersion: 'auto',
+  })
+    // Don't share these dependencies at all
+    .skip(['my-lib', 'some-dev-only-lib'])
+    // Give a package a completely different configuration
+    .override({
+      'package-a/themes/xyz': {
+        singleton: true,
+        strictVersion: true,
+        requiredVersion: 'auto',
+        includeSecondaries: { skip: '@package-a/themes/xyz/*' },
+        build: 'package',
+      },
+    })
+    // Tweak a few options on specific packages while keeping the base config
+    .patch(['package-b'], {
+      singleton: false,
+      includeSecondaries: { skip: 'package-b/icons/*' },
+      build: 'package',
+    })
+    .get(),
+});
+```
+
+By default the closest `package.json` (relative to your `federation.config.js`) is used. You can point at a different one by passing its path as the second argument: `fromPackageJson(baseCfg, projectPath)`.
+
+#### Alternative: the `shareAll` helper
+
+`shareAll` is the older, object-spread style alternative to `fromPackageJson`. It also shares all dependencies defined in your `package.json`, but instead of a fluent builder it returns a plain object that you spread into `shared`:
 
 ```typescript
 // shell/federation.config.js
@@ -166,11 +235,9 @@ export default withNativeFederation({
 });
 ```
 
-The options passed to shareAll are applied to all dependencies found in your `package.json`.
+The options passed to `shareAll` are applied to all dependencies found in your `package.json`. This might come in handy in a monorepo scenario and when doing some experiments / troubleshooting.
 
-This might come in handy in a monorepo scenario and when doing some experiments / troubleshooting.
-
-You can also add overrides to `shareAll` for specific packages:
+You can also add overrides to `shareAll` for specific packages, via the second argument:
 
 ```typescript
 // shell/federation.config.js

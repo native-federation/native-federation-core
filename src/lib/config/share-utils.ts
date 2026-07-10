@@ -58,20 +58,6 @@ export const fromPackageJson = (baseCfg: ShareAllExternalsOptions, projectPath?:
   return builder;
 };
 
-/**
- * @deprecated Use {@link fromPackageJson} instead, which offers a fluent,
- * composable API for skipping, overriding and patching shared externals:
- *
- * ```ts
- * // before
- * shareAll(config, { skipList, overrides });
- * // after
- * fromPackageJson(config).skip(skipList).override(overrides).get();
- * ```
- *
- * Note: `fromPackageJson().skip()` *extends* the default skip list, whereas
- * `shareAll`'s `skipList` option *replaces* it.
- */
 export function shareAll(
   config: ShareAllExternalsOptions,
   opts: {
