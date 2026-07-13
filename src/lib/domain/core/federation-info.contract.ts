@@ -1,4 +1,5 @@
 export interface FederationInfo {
+  $version?: string;
   name: string;
   exposes: ExposesInfo[];
   shared: Array<SharedInfo | DenseSharedInfo>;

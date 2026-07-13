@@ -1,7 +1,4 @@
-import type {
-  SharedInfo,
-  DenseSharedInfo,
-} from '../../domain/core/federation-info.contract.js';
+import type { SharedInfo, DenseSharedInfo } from '../../domain/core/federation-info.contract.js';
 import { CHUNK_PREFIX } from '../../domain/core/chunk.js';
 import { inferPackageFromSecondary } from '../../utils/normalize.js';
 
@@ -9,8 +6,8 @@ function isDense(entry: SharedInfo | DenseSharedInfo): entry is DenseSharedInfo 
   return 'entries' in entry;
 }
 
-function isChunk(entry: SharedInfo): boolean {
-  return entry.packageName.startsWith(CHUNK_PREFIX + '/');
+function isFlatChunk(entry: SharedInfo): boolean {
+  return entry.packageName.startsWith(CHUNK_PREFIX);
 }
 
 /**
@@ -26,8 +23,14 @@ export function densifyExternals(
   const groupIndex = new Map<string, number>();
 
   for (const entry of shared) {
-    if (isDense(entry) || isChunk(entry)) {
+    if (isDense(entry)) {
       result.push(entry);
+      continue;
+    }
+
+    if (isFlatChunk(entry)) {
+      const { outFileName, ...rest } = entry;
+      result.push({ ...rest, entries: { [entry.packageName]: outFileName } });
       continue;
     }
 
@@ -63,4 +66,17 @@ export function densifyExternals(
   }
 
   return result;
+}
+
+export function toDenseSharedInfoFormat(
+  shared: Array<SharedInfo | DenseSharedInfo>
+): DenseSharedInfo[] {
+  return shared.map(external => {
+    if ('entries' in external) return external;
+    const { outFileName, ...baseSharedInfoProps } = external;
+    return {
+      ...baseSharedInfoProps,
+      entries: { [external.packageName]: outFileName },
+    };
+  });
 }

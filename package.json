@@ -55,6 +55,11 @@
       "types": "./dist/internal.d.ts",
       "import": "./dist/internal.js",
       "default": "./dist/internal.js"
+    },
+    "./internal/browser": {
+      "types": "./dist/internal/browser.d.ts",
+      "import": "./dist/internal/browser.js",
+      "default": "./dist/internal/browser.js"
     }
   },
   "main": "./dist/index.js",
