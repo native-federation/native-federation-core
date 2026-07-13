@@ -1,8 +1,9 @@
 {
   "name": "@softarc/native-federation",
-  "version": "4.3.0",
+  "version": "4.3.1",
   "type": "module",
   "license": "MIT",
+  "packageManager": "pnpm@11.11.0",
   "scripts": {
     "build": "node esbuild.config.mjs && tsc -p tsconfig.build.json",
     "lint": "eslint src",

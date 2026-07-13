@@ -614,7 +614,7 @@ For a zero-build integration, declare your remotes in a manifest and include the
 <script>
   window.addEventListener(
     'mfe-loader-available',
-    (e) => {
+    e => {
       e.detail.loadRemoteModule('team/mfe1', './Button');
       e.detail.loadRemoteModule('team/mfe2', './Header');
     },
@@ -623,7 +623,7 @@ For a zero-build integration, declare your remotes in a manifest and include the
 </script>
 
 <!-- Include the orchestrator -->
-<script src="https://unpkg.com/@softarc/native-federation-orchestrator@4.3.0/quickstart.mjs"></script>
+<script src="https://unpkg.com/@softarc/native-federation-orchestrator@4.5.1/quickstart.mjs"></script>
 ```
 
 The `mfe-loader-available` event signals that the orchestrator has fetched the
