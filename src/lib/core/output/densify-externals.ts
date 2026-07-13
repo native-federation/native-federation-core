@@ -56,6 +56,7 @@ export function densifyExternals(
       if (entry.version !== undefined) dense.version = entry.version;
       if (entry.shareScope !== undefined) dense.shareScope = entry.shareScope;
       if (entry.bundle !== undefined) dense.bundle = entry.bundle;
+      if (entry.pool !== undefined) dense.pool = entry.pool;
       if (entry.dev !== undefined) dense.dev = entry.dev;
 
       groupIndex.set(key, result.length);
