@@ -24,14 +24,16 @@ export const getFilename = (title: string, dev?: boolean) => {
 export const getChecksum = (
   shared: Record<string, NormalizedExternalConfig>,
   dev: '1' | '0',
-  builderVersion = ''
-): string => getChecksumCore(nodeIo, shared, dev, builderVersion);
+  builderVersion = '',
+  synthesizeCjsExports = true
+): string => getChecksumCore(nodeIo, shared, dev, builderVersion, synthesizeCjsExports);
 
 export const getChecksumCore = (
   hash: HashPort,
   shared: Record<string, NormalizedExternalConfig>,
   dev: '1' | '0',
-  builderVersion = ''
+  builderVersion = '',
+  synthesizeCjsExports = true
 ): string => {
   const denseExternals = Object.keys(shared)
     .sort()
@@ -41,7 +43,10 @@ export const getChecksumCore = (
       );
     }, 'deps');
 
-  return hash.hash('sha256', denseExternals + `:dev=${dev}:builder=${builderVersion}`).hex();
+  const cjs = synthesizeCjsExports ? '1' : '0';
+  return hash
+    .hash('sha256', denseExternals + `:dev=${dev}:builder=${builderVersion}:cjs=${cjs}`)
+    .hex();
 };
 
 export type CacheMetadata = {

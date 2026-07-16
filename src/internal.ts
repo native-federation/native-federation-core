@@ -21,6 +21,18 @@ export {
   type ExportCondition,
   type ExportEntry,
 } from './lib/utils/package/package-info.js';
+export {
+  isCjsCandidate,
+  classifyByExtension,
+  hasEsmSyntax,
+  type ModuleFormat,
+} from './lib/utils/package/esm-detection.js';
+export {
+  isIdentifierName,
+  planCjsWrap,
+  buildSyntheticCjsEntry,
+  isEsmInteropError,
+} from './lib/utils/package/cjs-named-exports.js';
 
 export type {
   NfFileWatcher,

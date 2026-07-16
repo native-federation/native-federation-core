@@ -35,6 +35,7 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
       denseChunking: config.features?.denseChunking ?? false,
       denseExternals: config.features?.denseExternals ?? false,
       integrityHashes: config.features?.integrityHashes ?? false,
+      synthesizeCjsExports: config.features?.synthesizeCjsExports ?? true,
     },
     ...(config.shareScope && { shareScope: config.shareScope }),
   };

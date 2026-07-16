@@ -205,6 +205,7 @@ describe('withNativeFederation', () => {
       denseChunking: true,
       denseExternals: true,
       integrityHashes: false,
+      synthesizeCjsExports: true,
     });
   });
 

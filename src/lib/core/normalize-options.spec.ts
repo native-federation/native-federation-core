@@ -40,6 +40,7 @@ function makeConfig(
       denseChunking: false,
       denseExternals: false,
       integrityHashes: false,
+      synthesizeCjsExports: true,
     },
     ...overrides,
   };

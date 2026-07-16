@@ -44,6 +44,7 @@ function makeConfig(denseExternals: boolean): NormalizedFederationConfig {
       denseChunking: false,
       denseExternals,
       integrityHashes: false,
+      synthesizeCjsExports: true,
     },
   };
 }
