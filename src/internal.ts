@@ -39,3 +39,4 @@ export type {
   NfFileWatcherOptions,
 } from './lib/domain/utils/file-watcher.contract.js';
 export { syncNfFileWatcher, createNfWatcher } from './lib/utils/file-watcher.js';
+export { linkedSharedDirs } from './lib/core/build/resolve-shared-dirs.js';

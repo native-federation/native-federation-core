@@ -50,6 +50,43 @@ describe('createNfWatcherCore', () => {
     expect(debug).toHaveBeenCalled();
   });
 
+  it('passes the poll option to io.watch for polled paths', () => {
+    const dir = path.resolve('/proj/src');
+    const io = createMemoryIo().setDir(dir);
+    const spy = vi.spyOn(io, 'watch');
+    const watcher = createNfWatcherCore(io, { pollIntervalMs: 250 });
+
+    watcher.addPaths(dir, { poll: true });
+
+    expect(spy).toHaveBeenCalledWith(
+      dir,
+      expect.objectContaining({ recursive: true, poll: { intervalMs: 250 } }),
+      expect.any(Function)
+    );
+  });
+
+  it('coalesces a burst of events into one delivery per path when debounced', () => {
+    vi.useFakeTimers();
+    const dir = path.resolve('/proj/src').replace(/\\/g, '/');
+    const io = createMemoryIo().setDir(dir);
+    const onChange = vi.fn();
+    const watcher = createNfWatcherCore(io, { onChange, debounceMs: 50 });
+
+    watcher.addPaths(dir);
+    io.emit(dir, 'a.ts');
+    io.emit(dir, 'a.ts');
+    io.emit(dir, 'b.ts');
+
+    expect(onChange).not.toHaveBeenCalled(); // nothing before the quiet window elapses
+
+    vi.advanceTimersByTime(50);
+
+    expect(onChange).toHaveBeenCalledTimes(2); // a.ts + b.ts, deduped
+    expect(onChange).toHaveBeenCalledWith(`${dir}/a.ts`);
+    expect(onChange).toHaveBeenCalledWith(`${dir}/b.ts`);
+    vi.useRealTimers();
+  });
+
   it('clear() empties the dirty set and close() stops watchers', async () => {
     const dir = path.resolve('/proj/src');
     const io = createMemoryIo().setDir(dir);
@@ -81,5 +118,21 @@ describe('syncNfFileWatcher', () => {
     });
 
     expect(added).toEqual(['/proj/a.ts']);
+  });
+
+  it('adds linked shared dirs alongside the filtered cache keys', () => {
+    const added: string[] = [];
+    const watcher = {
+      addPaths: (p: string | readonly string[]) =>
+        added.push(...(typeof p === 'string' ? [p] : [...p])),
+    } as never;
+
+    syncNfFileWatcher(
+      watcher,
+      { keys: () => ['/proj/a.ts', '/proj/node_modules/x/index.js'][Symbol.iterator]() },
+      ['/dev/lib/dist']
+    );
+
+    expect(added).toEqual(['/proj/a.ts', '/dev/lib/dist']);
   });
 });

@@ -19,6 +19,7 @@ import { DEFAULT_EXTERNAL_LIST } from './default-external-list.js';
 import { isSourceFile, transformChunkImports } from './rewrite-chunk-imports.js';
 import { toChunkImport } from '../../domain/core/chunk.js';
 import { cacheEntryCore, getChecksumCore, getFilename } from '../cache/cache-persistence.js';
+import { linkedContentSignals } from './resolve-shared-dirs.js';
 import { computeIntegrityMapCore } from './compute-integrity.js';
 import { fileURLToPath } from 'url';
 import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
@@ -86,17 +87,25 @@ export async function bundleSharedCore(
   const builderPackageJson = readBuilderPackageJson(deps.io, fileURLToPath(import.meta.url));
   const builderVersion = parseBuilderVersion(builderPackageJson);
 
+  const folder = fedOptions.packageJson
+    ? path.dirname(fedOptions.packageJson)
+    : fedOptions.workspaceRoot;
+
+  const contentSignals = linkedContentSignals(
+    Object.keys(sharedBundles),
+    folder,
+    deps.io,
+    deps.repo
+  );
+
   const checksum = getChecksumCore(
     deps.io,
     sharedBundles,
     fedOptions.dev ? '1' : '0',
     builderVersion,
-    config.features.synthesizeCjsExports
+    config.features.synthesizeCjsExports,
+    contentSignals
   );
-
-  const folder = fedOptions.packageJson
-    ? path.dirname(fedOptions.packageJson)
-    : fedOptions.workspaceRoot;
 
   const bundleCache = cacheEntryCore(
     deps.io,
@@ -145,7 +154,14 @@ export async function bundleSharedCore(
 
   const entryPoints: EntryPoint[] = packageInfos.map(pi => {
     const encName = pi.packageName.replace(/[^A-Za-z0-9]/g, '_');
-    const outName = createOutName(deps.io, pi, configState, fedOptions, encName);
+    const outName = createOutName(
+      deps.io,
+      pi,
+      configState,
+      fedOptions,
+      encName,
+      contentSignals[pi.packageName] ?? ''
+    );
 
     // Re-emit named exports of CommonJS externals as static exports. ESM externals are left untouched.
     const synthetic =
@@ -327,9 +343,11 @@ function createOutName(
   pi: PackageInfo,
   configState: string,
   fedOptions: NormalizedFederationOptions,
-  encName: string
+  encName: string,
+  contentSignal = ''
 ) {
-  const hashBase = pi.version + '_' + pi.entryPoint + '_' + configState;
+  const hashBase =
+    pi.version + '_' + pi.entryPoint + '_' + configState + (contentSignal ? '_' + contentSignal : '');
   const hash = calcHashCore(io, hashBase);
 
   const outName = fedOptions.dev ? `${encName}.${hash}-dev.js` : `${encName}.${hash}.js`;

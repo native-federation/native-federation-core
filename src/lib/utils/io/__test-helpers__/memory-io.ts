@@ -4,6 +4,7 @@ import type {
   Digest,
   HashAlgorithm,
   IoPort,
+  StatInfo,
   WatchHandle,
 } from '../../../domain/utils/io-port.contract.js';
 
@@ -12,6 +13,10 @@ import type {
 export interface MemoryIo extends IoPort {
   setFile(filePath: string, data: string | Uint8Array): MemoryIo;
   setDir(dirPath: string): MemoryIo;
+  /** Register `linkPath` as a symlink resolving to `target` (for realpath/stat). */
+  setSymlink(linkPath: string, target: string): MemoryIo;
+  /** Set an entry's mtime (ms) reported by `stat`. */
+  setMtime(filePath: string, mtimeMs: number): MemoryIo;
   files(): string[];
   emit(watchedPath: string, filename?: string | null): void;
 }
@@ -26,6 +31,8 @@ export function createMemoryIo(): MemoryIo {
   const files = new Map<string, Uint8Array>();
   const dirs = new Set<string>();
   const watchers = new Map<string, Array<(filename: string | null) => void>>();
+  const symlinks = new Map<string, string>();
+  const mtimes = new Map<string, number>();
 
   const encode = (data: string | Uint8Array): Uint8Array =>
     typeof data === 'string' ? new TextEncoder().encode(data) : data;
@@ -58,6 +65,14 @@ export function createMemoryIo(): MemoryIo {
     },
     setDir(dirPath) {
       dirs.add(toKey(dirPath));
+      return io;
+    },
+    setSymlink(linkPath, target) {
+      symlinks.set(toKey(linkPath), toKey(target));
+      return io;
+    },
+    setMtime(filePath, mtimeMs) {
+      mtimes.set(toKey(filePath), mtimeMs);
       return io;
     },
     files() {
@@ -95,6 +110,20 @@ export function createMemoryIo(): MemoryIo {
         if (path.posix.dirname(entry) === key) names.add(path.posix.basename(entry));
       }
       return [...names];
+    },
+    realpath(p) {
+      const key = toKey(p);
+      for (const [link, target] of symlinks) {
+        if (key === link) return target;
+        if (key.startsWith(link + '/')) return target + key.slice(link.length);
+      }
+      return key;
+    },
+    stat(p): StatInfo | null {
+      const key = toKey(p);
+      const isSymbolicLink = symlinks.has(key);
+      if (!isSymbolicLink && !files.has(key) && !dirs.has(key)) return null;
+      return { mtimeMs: mtimes.get(key) ?? 0, isSymbolicLink };
     },
     writeText(p, data) {
       const key = toKey(p);

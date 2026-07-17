@@ -70,6 +70,30 @@ describe('getChecksumCore', () => {
       .digest('hex');
     expect(getChecksumCore(io, { react: ext('18') }, '0', '2.0.0')).toBe(expected);
   });
+
+  // Registry-dep regression guard: an empty content-signal map must not perturb the hash.
+  it('is byte-identical whether contentSignals is omitted or empty', () => {
+    const base = { react: ext('18') };
+    expect(getChecksumCore(io, base, '0', '2.0.0', true, {})).toBe(
+      getChecksumCore(io, base, '0', '2.0.0')
+    );
+  });
+
+  it('changes when a content signal is added for a (linked) package', () => {
+    const base = { '@scope/lib': ext('1.0.0') };
+    expect(getChecksumCore(io, base, '0', '', true, { '@scope/lib': '111' })).not.toBe(
+      getChecksumCore(io, base, '0')
+    );
+  });
+
+  it('changes when a content signal changes but is stable when it does not', () => {
+    const base = { '@scope/lib': ext('1.0.0') };
+    const a = getChecksumCore(io, base, '0', '', true, { '@scope/lib': '111' });
+    const b = getChecksumCore(io, base, '0', '', true, { '@scope/lib': '222' });
+    const aAgain = getChecksumCore(io, base, '0', '', true, { '@scope/lib': '111' });
+    expect(a).not.toBe(b);
+    expect(a).toBe(aAgain);
+  });
 });
 
 describe('cacheEntryCore', () => {

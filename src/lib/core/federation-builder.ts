@@ -67,4 +67,7 @@ export const federationBuilder = {
   get config(): NormalizedFederationConfig {
     return config;
   },
+  get options(): NormalizedFederationOptions {
+    return options;
+  },
 };
