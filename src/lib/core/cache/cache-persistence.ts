@@ -25,22 +25,26 @@ export const getChecksum = (
   shared: Record<string, NormalizedExternalConfig>,
   dev: '1' | '0',
   builderVersion = '',
-  synthesizeCjsExports = true
-): string => getChecksumCore(nodeIo, shared, dev, builderVersion, synthesizeCjsExports);
+  synthesizeCjsExports = true,
+  contentSignals: Record<string, string> = {}
+): string =>
+  getChecksumCore(nodeIo, shared, dev, builderVersion, synthesizeCjsExports, contentSignals);
 
 export const getChecksumCore = (
   hash: HashPort,
   shared: Record<string, NormalizedExternalConfig>,
   dev: '1' | '0',
   builderVersion = '',
-  synthesizeCjsExports = true
+  synthesizeCjsExports = true,
+  // Per-key content signal, set only for symlinked deps; empty map => version-only hash.
+  contentSignals: Record<string, string> = {}
 ): string => {
   const denseExternals = Object.keys(shared)
     .sort()
     .reduce((clean, external) => {
-      return (
-        clean + ':' + external + (shared[external]!.version ? `@${shared[external]!.version}` : '')
-      );
+      const version = shared[external]!.version ? `@${shared[external]!.version}` : '';
+      const signal = contentSignals[external] ? `#${contentSignals[external]}` : '';
+      return clean + ':' + external + version + signal;
     }, 'deps');
 
   const cjs = synthesizeCjsExports ? '1' : '0';

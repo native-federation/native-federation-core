@@ -5,6 +5,11 @@ export interface Digest {
   base64(): string;
 }
 
+export interface StatInfo {
+  mtimeMs: number;
+  isSymbolicLink: boolean;
+}
+
 export interface FileReaderPort {
   readText(path: string): string;
   readBytes(path: string): Uint8Array;
@@ -15,6 +20,8 @@ export interface FileReaderPort {
   isDirectory(path: string): boolean;
   /** Immediate child entry names (not full paths). Empty array on ENOENT, never throws. */
   readDir(path: string): string[];
+  realpath(path: string): string;
+  stat(path: string): StatInfo | null;
 }
 
 export interface FileWriterPort {
@@ -36,6 +43,11 @@ export interface WatchHandle {
   close(): void;
 }
 
+interface WatchOptions {
+  recursive: boolean;
+  poll?: { intervalMs: number };
+}
+
 export interface WatchPort {
   /**
    * For a recursive directory watch `onEvent` receives the changed entry's
@@ -44,7 +56,7 @@ export interface WatchPort {
    */
   watch(
     path: string,
-    opts: { recursive: boolean },
+    opts: WatchOptions,
     onEvent: (filename: string | null) => void
   ): WatchHandle;
 }
