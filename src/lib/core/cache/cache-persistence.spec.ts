@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as crypto from 'crypto';
-import { cacheEntryCore, getChecksumCore, getFilename, type CacheMetadata } from './cache-persistence.js';
+import {
+  cacheEntryCore,
+  getChecksumCore,
+  getFilename,
+  type CacheMetadata,
+} from './cache-persistence.js';
 import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
 import { logger } from '../../utils/logger.js';
 import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
@@ -51,10 +56,17 @@ describe('getChecksumCore', () => {
     );
   });
 
+  it('changes when the CJS-export synthesis flag changes', () => {
+    const base = { react: ext('18') };
+    expect(getChecksumCore(io, base, '0', '1.0.0', true)).not.toBe(
+      getChecksumCore(io, base, '0', '1.0.0', false)
+    );
+  });
+
   it('matches a hand-computed sha256', () => {
     const expected = crypto
       .createHash('sha256')
-      .update('deps:react@18:dev=0:builder=2.0.0')
+      .update('deps:react@18:dev=0:builder=2.0.0:cjs=1')
       .digest('hex');
     expect(getChecksumCore(io, { react: ext('18') }, '0', '2.0.0')).toBe(expected);
   });

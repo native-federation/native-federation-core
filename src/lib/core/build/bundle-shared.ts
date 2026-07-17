@@ -28,6 +28,8 @@ import type {
   NFBuildAdapterResult,
 } from '../../domain/core/build-adapter.contract.js';
 import { getBuildAdapter } from './build-adapter.js';
+import { synthesizeCjsNamedExportsEntry, type ModuleEvaluator } from './synthesize-cjs-exports.js';
+import { createRequire } from 'module';
 
 export async function bundleShared(
   sharedBundles: Record<string, NormalizedExternalConfig>,
@@ -40,8 +42,14 @@ export async function bundleShared(
   chunks?: Record<string, string[]>;
   integrity?: IntegrityMap;
 }> {
+  const requireFromWorkspace = createRequire(path.join(fedOptions.workspaceRoot, 'index.js'));
   return bundleSharedCore(
-    { io: nodeIo, repo: sharedPackageJsonRepository, adapter: getBuildAdapter() },
+    {
+      io: nodeIo,
+      repo: sharedPackageJsonRepository,
+      adapter: getBuildAdapter(),
+      evaluateModule: (absPath: string) => requireFromWorkspace(absPath),
+    },
     sharedBundles,
     config,
     fedOptions,
@@ -54,6 +62,12 @@ interface BundleSharedDeps {
   io: IoPort;
   repo: PackageJsonRepository;
   adapter: NFBuildAdapter;
+  /**
+   * Loads a module by absolute path at build time (Node `require`) and returns its
+   * runtime exports, from which a CJS external's named exports are then enumerated.
+   * Omitted → no named-export synthesis; externals stay default-only.
+   */
+  evaluateModule?: ModuleEvaluator;
 }
 
 export async function bundleSharedCore(
@@ -76,7 +90,8 @@ export async function bundleSharedCore(
     deps.io,
     sharedBundles,
     fedOptions.dev ? '1' : '0',
-    builderVersion
+    builderVersion,
+    config.features.synthesizeCjsExports
   );
 
   const folder = fedOptions.packageJson
@@ -131,7 +146,19 @@ export async function bundleSharedCore(
   const entryPoints: EntryPoint[] = packageInfos.map(pi => {
     const encName = pi.packageName.replace(/[^A-Za-z0-9]/g, '_');
     const outName = createOutName(deps.io, pi, configState, fedOptions, encName);
-    return { fileName: pi.entryPoint, outName };
+
+    // Re-emit named exports of CommonJS externals as static exports. ESM externals are left untouched.
+    const synthetic =
+      deps.evaluateModule && config.features.synthesizeCjsExports
+        ? synthesizeCjsNamedExportsEntry(
+            deps.io,
+            deps.evaluateModule,
+            pi,
+            fedOptions.federationCache.cachePath,
+            outName
+          )
+        : null;
+    return { fileName: synthetic ?? pi.entryPoint, outName };
   });
 
   const fullOutputPath = path.join(fedOptions.workspaceRoot, fedOptions.outputPath);

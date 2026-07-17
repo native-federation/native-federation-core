@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as crypto from 'crypto';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -136,6 +136,7 @@ function makeConfig(): NormalizedFederationConfig {
       denseChunking: false,
       denseExternals: false,
       integrityHashes: false,
+      synthesizeCjsExports: true,
     },
   };
 }
@@ -340,6 +341,116 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     expect(a).toMatch(/^foo\..{10}\.js$/);
     expect(a).toBe(await build('export const x = 1;\n')); // stable for identical content
     expect(a).not.toBe(b); // changes when content changes
+  });
+
+  it('routes a CommonJS external through a synthetic named-exports entry', async () => {
+    const mem = createMemoryIo()
+      .setFile(ROOT_PKG, '{}')
+      .setFile('/n/dayjs/dayjs.min.js', '!function(t,e){module.exports=e()}(this,function(){})');
+    const adapter = createFakeBuildAdapter({ io: mem });
+    const sharedBundles: Record<string, NormalizedExternalConfig> = {
+      dayjs: {
+        singleton: true,
+        strictVersion: false,
+        requiredVersion: '^1.0.0',
+        version: '1.11.0',
+        chunks: false,
+        platform: 'browser',
+        build: 'default',
+        packageInfo: { entryPoint: '/n/dayjs/dayjs.min.js', version: '1.11.0', esm: false },
+      },
+    };
+
+    await bundleSharedCore(
+      {
+        io: mem,
+        repo: emptyRepo,
+        adapter,
+        evaluateModule: () => ({ isDayjs: () => {}, extend: () => {} }),
+      },
+      sharedBundles,
+      makeConfig(),
+      makeFedOptions(),
+      [],
+      BUILD_OPTIONS
+    );
+
+    const entryPoint = adapter.calls.setup[0]!.options.entryPoints[0]!;
+    // Named after the hashed outName (dayjs.<hash>.js), so packages that normalize to the
+    // same identifier can't clobber each other's synthetic entry.
+    expect(path.dirname(entryPoint.fileName)).toBe(path.join('/cache', '.nf-cjs-entries'));
+    expect(path.basename(entryPoint.fileName)).toMatch(/^dayjs\..+\.js$/);
+    const synthetic = mem.readText(entryPoint.fileName);
+    expect(synthetic).toContain('import _nfDefault from "/n/dayjs/dayjs.min.js";');
+    expect(synthetic).toContain('as isDayjs');
+  });
+
+  it('leaves a CommonJS external untouched when synthesizeCjsExports is disabled', async () => {
+    const mem = createMemoryIo()
+      .setFile(ROOT_PKG, '{}')
+      .setFile('/n/dayjs/dayjs.min.js', '!function(t,e){module.exports=e()}(this,function(){})');
+    const adapter = createFakeBuildAdapter({ io: mem });
+    const evaluate = vi.fn(() => ({ isDayjs: () => {} }));
+    const sharedBundles: Record<string, NormalizedExternalConfig> = {
+      dayjs: {
+        singleton: true,
+        strictVersion: false,
+        requiredVersion: '^1.0.0',
+        version: '1.11.0',
+        chunks: false,
+        platform: 'browser',
+        build: 'default',
+        packageInfo: { entryPoint: '/n/dayjs/dayjs.min.js', version: '1.11.0', esm: false },
+      },
+    };
+    const config = makeConfig();
+    config.features.synthesizeCjsExports = false;
+
+    await bundleSharedCore(
+      { io: mem, repo: emptyRepo, adapter, evaluateModule: evaluate },
+      sharedBundles,
+      config,
+      makeFedOptions(),
+      [],
+      BUILD_OPTIONS
+    );
+
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(adapter.calls.setup[0]!.options.entryPoints[0]!.fileName).toBe('/n/dayjs/dayjs.min.js');
+  });
+
+  it('leaves an ESM external on its original entry and never evaluates it', async () => {
+    const mem = createMemoryIo()
+      .setFile(ROOT_PKG, '{}')
+      .setFile('/n/rxjs/dist/esm/index.js', `export { Observable } from './internal/Observable';`);
+    const adapter = createFakeBuildAdapter({ io: mem });
+    const evaluate = vi.fn(() => ({}));
+    const sharedBundles: Record<string, NormalizedExternalConfig> = {
+      rxjs: {
+        singleton: true,
+        strictVersion: false,
+        requiredVersion: '^7.0.0',
+        version: '7.8.0',
+        chunks: false,
+        platform: 'browser',
+        build: 'default',
+        packageInfo: { entryPoint: '/n/rxjs/dist/esm/index.js', version: '7.8.0', esm: true },
+      },
+    };
+
+    await bundleSharedCore(
+      { io: mem, repo: emptyRepo, adapter, evaluateModule: evaluate },
+      sharedBundles,
+      makeConfig(),
+      makeFedOptions(),
+      [],
+      BUILD_OPTIONS
+    );
+
+    expect(adapter.calls.setup[0]!.options.entryPoints[0]!.fileName).toBe(
+      '/n/rxjs/dist/esm/index.js'
+    );
+    expect(evaluate).not.toHaveBeenCalled();
   });
 
   it('reuses the bundle cache when denseExternals is toggled (same output name)', async () => {

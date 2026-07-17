@@ -152,6 +152,7 @@ function makeConfig(overrides: Partial<NormalizedFederationConfig> = {}): Normal
       denseChunking: false,
       denseExternals: false,
       integrityHashes: false,
+      synthesizeCjsExports: true,
     },
     ...overrides,
   };

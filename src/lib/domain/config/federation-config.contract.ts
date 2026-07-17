@@ -23,6 +23,7 @@ export interface FederationConfig {
     denseChunking?: boolean;
     denseExternals?: boolean;
     integrityHashes?: boolean;
+    synthesizeCjsExports?: boolean;
   };
 }
 
@@ -42,5 +43,6 @@ export interface NormalizedFederationConfig {
     denseChunking: boolean;
     denseExternals: boolean;
     integrityHashes: boolean;
+    synthesizeCjsExports: boolean;
   };
 }
