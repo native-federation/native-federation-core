@@ -49,7 +49,7 @@ importers:
         specifier: ^29.0.0
         version: 29.1.1
       knip:
-        specifier: ^6.20.0
+        specifier: ^6.26.0
         version: 6.26.0
       prettier:
         specifier: ^3.9.4
