@@ -1,6 +1,6 @@
 import { getProjectData as sheriffGetProjectData, type ProjectData } from '@softarc/sheriff-core';
 import { cwd } from 'process';
-import { sharedPackageJsonRepository, getPackageInfo } from '../utils/package/package-info.js';
+import { sharedPackageJsonRepository, tryGetPackageInfo } from '../utils/package/package-info.js';
 import { type PackageJsonRepository } from '../domain/utils/package-json.contract.js';
 import { getExternalImportsCore } from './get-external-imports.js';
 import { nodeIo } from '../utils/io/node-io-adapter.js';
@@ -98,7 +98,7 @@ function addTransientDeps(
       continue;
     }
 
-    const pInfo = getPackageInfo(dep, workspaceRoot, deps.repo);
+    const pInfo = tryGetPackageInfo(dep, workspaceRoot, deps.repo);
 
     if (!pInfo) {
       continue;

@@ -18,7 +18,7 @@ export type {
 } from '../../domain/utils/package-json.contract.js';
 export { isESMExport } from './esm-detection.js';
 
-export function getPackageInfo(
+export function tryGetPackageInfo(
   packageName: string,
   workspaceRoot: string,
   repo: PackageJsonRepository = sharedPackageJsonRepository
@@ -32,8 +32,29 @@ export function getPackageInfo(
     }
   }
 
-  logger.warn('No meta data found for shared lib ' + packageName);
   return null;
+}
+
+/**
+ * Resolve a package that is expected to be resolvable, warning once if it is not.
+ * Only use this where a failure is genuinely actionable, i.e. for packages the user
+ * asked to share.
+ */
+export function getPackageInfo(
+  packageName: string,
+  workspaceRoot: string,
+  repo: PackageJsonRepository = sharedPackageJsonRepository
+): PackageInfo | null {
+  const info = tryGetPackageInfo(packageName, workspaceRoot, repo);
+
+  if (!info) {
+    logger.warn('No meta data found for shared lib ' + packageName);
+    logger.warn(
+      "If you don't need this package, skip it in your federation.config.js or consider moving it into depDependencies in your package.json"
+    );
+  }
+
+  return info;
 }
 
 export function getVersionMaps(
