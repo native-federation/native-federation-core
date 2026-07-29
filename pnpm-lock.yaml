@@ -37,10 +37,10 @@ importers:
         specifier: ^4.0.0
         version: 4.1.10(vitest@4.1.10)
       eslint:
-        specifier: ^10.4.1
+        specifier: ^10.7.0
         version: 10.7.0(jiti@2.7.0)
       globals:
-        specifier: ^17.3.0
+        specifier: ^17.7.0
         version: 17.7.0
       jiti:
         specifier: ^2.6.1
@@ -52,7 +52,7 @@ importers:
         specifier: ^6.26.0
         version: 6.26.0
       prettier:
-        specifier: ^3.9.4
+        specifier: ^3.9.5
         version: 3.9.5
       tslib:
         specifier: ^2.3.0
@@ -61,7 +61,7 @@ importers:
         specifier: ~6.0.0
         version: 6.0.3
       typescript-eslint:
-        specifier: ^8.61.0
+        specifier: ^8.64.0
         version: 8.64.0(eslint@10.7.0(jiti@2.7.0))(typescript@6.0.3)
       vite:
         specifier: ^8.1.4
