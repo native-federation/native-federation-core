@@ -4,7 +4,12 @@ import { sharedPackageJsonRepository, getPackageInfo } from '../utils/package/pa
 import { type PackageJsonRepository } from '../domain/utils/package-json.contract.js';
 import { getExternalImportsCore } from './get-external-imports.js';
 import { nodeIo } from '../utils/io/node-io-adapter.js';
-import { type FileReaderPort } from '../domain/utils/io-port.contract.js';
+import {
+  type FileReaderPort,
+  type FileWriterPort,
+  type HashPort,
+} from '../domain/utils/io-port.contract.js';
+import { getDefaultCachePath } from '../core/cache/cache-persistence.js';
 import { type PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { type UsedDependencies } from '../domain/utils/used-dependencies.contract.js';
 import { type ExposeEntry } from '../domain/config/federation-config.contract.js';
@@ -18,7 +23,7 @@ type GetProjectData = (
 ) => ProjectData;
 
 export interface UsedDependenciesDeps {
-  io: FileReaderPort;
+  io: FileReaderPort & FileWriterPort & HashPort;
   repo: PackageJsonRepository;
   getProjectData: GetProjectData;
 }
@@ -82,14 +87,74 @@ export function getUsedDependenciesFactoryCore(
   };
 }
 
+const TRANSIENT_DEPS_CACHE_FILE = 'used-transient-deps.meta.json';
+
+const transientDepsCacheFile = (workspaceRoot: string) =>
+  path.join(getDefaultCachePath(workspaceRoot), TRANSIENT_DEPS_CACHE_FILE);
+
+interface TransientDepsCacheEntry {
+  checksum: string;
+  /** Version of every package the previous expansion visited. */
+  versions: Record<string, string | null>;
+  result: string[];
+}
+
+/**
+ * Expanding the peer graph parses the entry point of every visited package,
+ * which dominates the cost of resolving used dependencies. The expansion is a
+ * pure function of the input package names and the contents of the visited
+ * packages, so it is cached across builds.
+ *
+ * Validation re-reads only the visited package versions — orders of magnitude
+ * cheaper than re-parsing their entry points — so a dependency upgrade still
+ * invalidates the entry. The cache lives under `node_modules/.cache`, so a
+ * reinstall drops it as well.
+ */
+function readCachedTransientDeps(
+  deps: UsedDependenciesDeps,
+  workspaceRoot: string,
+  checksum: string
+): Set<string> | undefined {
+  const file = transientDepsCacheFile(workspaceRoot);
+  if (!deps.io.exists(file)) {
+    return undefined;
+  }
+
+  let cached: TransientDepsCacheEntry;
+  try {
+    cached = JSON.parse(deps.io.readText(file)) as TransientDepsCacheEntry;
+  } catch {
+    return undefined;
+  }
+
+  if (cached.checksum !== checksum || !cached.result || !cached.versions) {
+    return undefined;
+  }
+
+  for (const [name, version] of Object.entries(cached.versions)) {
+    if ((getPackageInfo(name, workspaceRoot, deps.repo)?.version ?? null) !== version) {
+      return undefined;
+    }
+  }
+
+  return new Set(cached.result);
+}
+
 function addTransientDeps(
   packages: Set<string>,
   workspaceRoot: string,
   deps: UsedDependenciesDeps
 ) {
+  const checksum = deps.io.hash('sha256', [...packages].sort().join(':')).hex();
+  const cached = readCachedTransientDeps(deps, workspaceRoot, checksum);
+  if (cached) {
+    return cached;
+  }
+
   const packagesAndPeers = new Set<string>([...packages]);
   const discovered = new Set<string>(packagesAndPeers);
   const stack = [...packagesAndPeers];
+  const versions: Record<string, string | null> = {};
 
   while (stack.length > 0) {
     const dep = stack.pop();
@@ -104,6 +169,8 @@ function addTransientDeps(
       continue;
     }
 
+    versions[dep] = pInfo.version ?? null;
+
     const peerDeps = getExternalImportsCore(deps.io, pInfo.entryPoint);
 
     for (const peerDep of peerDeps) {
@@ -114,6 +181,16 @@ function addTransientDeps(
       }
     }
   }
+  try {
+    deps.io.mkdirp(getDefaultCachePath(workspaceRoot));
+    deps.io.writeText(
+      transientDepsCacheFile(workspaceRoot),
+      JSON.stringify({ checksum, versions, result: [...packagesAndPeers] })
+    );
+  } catch {
+    // A cache that cannot be written must never fail the build.
+  }
+
   return packagesAndPeers;
 }
 

@@ -6,7 +6,7 @@ import {
   matchMapping,
   type UsedDependenciesDeps,
 } from './get-used-dependencies.js';
-import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
+import { createMemoryIo, type MemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
 import { createPackageJsonRepository } from '../utils/io/package-json-repository.js';
 
 describe('getUsedDependenciesFactoryCore', () => {
@@ -43,6 +43,58 @@ describe('getUsedDependenciesFactoryCore', () => {
 
     expect(used.external).toContain('rxjs');
     expect(used.external).toContain('@angular/core');
+  });
+
+  it('caches the transient peer expansion and reuses it on the next run', () => {
+    const files = {
+      '/ws/node_modules/a/package.json': JSON.stringify({ name: 'a', version: '1.0.0', main: 'index.js' }),
+      '/ws/node_modules/a/index.js': "export * from 'b';",
+      '/ws/node_modules/b/package.json': JSON.stringify({ name: 'b', version: '1.0.0', main: 'index.js' }),
+      '/ws/node_modules/b/index.js': '',
+    };
+    const projectData = {
+      'src/comp.ts': { externalLibraries: ['a'], imports: [], unresolvedImports: [] },
+    } as unknown as ProjectData;
+
+    const first = makeDeps(projectData, files);
+    const used = getUsedDependenciesFactoryCore(first, '/ws')({ exposes: { './Comp': { file: 'src/comp.ts' } }, sharedMappings: {} });
+    expect([...used.external].sort()).toEqual(['a', 'b']);
+
+    // Second run against the SAME io: the entry file no longer re-exports 'b',
+    // so a cache miss could not discover it through the peer graph again.
+    (first.io as MemoryIo).setFile('/ws/node_modules/a/index.js', '');
+    const cachedRun = getUsedDependenciesFactoryCore(first, '/ws')({ exposes: { './Comp': { file: 'src/comp.ts' } }, sharedMappings: {} });
+    expect([...cachedRun.external].sort()).toEqual(['a', 'b']);
+  });
+
+  it('invalidates the cached expansion when a visited package version changes', () => {
+    const files = {
+      '/ws/node_modules/a/package.json': JSON.stringify({ name: 'a', version: '1.0.0', main: 'index.js' }),
+      '/ws/node_modules/a/index.js': "export * from 'b';",
+      '/ws/node_modules/b/package.json': JSON.stringify({ name: 'b', version: '1.0.0', main: 'index.js' }),
+      '/ws/node_modules/b/index.js': '',
+    };
+    const projectData = {
+      'src/comp.ts': { externalLibraries: ['a'], imports: [], unresolvedImports: [] },
+    } as unknown as ProjectData;
+
+    const deps = makeDeps(projectData, files);
+    expect([...getUsedDependenciesFactoryCore(deps, '/ws')({ exposes: { './Comp': { file: 'src/comp.ts' } }, sharedMappings: {} }).external].sort()).toEqual([
+      'a',
+      'b',
+    ]);
+
+    // Upgrading 'a' must drop the cache, so the new peer graph is discovered.
+    const io = deps.io as MemoryIo;
+    io.setFile('/ws/node_modules/a/package.json', JSON.stringify({ name: 'a', version: '2.0.0', main: 'index.js' }));
+    io.setFile('/ws/node_modules/a/index.js', "export * from 'c';");
+    io.setFile('/ws/node_modules/c/package.json', JSON.stringify({ name: 'c', version: '1.0.0', main: 'index.js' }));
+    io.setFile('/ws/node_modules/c/index.js', '');
+
+    expect([...getUsedDependenciesFactoryCore(deps, '/ws')({ exposes: { './Comp': { file: 'src/comp.ts' } }, sharedMappings: {} }).external].sort()).toEqual([
+      'a',
+      'c',
+    ]);
   });
 
   it('discovers transient peer deps through the injected repo + io', () => {
