@@ -1,12 +1,46 @@
 import { describe, expect, it } from 'vitest';
 import {
   captureWildcard,
+  isUnderAnyDir,
+  isUnderDir,
   matchesWildcard,
   parseWildcard,
   substituteWildcard,
   toGlobPattern,
   toPosix,
 } from './path-patterns.js';
+
+describe('isUnderDir', () => {
+  it('matches a file nested under the dir, and the dir itself', () => {
+    expect(isUnderDir('/dev/lib/src/a.ts', '/dev/lib')).toBe(true);
+    expect(isUnderDir('/dev/lib', '/dev/lib')).toBe(true);
+  });
+
+  it('does not match a sibling that merely shares a name prefix', () => {
+    expect(isUnderDir('/dev/lib-other/a.ts', '/dev/lib')).toBe(false);
+  });
+
+  // The regression this helper exists for: linkedSharedDirs and the file watcher both
+  // emit posix, so a caller comparing with a native `\` separator matched nothing on
+  // Windows and the npm-link rebuild trigger silently never fired.
+  it('matches regardless of which separator either side arrives with', () => {
+    expect(isUnderDir('C:/dev/lib/src/a.ts', 'C:/dev/lib')).toBe(true);
+    expect(isUnderDir('C:\\dev\\lib\\src\\a.ts', 'C:/dev/lib')).toBe(true);
+    expect(isUnderDir('C:/dev/lib/src/a.ts', 'C:\\dev\\lib')).toBe(true);
+  });
+
+  it('tolerates a trailing slash on the dir', () => {
+    expect(isUnderDir('/dev/lib/src/a.ts', '/dev/lib/')).toBe(true);
+  });
+});
+
+describe('isUnderAnyDir', () => {
+  it('is true when any dir contains the file, false for none and for an empty list', () => {
+    expect(isUnderAnyDir('/dev/b/x.ts', ['/dev/a', '/dev/b'])).toBe(true);
+    expect(isUnderAnyDir('/dev/c/x.ts', ['/dev/a', '/dev/b'])).toBe(false);
+    expect(isUnderAnyDir('/dev/a/x.ts', [])).toBe(false);
+  });
+});
 
 describe('toPosix', () => {
   it('converts backslashes to forward slashes', () => {

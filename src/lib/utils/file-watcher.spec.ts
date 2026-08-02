@@ -16,17 +16,32 @@ describe('createNfWatcherCore', () => {
     expect([...watcher.get()]).toEqual([`${dir.replace(/\\/g, '/')}/a.ts`]);
   });
 
-  it('invokes onChange instead of buffering when a handler is provided', () => {
+  // Both channels must fire: the angular-adapter build builder wakes its rebuild
+  // loop from onChange but reads *which* files changed from get()/clear().
+  it('buffers into dirtyPaths and invokes onChange when a handler is provided', () => {
     const file = path.resolve('/proj/file.ts');
     const io = createMemoryIo().setFile(file, '');
+    const posix = file.replace(/\\/g, '/');
     const onChange = vi.fn();
     const watcher = createNfWatcherCore(io, { onChange });
 
     watcher.addPaths(file);
     io.emit(file);
 
-    expect(onChange).toHaveBeenCalledWith(file.replace(/\\/g, '/'));
-    expect(watcher.get().size).toBe(0);
+    expect(onChange).toHaveBeenCalledWith(posix);
+    expect([...watcher.get()]).toEqual([posix]);
+  });
+
+  it('has already recorded the path by the time onChange runs', () => {
+    const file = path.resolve('/proj/file.ts');
+    const io = createMemoryIo().setFile(file, '');
+    const seen: string[][] = [];
+    const watcher = createNfWatcherCore(io, { onChange: () => seen.push([...watcher.get()]) });
+
+    watcher.addPaths(file);
+    io.emit(file);
+
+    expect(seen).toEqual([[file.replace(/\\/g, '/')]]);
   });
 
   it('does not register the same path twice', () => {

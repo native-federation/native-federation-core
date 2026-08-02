@@ -1,5 +1,19 @@
 export const toPosix = (p: string): string => p.replace(/\\/g, '/');
 
+/**
+ * True when `file` is `dir` itself or lives under it. Both sides are normalized, so a
+ * caller cannot splice in `path.sep` and get a predicate that is silently always-false
+ * on Windows -- `linkedSharedDirs` and the file watcher both emit posix paths.
+ */
+export function isUnderDir(file: string, dir: string): boolean {
+  const f = toPosix(file);
+  const d = toPosix(dir).replace(/\/+$/, '');
+  return f === d || f.startsWith(d + '/');
+}
+
+export const isUnderAnyDir = (file: string, dirs: readonly string[]): boolean =>
+  dirs.some(d => isUnderDir(file, d));
+
 export interface WildcardPattern {
   prefix: string;
   suffix: string;
