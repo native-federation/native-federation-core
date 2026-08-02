@@ -65,7 +65,8 @@ function flattenEntries(entries: SharedMappingEntry[]): {
   configs: SharedMappingConfigs;
 } {
   const patterns: string[] = [];
-  const configs: SharedMappingConfigs = {};
+  // Prototype-free: patterns are user strings, so `in` must not answer for 'toString' & co.
+  const configs: SharedMappingConfigs = Object.create(null);
 
   for (const entry of entries) {
     if (typeof entry === 'string') {

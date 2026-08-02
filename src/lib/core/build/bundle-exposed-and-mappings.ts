@@ -219,19 +219,23 @@ function toSharedMappingInfo(
     ? getMappingVersion(mappedPath, fedOptions.workspaceRoot)
     : '';
 
-  const mappingConfig = resolveMappingConfig(mappedImport, config.sharedMappingsConfig);
+  const mappingConfig = resolveMappingConfig(
+    mappedImport,
+    config.sharedMappingsConfig,
+    config.features.mappingVersion
+  );
   // An explicit version drives requiredVersion too, the same way the detected one does.
-  const version = mappingConfig?.version ?? mappingVersion;
+  const version = mappingConfig.version ?? mappingVersion;
 
   return {
     packageName: mappedImport,
     outFileName,
-    requiredVersion: mappingConfig?.requiredVersion ?? (version.length > 0 ? '~' + version : ''),
-    singleton: mappingConfig?.singleton ?? true,
-    strictVersion: mappingConfig?.strictVersion ?? config.features.mappingVersion,
+    requiredVersion: mappingConfig.requiredVersion ?? (version.length > 0 ? '~' + version : ''),
+    singleton: mappingConfig.singleton,
+    strictVersion: mappingConfig.strictVersion,
     version,
-    ...(mappingConfig?.shareScope && { shareScope: mappingConfig.shareScope }),
-    ...(mappingConfig?.pool && { pool: mappingConfig.pool }),
+    ...(mappingConfig.shareScope && { shareScope: mappingConfig.shareScope }),
+    ...(mappingConfig.pool && { pool: mappingConfig.pool }),
     dev: !fedOptions.dev
       ? undefined
       : {

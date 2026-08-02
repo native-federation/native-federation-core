@@ -2,10 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { ProjectData } from '@softarc/sheriff-core';
 import {
   getUsedDependenciesFactoryCore,
-  isSharedMapping,
-  matchMapping,
   type UsedDependenciesDeps,
 } from './get-used-dependencies.js';
+import { isSharedMapping, matchMapping } from './match-mapping.js';
 import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
 import { createPackageJsonRepository } from '../utils/io/package-json-repository.js';
 

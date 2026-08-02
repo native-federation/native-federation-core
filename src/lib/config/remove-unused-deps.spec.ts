@@ -103,7 +103,7 @@ describe('removeUnusedDeps', () => {
           '@org/ui': {
             singleton: true,
             strictVersion: true,
-            includeSecondaries: { keepAll: true },
+            includeSecondaries: true,
           },
         },
       }
@@ -142,7 +142,7 @@ describe('removeUnusedDeps', () => {
           '@org/ui': {
             singleton: true,
             strictVersion: true,
-            includeSecondaries: { keepAll: true },
+            includeSecondaries: true,
           },
         },
       }
@@ -171,7 +171,8 @@ describe('removeUnusedDeps', () => {
           '@org/ui/*': {
             singleton: true,
             strictVersion: true,
-            includeSecondaries: { keepAll: true, resolveGlob: true },
+            includeSecondaries: true,
+            resolveGlob: true,
           },
         },
       }
@@ -180,6 +181,41 @@ describe('removeUnusedDeps', () => {
     expect(run(used, config, io).sharedMappings).toEqual({
       [path.join(WS, 'libs/ui/button/index.ts')]: '@org/ui/button',
       [path.join(WS, 'libs/ui/card/index.ts')]: '@org/ui/card',
+    });
+  });
+
+  // The two sources are unioned, so reachability still contributes what expansion refused. That
+  // is the mechanic, not an endorsement: a non-barrel specifier like this one is rejected later
+  // by assertBarrelMappings — see normalize-options.spec.ts.
+  it('lets reachability add a deep import that expansion refused', () => {
+    const io = createMemoryIo()
+      .setFile(path.join(WS, 'libs/ui/button/index.ts'), '')
+      .setFile(path.join(WS, 'libs/ui/button/button.component.ts'), '');
+
+    const used: UsedDependencies = {
+      external: new Set(),
+      internal: {
+        [path.join(WS, 'libs/ui/button/button.component.ts')]: '@org/ui/button/button.component',
+      },
+    };
+    const config = makeConfig(
+      {},
+      {
+        sharedMappings: { [path.join(WS, 'libs/ui/*')]: '@org/ui/*' },
+        sharedMappingsConfig: {
+          '@org/ui/*': {
+            singleton: true,
+            strictVersion: true,
+            includeSecondaries: true,
+            resolveGlob: true,
+          },
+        },
+      }
+    );
+
+    expect(run(used, config, io).sharedMappings).toEqual({
+      [path.join(WS, 'libs/ui/button/index.ts')]: '@org/ui/button',
+      [path.join(WS, 'libs/ui/button/button.component.ts')]: '@org/ui/button/button.component',
     });
   });
 
@@ -194,7 +230,8 @@ describe('removeUnusedDeps', () => {
           '@org/ui/*': {
             singleton: true,
             strictVersion: true,
-            includeSecondaries: { keepAll: true, resolveGlob: true },
+            includeSecondaries: true,
+            resolveGlob: true,
           },
         },
       }
@@ -216,7 +253,7 @@ describe('removeUnusedDeps', () => {
           '@org/ui/*': {
             singleton: true,
             strictVersion: true,
-            includeSecondaries: { keepAll: true },
+            includeSecondaries: true,
           },
         },
       }
@@ -228,11 +265,11 @@ describe('removeUnusedDeps', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('@org/ui/*'));
   });
 
-  // A bare `true` is a statement about secondary entry points, which a mapping does not have.
-  it('ignores includeSecondaries: true on a mapping', () => {
+  // Both halves read one normalized flag, so a mapping opts out exactly like a shared external.
+  it('reads the same includeSecondaries flag for mappings and shared externals', () => {
     const used: UsedDependencies = { external: new Set(), internal: {} };
     const config = makeConfig(
-      {},
+      { lib: external({ includeSecondaries: true }) },
       {
         sharedMappings: { '/ws/libs/ui/index.ts': '@org/ui' },
         sharedMappingsConfig: {
@@ -241,7 +278,10 @@ describe('removeUnusedDeps', () => {
       }
     );
 
-    expect(run(used, config).sharedMappings).toEqual({});
+    const result = run(used, config);
+
+    expect(Object.keys(result.shared)).toEqual(['lib']);
+    expect(result.sharedMappings).toEqual({ '/ws/libs/ui/index.ts': '@org/ui' });
   });
 
   // The skip list only ever saw the raw pattern, so expanded imports must be re-checked.
@@ -260,7 +300,8 @@ describe('removeUnusedDeps', () => {
           '@org/ui/*': {
             singleton: true,
             strictVersion: true,
-            includeSecondaries: { keepAll: true, resolveGlob: true },
+            includeSecondaries: true,
+            resolveGlob: true,
           },
         },
       }

@@ -245,7 +245,7 @@ describe('withNativeFederation', () => {
       requiredVersion: '^2.0.0',
       shareScope: 'custom',
       pool: 'p1',
-      includeSecondaries: { keepAll: true },
+      includeSecondaries: true,
     });
   });
 

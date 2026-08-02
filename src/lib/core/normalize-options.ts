@@ -9,6 +9,7 @@ import { nodeIo } from '../utils/io/node-io-adapter.js';
 import type { FileReaderPort, GlobPort } from '../domain/utils/io-port.contract.js';
 import { removeUnusedDeps } from '../config/remove-unused-deps.js';
 import { expandOrDropWildcards } from '../config/expand-mappings.js';
+import { assertBarrelMappings } from '../config/validate-mappings.js';
 import { type FederationCache } from '../../domain.js';
 import { createFederationCache } from './cache/federation-cache.js';
 import { getDefaultCachePath } from './cache/cache-persistence.js';
@@ -110,6 +111,9 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
       workspaceRoot: options.workspaceRoot,
     });
   }
+
+  // Whatever survived either branch is what remoteEntry.json will advertise.
+  assertBarrelMappings(config.sharedMappings);
 
   return { config, options: normalizedOptions };
 }

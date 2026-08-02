@@ -2,7 +2,6 @@ import type { PreparedSkipList, SkipList } from './skip-list.contract.js';
 import type { PathToImport } from '../utils/mapped-path.contract.js';
 import type {
   ExternalConfig,
-  IncludeSecondariesOptions,
   NormalizedSharedExternalsConfig,
   SharedExternalsConfig,
 } from './external-config.contract.js';
@@ -19,6 +18,10 @@ export type SharedMappingConfigs = Record<string, ExternalConfig>;
  * single `mapping-or-exposed` bundle, so `build`/`platform`/`chunks`/`packageInfo`
  * have nothing to select. `requiredVersion` and `version` stay optional because their
  * defaults are read from the mapped lib's package.json at build time.
+ *
+ * `includeSecondaries` collapses to a boolean exactly as it does for a shared external:
+ * it means "exempt from `ignoreUnusedDeps` pruning". `resolveGlob` is lifted out of it
+ * because a mapping has no secondary entry points for it to apply to.
  */
 export interface NormalizedMappingConfig {
   singleton: boolean;
@@ -27,7 +30,8 @@ export interface NormalizedMappingConfig {
   version?: string;
   shareScope?: string;
   pool?: string;
-  includeSecondaries?: IncludeSecondariesOptions;
+  includeSecondaries?: boolean;
+  resolveGlob?: boolean;
 }
 
 export type NormalizedSharedMappingConfigs = Record<string, NormalizedMappingConfig>;

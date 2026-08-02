@@ -75,31 +75,42 @@ describe('mappingsFromWorkspace', () => {
 describe('resolveMappingConfig', () => {
   const cfg = (pool: string) => ({ singleton: true, strictVersion: true, pool });
 
-  it('returns undefined when nothing matches', () => {
-    expect(resolveMappingConfig('@org/ui', { '@other/*': cfg('a') })).toBeUndefined();
+  // Falls back to the defaults rather than undefined, so callers never re-state them.
+  it('returns the defaults when nothing matches', () => {
+    expect(resolveMappingConfig('@org/ui', { '@other/*': cfg('a') }, true)).toEqual({
+      singleton: true,
+      strictVersion: true,
+    });
+  });
+
+  it('tracks the mappingVersion flag in the fallback defaults', () => {
+    expect(resolveMappingConfig('@org/ui', {}, false)).toEqual({
+      singleton: true,
+      strictVersion: false,
+    });
   });
 
   it('matches an exact pattern', () => {
-    expect(resolveMappingConfig('@org/ui', { '@org/ui': cfg('a') })).toEqual(cfg('a'));
+    expect(resolveMappingConfig('@org/ui', { '@org/ui': cfg('a') }, true)).toEqual(cfg('a'));
   });
 
   // The build sees resolved imports; the table is keyed by the pattern the user wrote.
   it('matches a resolved import against the wildcard pattern it came from', () => {
-    expect(resolveMappingConfig('@org/ui/button', { '@org/ui/*': cfg('a') })).toEqual(cfg('a'));
+    expect(resolveMappingConfig('@org/ui/button', { '@org/ui/*': cfg('a') }, true)).toEqual(cfg('a'));
   });
 
   it("treats '*' as a catch-all", () => {
-    expect(resolveMappingConfig('@anything/at/all', { '*': cfg('a') })).toEqual(cfg('a'));
+    expect(resolveMappingConfig('@anything/at/all', { '*': cfg('a') }, true)).toEqual(cfg('a'));
   });
 
   it('lets an exact pattern declared first beat a later wildcard', () => {
     const configs = { '@org/ui': cfg('exact'), '@org/*': cfg('wild') };
-    expect(resolveMappingConfig('@org/ui', configs)).toEqual(cfg('exact'));
+    expect(resolveMappingConfig('@org/ui', configs, true)).toEqual(cfg('exact'));
   });
 
   // Declaration order is the rule, not specificity — the builder relies on emitting patches first.
   it('lets a wildcard declared first beat a later exact pattern', () => {
     const configs = { '@org/*': cfg('wild'), '@org/ui': cfg('exact') };
-    expect(resolveMappingConfig('@org/ui', configs)).toEqual(cfg('wild'));
+    expect(resolveMappingConfig('@org/ui', configs, true)).toEqual(cfg('wild'));
   });
 });

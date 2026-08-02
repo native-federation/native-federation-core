@@ -5,8 +5,6 @@ import { resolveMappingConfig, withoutSkippedMappings } from './mapping-utils.js
 import {
   expandWildcardMapping,
   isWildcardMapping,
-  keepsAll,
-  resolvesGlob,
   type MappingExpansionContext,
 } from './expand-mappings.js';
 import { logger } from '../utils/logger.js';
@@ -39,11 +37,12 @@ function keptMappings(
   const kept: PathToImport = {};
 
   for (const [mappedPath, mappedImport] of Object.entries(config.sharedMappings)) {
-    const includeSecondaries = resolveMappingConfig(
+    const mappingConfig = resolveMappingConfig(
       mappedImport,
-      config.sharedMappingsConfig
-    )?.includeSecondaries;
-    if (!keepsAll(includeSecondaries)) continue;
+      config.sharedMappingsConfig,
+      config.features.mappingVersion
+    );
+    if (!mappingConfig.includeSecondaries) continue;
 
     if (!isWildcardMapping(mappedPath, mappedImport)) {
       kept[mappedPath] = mappedImport;
@@ -52,7 +51,7 @@ function keptMappings(
 
     // A wildcard entry is a pattern, not an entry point: without expansion the bundler
     // would be handed a path containing '*'. Only reachability can resolve it otherwise.
-    if (!resolvesGlob(includeSecondaries)) {
+    if (!mappingConfig.resolveGlob) {
       logger.warn(
         `Mapping '${mappedImport}' opts out of pruning, but wildcard mappings need 'includeSecondaries: { resolveGlob: true }' to be expanded, and will be pruned.`
       );

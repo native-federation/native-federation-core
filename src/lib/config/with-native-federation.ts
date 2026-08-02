@@ -9,7 +9,7 @@ import type {
   SharedMappingConfigs,
 } from '../domain/config/federation-config.contract.js';
 import { isInSkipList, prepareSkipList } from './default-skip-list.js';
-import { withoutSkippedMappings } from './mapping-utils.js';
+import { normalizeMappingConfig, withoutSkippedMappings } from './mapping-utils.js';
 import { type PreparedSkipList } from '../domain/config/skip-list.contract.js';
 import type {
   NormalizedExternalConfig,
@@ -115,24 +115,21 @@ function normalizeShared(
   return result;
 }
 
-// Only singleton/strictVersion can be settled here; requiredVersion and version are read
-// from the mapped lib's package.json at build time, so they stay undefined when unset.
+const IGNORED_MAPPING_PROPS = ['build', 'platform', 'chunks', 'packageInfo'] as const;
+
 function normalizeMappingConfigs(
   configs: SharedMappingConfigs,
   mappingVersion: boolean
 ): NormalizedSharedMappingConfigs {
   return Object.entries(configs).reduce((acc, [pattern, cfg]) => {
-    acc[pattern] = {
-      singleton: cfg.singleton ?? true,
-      strictVersion: cfg.strictVersion ?? mappingVersion,
-      ...(cfg.requiredVersion !== undefined && { requiredVersion: cfg.requiredVersion }),
-      ...(cfg.version !== undefined && { version: cfg.version }),
-      ...(cfg.shareScope && { shareScope: cfg.shareScope }),
-      ...(cfg.pool && { pool: cfg.pool }),
-      ...(cfg.includeSecondaries !== undefined && {
-        includeSecondaries: cfg.includeSecondaries,
-      }),
-    };
+    const ignored = IGNORED_MAPPING_PROPS.filter(prop => cfg[prop] !== undefined);
+    if (ignored.length > 0) {
+      logger.warn(
+        `Mapping '${pattern}' sets ${ignored.join(', ')}, which mapped paths do not honour (they all share one bundle). Ignored.`
+      );
+    }
+
+    acc[pattern] = normalizeMappingConfig(cfg, mappingVersion);
     return acc;
   }, {} as NormalizedSharedMappingConfigs);
 }
