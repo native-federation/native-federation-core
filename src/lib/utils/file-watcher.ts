@@ -20,8 +20,9 @@ export function createNfWatcherCore(
   const dirtyPaths = new Set<string>();
 
   const deliver = (path: string) => {
+    // Record first: a listener may read get() synchronously and must see itself.
+    dirtyPaths.add(path);
     if (onChange) onChange(path);
-    else dirtyPaths.add(path);
   };
 
   // Coalesce bursts (ng-packagr emits several writes per rebuild) into one flush.

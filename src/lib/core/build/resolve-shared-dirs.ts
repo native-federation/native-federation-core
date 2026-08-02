@@ -5,7 +5,7 @@ import type { FileReaderPort } from '../../domain/utils/io-port.contract.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import { sharedPackageJsonRepository } from '../../utils/package/package-info.js';
-import { toPosix } from '../../utils/path-patterns.js';
+import { isUnderDir, toPosix } from '../../utils/path-patterns.js';
 
 interface SharedEntry {
   key: string;
@@ -108,8 +108,7 @@ export function affectedSharedKeys(
   const realFiles = modifiedFiles.map(f => toPosix(io.realpath(f)));
 
   for (const [key, dir] of dirs) {
-    const prefix = dir.endsWith('/') ? dir : dir + '/';
-    if (realFiles.some(f => f === dir || f.startsWith(prefix))) affected.add(key);
+    if (realFiles.some(f => isUnderDir(f, dir))) affected.add(key);
   }
   return affected;
 }
