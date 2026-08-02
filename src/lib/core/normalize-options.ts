@@ -6,14 +6,15 @@ import type {
 import * as path from 'path';
 import { pathToFileURL } from 'url';
 import { nodeIo } from '../utils/io/node-io-adapter.js';
-import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
+import type { FileReaderPort, GlobPort } from '../domain/utils/io-port.contract.js';
 import { removeUnusedDeps } from '../config/remove-unused-deps.js';
+import { expandOrDropWildcards } from '../config/expand-mappings.js';
+import { assertBarrelMappings } from '../config/validate-mappings.js';
 import { type FederationCache } from '../../domain.js';
 import { createFederationCache } from './cache/federation-cache.js';
 import { getDefaultCachePath } from './cache/cache-persistence.js';
 import { getUsedDependenciesFactory } from '../config/get-used-dependencies.js';
 import { logger } from '../utils/logger.js';
-import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { normalizePackageName } from '../utils/normalize.js';
 
 type ConfigLoader = (fullConfigPath: string) => Promise<NormalizedFederationConfig>;
@@ -22,7 +23,7 @@ const defaultConfigLoader: ConfigLoader = async fullConfigPath =>
   (await import(pathToFileURL(fullConfigPath).href))?.default;
 
 interface NormalizeFederationDeps {
-  io: FileReaderPort;
+  io: FileReaderPort & GlobPort;
   loadConfig: ConfigLoader;
   usedDependenciesFactory?: typeof getUsedDependenciesFactory;
 }
@@ -101,22 +102,23 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
       options.workspaceRoot,
       options.entryPoints
     );
-    config = removeUnusedDeps(getUsedDeps(config), config);
+    config = removeUnusedDeps(getUsedDeps(config), config, {
+      io: deps.io,
+      workspaceRoot: options.workspaceRoot,
+    });
     logger.info('Removed unused dependencies.');
     logger.debug(
       'This can be disabled per dependency/external using the "includeSecondaries: {keepAll: true}" property. Or in general by disabling the "ignoreUnusedDeps" feature. '
     );
   } else {
-    const withWildcard = Object.keys(config.sharedMappings).some(m => m.includes('*'));
-    if (withWildcard) {
-      logger.warn(
-        'Sharing mapped paths with wildcards (*) is only supported with ignoreUnusedDeps feature.'
-      );
-      config.sharedMappings = Object.entries(config.sharedMappings)
-        .filter(([_path]) => !_path.includes('*'))
-        .reduce((acc, [_path, _import]) => ({ ...acc, [_path]: _import }), {} as PathToImport);
-    }
+    config.sharedMappings = expandOrDropWildcards(config, {
+      io: deps.io,
+      workspaceRoot: options.workspaceRoot,
+    });
   }
+
+  // Whatever survived either branch is what remoteEntry.json will advertise.
+  assertBarrelMappings(config.sharedMappings);
 
   return { config, options: normalizedOptions };
 }

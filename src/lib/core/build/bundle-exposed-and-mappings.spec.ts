@@ -69,9 +69,7 @@ describe('getMappingVersion', () => {
     const entry = write('libs/shared/src/index.ts', '');
 
     expect(getMappingVersion(entry, tmpRoot)).toBe('');
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Failed to parse')
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to parse'));
   });
 
   it('returns "" when no package.json exists at or above the entry within the workspace', () => {
@@ -136,13 +134,16 @@ describe('getMappingVersionCore', () => {
   });
 });
 
-function makeConfig(overrides: Partial<NormalizedFederationConfig> = {}): NormalizedFederationConfig {
+function makeConfig(
+  overrides: Partial<NormalizedFederationConfig> = {}
+): NormalizedFederationConfig {
   return {
     $type: 'classic',
     name: 'app',
     exposes: {},
     shared: {},
     sharedMappings: {},
+    sharedMappingsConfig: {},
     skip: prepareSkipList([]),
     chunks: false,
     externals: [],
@@ -183,12 +184,9 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     });
     const adapter = createFakeBuildAdapter();
 
-    const result = await bundleExposedAndMappingsCore(
-      { adapter },
-      config,
-      makeFedOptions(),
-      ['rxjs']
-    );
+    const result = await bundleExposedAndMappingsCore({ adapter }, config, makeFedOptions(), [
+      'rxjs',
+    ]);
 
     expect(result.exposes).toEqual([
       expect.objectContaining({ key: './Comp', outFileName: 'Comp.js' }),
@@ -200,12 +198,110 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     expect(adapter.calls.build).toHaveLength(1);
   });
 
+  // mappingVersion is off in makeConfig, so this is the un-annotated baseline: no version
+  // is detected and requiredVersion stays empty.
+  it('emits the pre-existing defaults for an un-annotated mapping', async () => {
+    const config = makeConfig({ sharedMappings: { './libs/foo': 'foo' } });
+
+    const result = await bundleExposedAndMappingsCore(
+      { adapter: createFakeBuildAdapter() },
+      config,
+      makeFedOptions({ dev: false }),
+      []
+    );
+
+    expect(result.mappings[0]).toEqual({
+      packageName: 'foo',
+      outFileName: 'foo.js',
+      requiredVersion: '',
+      singleton: true,
+      strictVersion: false,
+      version: '',
+      dev: undefined,
+    });
+  });
+
+  it('applies a configured mapping override', async () => {
+    const config = makeConfig({
+      sharedMappings: { './libs/foo': 'foo' },
+      sharedMappingsConfig: {
+        foo: {
+          singleton: false,
+          strictVersion: true,
+          version: '2.1.0',
+          shareScope: 'custom',
+          pool: 'p1',
+        },
+      },
+    });
+
+    const result = await bundleExposedAndMappingsCore(
+      { adapter: createFakeBuildAdapter() },
+      config,
+      makeFedOptions({ dev: false }),
+      []
+    );
+
+    expect(result.mappings[0]).toMatchObject({
+      packageName: 'foo',
+      singleton: false,
+      strictVersion: true,
+      version: '2.1.0',
+      // derived from the explicit version, since requiredVersion was not set
+      requiredVersion: '~2.1.0',
+      shareScope: 'custom',
+      pool: 'p1',
+    });
+  });
+
+  it('lets an explicit requiredVersion win over the derived one', async () => {
+    const config = makeConfig({
+      sharedMappings: { './libs/foo': 'foo' },
+      sharedMappingsConfig: {
+        foo: { singleton: true, strictVersion: true, version: '2.1.0', requiredVersion: '^2.0.0' },
+      },
+    });
+
+    const result = await bundleExposedAndMappingsCore(
+      { adapter: createFakeBuildAdapter() },
+      config,
+      makeFedOptions({ dev: false }),
+      []
+    );
+
+    expect(result.mappings[0]).toMatchObject({ requiredVersion: '^2.0.0', version: '2.1.0' });
+  });
+
+  // The config table is keyed by the pattern the user wrote, not the resolved import.
+  it('matches a resolved mapping import against its wildcard pattern', async () => {
+    const config = makeConfig({
+      sharedMappings: { './libs/ui/button': '@org/ui/button' },
+      sharedMappingsConfig: { '@org/ui/*': { singleton: false, strictVersion: false } },
+    });
+
+    const result = await bundleExposedAndMappingsCore(
+      { adapter: createFakeBuildAdapter() },
+      config,
+      makeFedOptions({ dev: false }),
+      []
+    );
+
+    expect(result.mappings[0]).toMatchObject({
+      packageName: '@org/ui/button',
+      singleton: false,
+    });
+  });
+
   it('skips setup and forwards modifiedFiles on a rebuild', async () => {
     const adapter = createFakeBuildAdapter({ results: [] });
 
-    await bundleExposedAndMappingsCore({ adapter }, makeConfig(), makeFedOptions(), [], [
-      '/ws/src/x.ts',
-    ]);
+    await bundleExposedAndMappingsCore(
+      { adapter },
+      makeConfig(),
+      makeFedOptions(),
+      [],
+      ['/ws/src/x.ts']
+    );
 
     expect(adapter.calls.setup).toHaveLength(0);
     expect(adapter.calls.build[0]!.modifiedFiles).toEqual(['/ws/src/x.ts']);

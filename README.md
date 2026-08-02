@@ -437,10 +437,80 @@ module.exports = withNativeFederation({
 Notes:
 
 - `sharedMappings` is optional. If you omit it, all mapped paths are shared.
+- Entries are matched as patterns, so `'@my-org/*'` selects every mapped path under that scope.
 - You can use wildcard suffixes (for example, `@my-org/ui/*`) to include multiple mapped paths.
-- `skip` still applies and can be used to exclude mapped paths even if they were selected via `sharedMappings`.
+- `skip` still applies and can be used to exclude mapped paths even if they were selected via `sharedMappings`. For wildcard mappings it is matched against each resolved import (`@my-org/ui/button`), not the pattern.
 - Mapped paths are read from the workspace root tsconfig file: `tsconfig.base.json` if present, otherwise `tsconfig.json`.
 - The workspace root is detected by searching upward from the current working directory until a `package.json` is found.
+
+#### Configuring shared mappings
+
+A mapped path can carry the same kind of metadata as a shared npm package. Pair a list of patterns with a config object:
+
+```js
+module.exports = withNativeFederation({
+  sharedMappings: ['@my-org/auth-lib', [['@my-org/ui/*'], { singleton: false }]],
+});
+```
+
+Plain strings and annotated pairs can be mixed freely. When several entries match the same mapped path, **the first one wins**, so put the specific entries before the general ones.
+
+The honoured properties are `singleton`, `strictVersion`, `requiredVersion`, `version`, `shareScope`, `pool` and `includeSecondaries`. Anything omitted keeps its current default: `singleton: true`, `strictVersion` following the `mappingVersion` flag, and the version read from the mapped library's nearest `package.json`. Setting `version` explicitly also drives `requiredVersion` unless you set that too.
+
+`build`, `platform`, `chunks` and `packageInfo` are **not** honoured for mapped paths — every mapping is built into the same bundle, so there is nothing for them to select.
+
+For anything beyond a couple of entries, `mappingsFromWorkspace` is easier to read. It produces exactly the array form above:
+
+```js
+import { withNativeFederation, mappingsFromWorkspace } from '@softarc/native-federation/config';
+
+module.exports = withNativeFederation({
+  sharedMappings: mappingsFromWorkspace({ singleton: true, strictVersion: true })
+    .filter(['@my-org/ui/*', '@my-org/auth-lib'])
+    .patch(['@my-org/ui/*'], { singleton: false })
+    .get(),
+});
+```
+
+- Omit `.filter()` to select every mapped path — the same default as omitting `sharedMappings`.
+- `.patch()` annotates a subset; it never widens the selection, so patching a pattern that `.filter()` excluded is ignored with a warning.
+
+#### Keeping mappings that nothing imports
+
+With the `ignoreUnusedDeps` feature on (the default), mapped paths are pruned to those actually reachable from your entry points. A host that exposes little of its own but is expected to supply libraries to its remotes can opt out per mapping, the same way `shared` packages do:
+
+```js
+module.exports = withNativeFederation({
+  sharedMappings: mappingsFromWorkspace({
+    includeSecondaries: { keepAll: true, resolveGlob: true },
+  }).get(),
+});
+```
+
+- `keepAll` keeps the mapping even when nothing imports it. This is read exactly as it is for a shared package, so a bare `includeSecondaries: true` opts out too.
+- `resolveGlob` is additionally required for **wildcard** mappings. A wildcard is a pattern rather than an entry point, and normally only the reachability scan turns it into concrete files; `resolveGlob` expands it against the filesystem instead. Without it, a wildcard mapping is dropped with a warning.
+
+An expanded wildcard is named by the same rule the reachability scan uses, so `libs/ui/*` matching `libs/ui/button/index.ts` is shared as `@my-org/ui/button`.
+
+Expansion only accepts **entry points**. A glob cannot tell a library's public surface from its internals, so a match whose specifier still contains a dot in its last segment — `@my-org/ui/button/button.component`, `.spec`, `.d` — is skipped rather than shared.
+
+That restriction is not cosmetic: **only barrel imports can be shared as a mapped path.** A mapped path is advertised under its import specifier and marked external, so the specifier has to be one a browser import map can resolve, and a dot in the last segment does not resolve (see [vitejs/vite#21036](https://github.com/vitejs/vite/issues/21036)).
+
+So the rule is simply *would this end up in `remoteEntry.json`?* If it would, a non-barrel specifier fails the build:
+
+```
+Invalid 'shared mappings' config. Only barrel imports can be shared as a sharedMapping:
+'@my-org/ui/button/button.component'.
+```
+
+If it would not, nothing is reported — there is no reason to fail a build over a path that was never going to be published:
+
+- **pruned away** by `ignoreUnusedDeps` — nothing imports it, so it is already gone.
+- **skipped by a wildcard expansion** — `resolveGlob` is a guess about your public surface, so it drops non-barrel matches rather than inventing a build error out of `*.service.ts` files nobody imports.
+
+What is left is the case worth stopping for: something genuinely imports `@my-org/ui/button/button.component`, so it is about to be published and would break at runtime. Import the barrel (`@my-org/ui/button`) and re-export from it. Note that with `ignoreUnusedDeps: false` nothing is pruned, so every mapped path is published and therefore checked.
+
+Note that a host providing libraries its remotes depend on couples the two: the remote can no longer run standalone. Letting each application share the entry points it imports and leaving the orchestrator to deduplicate at runtime is usually the better default.
 
 The `mappingVersion` feature flag controls whether mapped paths get a version. It is **enabled by default**: Native Federation reads the version from the mapped library's nearest `package.json` and shares it with strict versioning, just like a published library.
 
