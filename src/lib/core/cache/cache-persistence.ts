@@ -100,8 +100,12 @@ export const cacheEntryCore = (io: CachePort, pathToCache: string, fileName: str
 
       cachedResult.files.forEach(file => {
         const cachedFile = path.join(pathToCache, file);
-        const distFileName = path.join(fullOutputPath, file);
-        if (io.exists(cachedFile)) io.copyFile(cachedFile, distFileName);
+        if (!io.exists(cachedFile))
+          throw new Error(
+            `Cached artifact '${file}' recorded in '${metadataFile}' is missing. ` +
+              `Delete '${pathToCache}' and rebuild.`
+          );
+        io.copyFile(cachedFile, path.join(fullOutputPath, file));
       });
     },
     clear: () => {
