@@ -26,7 +26,7 @@ describe('withNativeFederation', () => {
   beforeEach(() => {
     shareAll.mockReturnValue({});
     findRootTsConfigJson.mockReturnValue('/ws/tsconfig.json');
-    getRawMappedPaths.mockReturnValue({});
+    getRawMappedPaths.mockReturnValue({ paths: {}, configs: {} });
   });
 
   afterEach(() => {
@@ -180,8 +180,11 @@ describe('withNativeFederation', () => {
 
   it('builds shared mappings from the resolved tsconfig, filtering the skip list', () => {
     getRawMappedPaths.mockReturnValue({
-      '/ws/libs/ui/index.ts': '@org/ui',
-      '/ws/libs/skip/index.ts': '@org/skip',
+      paths: {
+        '/ws/libs/ui/index.ts': '@org/ui',
+        '/ws/libs/skip/index.ts': '@org/skip',
+      },
+      configs: {},
     });
 
     const result = withNativeFederation({

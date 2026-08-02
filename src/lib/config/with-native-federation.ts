@@ -112,7 +112,7 @@ function normalizeShared(
 function removeSkippedMappings(config: FederationConfig, skipList: PreparedSkipList): PathToImport {
   const rootTsConfigPath = findRootTsConfigJson();
 
-  const paths = getRawMappedPaths(rootTsConfigPath, config.sharedMappings);
+  const { paths } = getRawMappedPaths(rootTsConfigPath, config.sharedMappings);
 
   return Object.entries(paths)
     .filter(([, _import]) => !isInSkipList(_import, skipList))
