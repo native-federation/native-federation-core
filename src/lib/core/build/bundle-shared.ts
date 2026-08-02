@@ -3,6 +3,7 @@ import type { NormalizedFederationConfig } from '../../domain/config/federation-
 import {
   sharedPackageJsonRepository,
   getPackageInfo,
+  installedVersions,
   type PackageInfo,
 } from '../../utils/package/package-info.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
@@ -98,13 +99,20 @@ export async function bundleSharedCore(
     deps.repo
   );
 
+  const resolvedVersions = installedVersions(Object.keys(sharedBundles), folder, deps.repo);
+  // A configured packageInfo short-circuits resolution below, so the key must follow that source.
+  for (const [key, cfg] of Object.entries(sharedBundles)) {
+    if (cfg.packageInfo?.version) resolvedVersions[key] = cfg.packageInfo.version;
+  }
+
   const checksum = getChecksumCore(
     deps.io,
     sharedBundles,
     fedOptions.dev ? '1' : '0',
     builderVersion,
     config.features.synthesizeCjsExports,
-    contentSignals
+    contentSignals,
+    resolvedVersions
   );
 
   const bundleCache = cacheEntryCore(

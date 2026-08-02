@@ -26,9 +26,18 @@ export const getChecksum = (
   dev: '1' | '0',
   builderVersion = '',
   synthesizeCjsExports = true,
-  contentSignals: Record<string, string> = {}
+  contentSignals: Record<string, string> = {},
+  resolvedVersions: Record<string, string> = {}
 ): string =>
-  getChecksumCore(nodeIo, shared, dev, builderVersion, synthesizeCjsExports, contentSignals);
+  getChecksumCore(
+    nodeIo,
+    shared,
+    dev,
+    builderVersion,
+    synthesizeCjsExports,
+    contentSignals,
+    resolvedVersions
+  );
 
 export const getChecksumCore = (
   hash: HashPort,
@@ -37,14 +46,18 @@ export const getChecksumCore = (
   builderVersion = '',
   synthesizeCjsExports = true,
   // Per-key content signal, set only for symlinked deps; empty map => version-only hash.
-  contentSignals: Record<string, string> = {}
+  contentSignals: Record<string, string> = {},
+  // Per-key installed version. `shared[].version` is the declared range and is absent on the
+  // shareAll path, so this is what actually ties the key to what is in node_modules.
+  resolvedVersions: Record<string, string> = {}
 ): string => {
   const denseExternals = Object.keys(shared)
     .sort()
     .reduce((clean, external) => {
       const version = shared[external]!.version ? `@${shared[external]!.version}` : '';
+      const resolved = resolvedVersions[external] ? `~${resolvedVersions[external]}` : '';
       const signal = contentSignals[external] ? `#${contentSignals[external]}` : '';
-      return clean + ':' + external + version + signal;
+      return clean + ':' + external + version + resolved + signal;
     }, 'deps');
 
   const cjs = synthesizeCjsExports ? '1' : '0';

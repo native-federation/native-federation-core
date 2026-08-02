@@ -486,4 +486,57 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     // denseExternals must not participate in the bundler cache key: identical output name.
     expect(await buildWith(false)).toBe(await buildWith(true));
   });
+
+  // The shareAll shape: no `version` on the config and no configured packageInfo, so the
+  // installed version is the only thing that can tell two builds apart.
+  const inferredFoo = (): Record<string, NormalizedExternalConfig> => ({
+    foo: {
+      singleton: true,
+      strictVersion: false,
+      requiredVersion: '^2.0.0',
+      chunks: false,
+      platform: 'browser',
+      build: 'default',
+    },
+  });
+
+  const repoAtVersion = (version: string): PackageJsonRepository => ({
+    getPackageJsonFiles: () => [{ content: {}, directory: '/ws' }],
+    findDepPackageJson: () => '/ws/node_modules/foo/package.json',
+    readJson: () => ({ version, type: 'module', module: './index.mjs' }),
+    exists: () => false,
+  });
+
+  const cachedBuild = async (mem: ReturnType<typeof createMemoryIo>, version: string) => {
+    const adapter = createFakeBuildAdapter({ io: mem });
+    const result = await bundleSharedCore(
+      { io: mem, repo: repoAtVersion(version), adapter },
+      inferredFoo(),
+      makeConfig(),
+      makeFedOptions({ cacheExternalArtifacts: true }),
+      [],
+      BUILD_OPTIONS
+    );
+    return { adapter, result };
+  };
+
+  it('re-uses the cached externals when the installed version is unchanged', async () => {
+    const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+
+    await cachedBuild(mem, '2.0.0');
+    const { adapter, result } = await cachedBuild(mem, '2.0.0');
+
+    expect(adapter.calls.setup).toHaveLength(0);
+    expect(result.externals[0]).toMatchObject({ packageName: 'foo', version: '2.0.0' });
+  });
+
+  it('rebuilds when the installed version changed under an unchanged config', async () => {
+    const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+
+    await cachedBuild(mem, '2.0.0');
+    const { adapter, result } = await cachedBuild(mem, '2.0.1');
+
+    expect(adapter.calls.setup).toHaveLength(1);
+    expect(result.externals[0]).toMatchObject({ packageName: 'foo', version: '2.0.1' });
+  });
 });

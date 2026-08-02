@@ -86,6 +86,29 @@ describe('getChecksumCore', () => {
     );
   });
 
+  it('is byte-identical whether resolvedVersions is omitted or empty', () => {
+    const base = { react: ext('18') };
+    expect(getChecksumCore(io, base, '0', '2.0.0', true, {}, {})).toBe(
+      getChecksumCore(io, base, '0', '2.0.0')
+    );
+  });
+
+  // The bug this guards: with shareAll the declared version is absent from `shared`, so the
+  // installed version is the only thing that can distinguish two builds.
+  it('changes when the installed version changes and the declared one does not', () => {
+    const base = { react: ext() };
+    expect(getChecksumCore(io, base, '0', '', true, {}, { react: '18.0.0' })).not.toBe(
+      getChecksumCore(io, base, '0', '', true, {}, { react: '18.0.8' })
+    );
+  });
+
+  // Declared and installed occupy separate slots, so one cannot be mistaken for the other.
+  it('distinguishes a declared version from the same string as an installed one', () => {
+    expect(getChecksumCore(io, { react: ext('18.0.0') }, '0')).not.toBe(
+      getChecksumCore(io, { react: ext() }, '0', '', true, {}, { react: '18.0.0' })
+    );
+  });
+
   it('changes when a content signal changes but is stable when it does not', () => {
     const base = { '@scope/lib': ext('1.0.0') };
     const a = getChecksumCore(io, base, '0', '', true, { '@scope/lib': '111' });
