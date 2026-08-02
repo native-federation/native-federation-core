@@ -1,8 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
-import { getPackageInfo, getVersionMaps, findDepPackageJson } from './package-info.js';
+import {
+  getPackageInfo,
+  tryGetPackageInfo,
+  getVersionMaps,
+  findDepPackageJson,
+} from './package-info.js';
 import { createPackageJsonRepository } from '../io/package-json-repository.js';
 import { createMemoryIo } from '../io/__test-helpers__/memory-io.js';
+import { logger } from '../logger.js';
 
 const WS = path.resolve('/ws');
 
@@ -36,6 +42,31 @@ describe('package-info facade (with injected repository)', () => {
     expect(getPackageInfo('react', WS, seededRepo())).not.toBeNull();
     // A fresh, empty repository must not see anything from the previous call.
     const empty = createPackageJsonRepository(createMemoryIo());
+    vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     expect(getPackageInfo('react', WS, empty)).toBeNull();
+    vi.restoreAllMocks();
+  });
+
+  it('getPackageInfo warns with an actionable hint when nothing resolves', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const empty = createPackageJsonRepository(createMemoryIo());
+
+    expect(getPackageInfo('react', WS, empty)).toBeNull();
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('No meta data found'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('federation.config.js'));
+    warn.mockRestore();
+  });
+
+  it('tryGetPackageInfo resolves identically but stays silent on failure', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+    expect(tryGetPackageInfo('react', WS, seededRepo())).toMatchObject({ packageName: 'react' });
+    expect(
+      tryGetPackageInfo('react', WS, createPackageJsonRepository(createMemoryIo()))
+    ).toBeNull();
+
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

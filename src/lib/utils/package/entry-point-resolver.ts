@@ -84,7 +84,7 @@ export function resolvePackageInfo(
   const esm = mainPkgJson['type'] === 'module';
 
   if (!version) {
-    logger.warn('No version found for ' + packageName);
+    logger.debug('No version found for ' + packageName + ' in ' + directory);
     return null;
   }
 
@@ -114,9 +114,6 @@ export function resolvePackageInfo(
     if (result) return result;
   }
 
-  logger.warn('No entry point found for ' + packageName);
-  logger.warn(
-    "If you don't need this package, skip it in your federation.config.js or consider moving it into depDependencies in your package.json"
-  );
+  logger.debug('No entry point found for ' + packageName + ' in ' + directory);
   return null;
 }

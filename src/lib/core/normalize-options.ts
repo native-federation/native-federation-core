@@ -92,7 +92,12 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
    * Step 3: Remove unused deps
    */
 
-  if (config.features.ignoreUnusedDeps) {
+  const nothingShared =
+    Object.keys(config.shared).length === 0 && Object.keys(config.sharedMappings).length === 0;
+
+  if (nothingShared) {
+    logger.debug('Nothing is shared, skipping the used dependency scan.');
+  } else if (config.features.ignoreUnusedDeps) {
     const getUsedDeps = (deps.usedDependenciesFactory ?? getUsedDependenciesFactory)(
       options.workspaceRoot,
       options.entryPoints

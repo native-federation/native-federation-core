@@ -113,6 +113,50 @@ describe('normalizeFederationOptionsCore', () => {
     info.mockRestore();
   });
 
+  it('skips the used dependency scan when nothing is shared', async () => {
+    const io = createMemoryIo().setFile(CONFIG_PATH, '');
+    const usedDependenciesFactory = vi.fn(() => () => ({ external: new Set(), internal: {} }));
+    const config = makeConfig({
+      shared: {},
+      sharedMappings: {},
+      features: { ...makeConfig().features, ignoreUnusedDeps: true },
+    });
+
+    const result = await normalizeFederationOptionsCore(
+      { io, loadConfig: loaderFor(config), usedDependenciesFactory },
+      baseOptions,
+      cache
+    );
+
+    expect(usedDependenciesFactory).not.toHaveBeenCalled();
+    expect(result.config.shared).toEqual({});
+    expect(result.config.sharedMappings).toEqual({});
+  });
+
+  it('still runs the scan when only shared mappings are configured', async () => {
+    const io = createMemoryIo().setFile(CONFIG_PATH, '');
+    vi.spyOn(logger, 'info').mockImplementation(() => undefined);
+    const usedDependenciesFactory = vi.fn(() => () => ({
+      external: new Set<string>(),
+      internal: { '/ws/libs/ui/x.ts': '@org/ui/x' },
+    }));
+    const config = makeConfig({
+      shared: {},
+      sharedMappings: { '/ws/libs/ui': '@org/ui' },
+      features: { ...makeConfig().features, ignoreUnusedDeps: true },
+    });
+
+    const result = await normalizeFederationOptionsCore(
+      { io, loadConfig: loaderFor(config), usedDependenciesFactory },
+      baseOptions,
+      cache
+    );
+
+    expect(usedDependenciesFactory).toHaveBeenCalled();
+    expect(result.config.sharedMappings).toEqual({ '/ws/libs/ui/x.ts': '@org/ui/x' });
+    vi.restoreAllMocks();
+  });
+
   it('drops wildcard shared mappings and warns when ignoreUnusedDeps is off', async () => {
     const io = createMemoryIo().setFile(CONFIG_PATH, '');
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
@@ -167,7 +211,12 @@ describe('normalizeFederationOptionsCore', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     vi.spyOn(logger, 'info').mockImplementation(() => undefined);
 
-    const config = makeConfig({ features: { ...makeConfig({}).features, ignoreUnusedDeps: true } });
+    // A mapping has to be declared for the scan to run at all; reachability then resolves it
+    // to the deep import below, which is what gets published.
+    const config = makeConfig({
+      sharedMappings: { [path.join('/ws', 'libs/ui/*')]: '@org/ui/*' },
+      features: { ...makeConfig({}).features, ignoreUnusedDeps: true },
+    });
     const usedDependenciesFactory = () => () => ({
       external: new Set<string>(),
       internal: {
