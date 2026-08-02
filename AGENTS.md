@@ -109,7 +109,7 @@ export default withNativeFederation({
 
   skip: ['some-lib'], // Skip sharing certain libs
 
-  sharedMappings: ['@my-org/*'], // Share specific monorepo libs
+  sharedMappings: ['@my-org/*'], // Share monorepo libs matching a pattern (omit to share all)
 
   chunks: true, // Enable code-splitting (default: true)
 
@@ -128,6 +128,7 @@ export default withNativeFederation({
 - **`singleton`**: Ensures only one instance of a dependency is loaded
 - **`strictVersion`**: Throws error on version mismatch instead of loading multiple versions
 - **`chunks`**: Can be set globally or per-package to control code-splitting
+- **`sharedMappings`**: Entries are patterns, and may be paired with an `ExternalConfig` as `[['@my-org/ui/*'], { singleton: false }]` (first matching entry wins). `mappingsFromWorkspace()` builds the same array. `includeSecondaries: { keepAll: true }` exempts a mapping from `ignoreUnusedDeps` pruning (a bare `includeSecondaries: true` is ignored for mappings); wildcards additionally need `resolveGlob: true`. `build`, `platform`, `chunks` and `packageInfo` are not honoured for mappings.
 - **`build: 'package'`**: Bundle a shared dependency in isolation (not in the shared bundle)
 
 ## File Watching & Development

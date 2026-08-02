@@ -437,10 +437,60 @@ module.exports = withNativeFederation({
 Notes:
 
 - `sharedMappings` is optional. If you omit it, all mapped paths are shared.
+- Entries are matched as patterns, so `'@my-org/*'` selects every mapped path under that scope.
 - You can use wildcard suffixes (for example, `@my-org/ui/*`) to include multiple mapped paths.
-- `skip` still applies and can be used to exclude mapped paths even if they were selected via `sharedMappings`.
+- `skip` still applies and can be used to exclude mapped paths even if they were selected via `sharedMappings`. For wildcard mappings it is matched against each resolved import (`@my-org/ui/button`), not the pattern.
 - Mapped paths are read from the workspace root tsconfig file: `tsconfig.base.json` if present, otherwise `tsconfig.json`.
 - The workspace root is detected by searching upward from the current working directory until a `package.json` is found.
+
+#### Configuring shared mappings
+
+A mapped path can carry the same kind of metadata as a shared npm package. Pair a list of patterns with a config object:
+
+```js
+module.exports = withNativeFederation({
+  sharedMappings: ['@my-org/auth-lib', [['@my-org/ui/*'], { singleton: false }]],
+});
+```
+
+Plain strings and annotated pairs can be mixed freely. When several entries match the same mapped path, **the first one wins**, so put the specific entries before the general ones.
+
+The honoured properties are `singleton`, `strictVersion`, `requiredVersion`, `version`, `shareScope`, `pool` and `includeSecondaries`. Anything omitted keeps its current default: `singleton: true`, `strictVersion` following the `mappingVersion` flag, and the version read from the mapped library's nearest `package.json`. Setting `version` explicitly also drives `requiredVersion` unless you set that too.
+
+`build`, `platform`, `chunks` and `packageInfo` are **not** honoured for mapped paths — every mapping is built into the same bundle, so there is nothing for them to select.
+
+For anything beyond a couple of entries, `mappingsFromWorkspace` is easier to read. It produces exactly the array form above:
+
+```js
+import { withNativeFederation, mappingsFromWorkspace } from '@softarc/native-federation/config';
+
+module.exports = withNativeFederation({
+  sharedMappings: mappingsFromWorkspace({ singleton: true, strictVersion: true })
+    .filter(['@my-org/ui/*', '@my-org/auth-lib'])
+    .patch(['@my-org/ui/*'], { singleton: false })
+    .get(),
+});
+```
+
+- Omit `.filter()` to select every mapped path — the same default as omitting `sharedMappings`.
+- `.patch()` annotates a subset; it never widens the selection, so patching a pattern that `.filter()` excluded is ignored with a warning.
+
+#### Keeping mappings that nothing imports
+
+With the `ignoreUnusedDeps` feature on (the default), mapped paths are pruned to those actually reachable from your entry points. A host that exposes little of its own but is expected to supply libraries to its remotes can opt out per mapping, the same way `shared` packages do:
+
+```js
+module.exports = withNativeFederation({
+  sharedMappings: mappingsFromWorkspace({
+    includeSecondaries: { keepAll: true, resolveGlob: true },
+  }).get(),
+});
+```
+
+- `keepAll` keeps the mapping even when nothing imports it. It has to be spelled out: a bare `includeSecondaries: true` describes secondary entry points, which a mapped path does not have, so it is ignored for mappings.
+- `resolveGlob` is additionally required for **wildcard** mappings. A wildcard is a pattern rather than an entry point, and normally only the reachability scan turns it into concrete files; `resolveGlob` expands it against the filesystem instead. Without it, a wildcard mapping is dropped with a warning.
+
+Note that a host providing libraries its remotes depend on couples the two: the remote can no longer run standalone. Letting each application share the entry points it imports and leaving the orchestrator to deduplicate at runtime is usually the better default.
 
 The `mappingVersion` feature flag controls whether mapped paths get a version. It is **enabled by default**: Native Federation reads the version from the mapped library's nearest `package.json` and shares it with strict versioning, just like a published library.
 

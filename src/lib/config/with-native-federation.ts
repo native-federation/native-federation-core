@@ -5,32 +5,38 @@ import type {
   ExposeEntry,
   FederationConfig,
   NormalizedFederationConfig,
+  NormalizedSharedMappingConfigs,
+  SharedMappingConfigs,
 } from '../domain/config/federation-config.contract.js';
 import { isInSkipList, prepareSkipList } from './default-skip-list.js';
+import { withoutSkippedMappings } from './mapping-utils.js';
 import { type PreparedSkipList } from '../domain/config/skip-list.contract.js';
 import type {
   NormalizedExternalConfig,
   NormalizedSharedExternalsConfig,
 } from '../domain/config/external-config.contract.js';
-import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { logger } from '../utils/logger.js';
 
 export function withNativeFederation(config: FederationConfig): NormalizedFederationConfig {
   const skip = prepareSkipList(config.skip ?? []);
 
   const chunks = config.chunks ?? true;
+  const mappingVersion = config.features?.mappingVersion ?? true;
+
+  const { paths, configs } = getRawMappedPaths(findRootTsConfigJson(), config.sharedMappings);
 
   const normalized: NormalizedFederationConfig = {
     $type: 'classic',
     name: config.name ?? '',
     exposes: normalizeExposes(config.exposes),
     shared: normalizeShared(config, skip, chunks),
-    sharedMappings: removeSkippedMappings(config, skip),
+    sharedMappings: withoutSkippedMappings(paths, skip),
+    sharedMappingsConfig: normalizeMappingConfigs(configs, mappingVersion),
     chunks,
     skip,
     externals: config.externals ?? [],
     features: {
-      mappingVersion: config.features?.mappingVersion ?? true,
+      mappingVersion,
       ignoreUnusedDeps: config.features?.ignoreUnusedDeps ?? true,
       denseChunking: config.features?.denseChunking ?? false,
       denseExternals: config.features?.denseExternals ?? false,
@@ -109,12 +115,24 @@ function normalizeShared(
   return result;
 }
 
-function removeSkippedMappings(config: FederationConfig, skipList: PreparedSkipList): PathToImport {
-  const rootTsConfigPath = findRootTsConfigJson();
-
-  const { paths } = getRawMappedPaths(rootTsConfigPath, config.sharedMappings);
-
-  return Object.entries(paths)
-    .filter(([, _import]) => !isInSkipList(_import, skipList))
-    .reduce((acc, [_path, _import]) => ({ ...acc, [_path]: _import }), {} as PathToImport);
+// Only singleton/strictVersion can be settled here; requiredVersion and version are read
+// from the mapped lib's package.json at build time, so they stay undefined when unset.
+function normalizeMappingConfigs(
+  configs: SharedMappingConfigs,
+  mappingVersion: boolean
+): NormalizedSharedMappingConfigs {
+  return Object.entries(configs).reduce((acc, [pattern, cfg]) => {
+    acc[pattern] = {
+      singleton: cfg.singleton ?? true,
+      strictVersion: cfg.strictVersion ?? mappingVersion,
+      ...(cfg.requiredVersion !== undefined && { requiredVersion: cfg.requiredVersion }),
+      ...(cfg.version !== undefined && { version: cfg.version }),
+      ...(cfg.shareScope && { shareScope: cfg.shareScope }),
+      ...(cfg.pool && { pool: cfg.pool }),
+      ...(cfg.includeSecondaries !== undefined && {
+        includeSecondaries: cfg.includeSecondaries,
+      }),
+    };
+    return acc;
+  }, {} as NormalizedSharedMappingConfigs);
 }

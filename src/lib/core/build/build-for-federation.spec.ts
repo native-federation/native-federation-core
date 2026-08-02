@@ -16,7 +16,11 @@ vi.mock('./bundle-exposed-and-mappings.js', () => ({
 const { buildForFederation } = await import('./build-for-federation.js');
 const { writeImportMap } = await import('../output/write-import-map.js');
 
-function flat(packageName: string, outFileName: string, overrides: Partial<SharedInfo> = {}): SharedInfo {
+function flat(
+  packageName: string,
+  outFileName: string,
+  overrides: Partial<SharedInfo> = {}
+): SharedInfo {
   return {
     singleton: true,
     strictVersion: true,
@@ -35,6 +39,7 @@ function makeConfig(denseExternals: boolean): NormalizedFederationConfig {
     exposes: {},
     shared: {},
     sharedMappings: {},
+    sharedMappingsConfig: {},
     skip: prepareSkipList([]),
     chunks: false,
     externals: [],

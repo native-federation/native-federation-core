@@ -31,6 +31,7 @@ function makeConfig(
     exposes: { './Comp': { file: './src/comp.ts' } },
     shared: {},
     sharedMappings: {},
+    sharedMappingsConfig: {},
     skip: prepareSkipList([]),
     chunks: false,
     externals: [],
@@ -125,6 +126,37 @@ describe('normalizeFederationOptionsCore', () => {
 
     expect(result.config.sharedMappings).toEqual({ './b': 'lib/b' });
     expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  // resolveGlob materialises the pattern, so there is nothing left to warn about.
+  it('expands rather than drops a resolveGlob wildcard when ignoreUnusedDeps is off', async () => {
+    const io = createMemoryIo()
+      .setFile(CONFIG_PATH, '')
+      .setFile(path.join('/ws', 'libs/ui/button/index.ts'), '');
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+    const config = makeConfig({
+      sharedMappings: { [path.join('/ws', 'libs/ui/*/index.ts')]: '@org/ui/*' },
+      sharedMappingsConfig: {
+        '@org/ui/*': {
+          singleton: true,
+          strictVersion: true,
+          includeSecondaries: { resolveGlob: true },
+        },
+      },
+    });
+
+    const result = await normalizeFederationOptionsCore(
+      { io, loadConfig: loaderFor(config) },
+      baseOptions,
+      cache
+    );
+
+    expect(result.config.sharedMappings).toEqual({
+      [path.join('/ws', 'libs/ui/button/index.ts')]: '@org/ui/button',
+    });
+    expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
   });
 });

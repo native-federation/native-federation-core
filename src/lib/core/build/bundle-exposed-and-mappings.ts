@@ -19,6 +19,7 @@ import { AbortedError } from '../../utils/errors.js';
 import type { EntryPoint, NFBuildAdapter } from '../../domain/core/build-adapter.contract.js';
 import { rewriteChunkImports } from './rewrite-chunk-imports.js';
 import { getBuildAdapter } from './build-adapter.js';
+import { resolveMappingConfig } from '../../config/mapping-utils.js';
 
 export async function bundleExposedAndMappings(
   config: NormalizedFederationConfig,
@@ -115,7 +116,13 @@ export async function bundleExposedAndMappingsCore(
   for (const item of shared) {
     const distEntryFile = popFromResultMap(resultMap, item.outName);
     sharedResult.push(
-      toSharedMappingInfo(item.fileName, item.key!, path.basename(distEntryFile), config, fedOptions)
+      toSharedMappingInfo(
+        item.fileName,
+        item.key!,
+        path.basename(distEntryFile),
+        config,
+        fedOptions
+      )
     );
     entryFiles.push(distEntryFile);
   }
@@ -171,9 +178,7 @@ export function describeExposed(
 
   for (const key in config.exposes) {
     const expose = config.exposes[key]!;
-    const localPath = normalize(
-      path.normalize(path.join(options.workspaceRoot, expose.file))
-    );
+    const localPath = normalize(path.normalize(path.join(options.workspaceRoot, expose.file)));
 
     result.push({
       key,
@@ -213,13 +218,20 @@ function toSharedMappingInfo(
   const mappingVersion = config.features.mappingVersion
     ? getMappingVersion(mappedPath, fedOptions.workspaceRoot)
     : '';
+
+  const mappingConfig = resolveMappingConfig(mappedImport, config.sharedMappingsConfig);
+  // An explicit version drives requiredVersion too, the same way the detected one does.
+  const version = mappingConfig?.version ?? mappingVersion;
+
   return {
     packageName: mappedImport,
     outFileName,
-    requiredVersion: mappingVersion.length > 0 ? '~' + mappingVersion : '',
-    singleton: true,
-    strictVersion: config.features.mappingVersion,
-    version: mappingVersion,
+    requiredVersion: mappingConfig?.requiredVersion ?? (version.length > 0 ? '~' + version : ''),
+    singleton: mappingConfig?.singleton ?? true,
+    strictVersion: mappingConfig?.strictVersion ?? config.features.mappingVersion,
+    version,
+    ...(mappingConfig?.shareScope && { shareScope: mappingConfig.shareScope }),
+    ...(mappingConfig?.pool && { pool: mappingConfig.pool }),
     dev: !fedOptions.dev
       ? undefined
       : {
