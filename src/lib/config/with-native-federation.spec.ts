@@ -26,7 +26,7 @@ describe('withNativeFederation', () => {
   beforeEach(() => {
     shareAll.mockReturnValue({});
     findRootTsConfigJson.mockReturnValue('/ws/tsconfig.json');
-    getRawMappedPaths.mockReturnValue({});
+    getRawMappedPaths.mockReturnValue({ paths: {}, configs: {} });
   });
 
   afterEach(() => {
@@ -43,6 +43,7 @@ describe('withNativeFederation', () => {
       exposes: {},
       shared: {},
       sharedMappings: {},
+      sharedMappingsConfig: {},
       chunks: true,
       externals: [],
       features: {
@@ -180,8 +181,11 @@ describe('withNativeFederation', () => {
 
   it('builds shared mappings from the resolved tsconfig, filtering the skip list', () => {
     getRawMappedPaths.mockReturnValue({
-      '/ws/libs/ui/index.ts': '@org/ui',
-      '/ws/libs/skip/index.ts': '@org/skip',
+      paths: {
+        '/ws/libs/ui/index.ts': '@org/ui',
+        '/ws/libs/skip/index.ts': '@org/skip',
+      },
+      configs: {},
     });
 
     const result = withNativeFederation({
@@ -192,6 +196,57 @@ describe('withNativeFederation', () => {
     expect(findRootTsConfigJson).toHaveBeenCalled();
     expect(getRawMappedPaths).toHaveBeenCalledWith('/ws/tsconfig.json', ['@org/ui', '@org/skip']);
     expect(result.sharedMappings).toEqual({ '/ws/libs/ui/index.ts': '@org/ui' });
+  });
+
+  it('normalizes mapping configs, defaulting to the current hardcoded behaviour', () => {
+    getRawMappedPaths.mockReturnValue({
+      paths: { '/ws/libs/ui/index.ts': '@org/ui' },
+      configs: { '@org/ui': {} },
+    });
+
+    const result = withNativeFederation({ sharedMappings: [[['@org/ui'], {}]] });
+
+    expect(result.sharedMappingsConfig).toEqual({
+      '@org/ui': { singleton: true, strictVersion: true },
+    });
+  });
+
+  // strictVersion tracks the mappingVersion flag, matching what toSharedMappingInfo does today.
+  it('defaults strictVersion from the mappingVersion feature flag', () => {
+    getRawMappedPaths.mockReturnValue({ paths: {}, configs: { '@org/ui': {} } });
+
+    const result = withNativeFederation({
+      sharedMappings: [[['@org/ui'], {}]],
+      features: { mappingVersion: false },
+    });
+
+    expect(result.sharedMappingsConfig['@org/ui']).toMatchObject({ strictVersion: false });
+  });
+
+  it('keeps explicitly configured mapping values', () => {
+    getRawMappedPaths.mockReturnValue({
+      paths: {},
+      configs: {
+        '@org/ui': {
+          singleton: false,
+          requiredVersion: '^2.0.0',
+          shareScope: 'custom',
+          pool: 'p1',
+          includeSecondaries: { keepAll: true },
+        },
+      },
+    });
+
+    const result = withNativeFederation({ sharedMappings: [[['@org/ui'], {}]] });
+
+    expect(result.sharedMappingsConfig['@org/ui']).toEqual({
+      singleton: false,
+      strictVersion: true,
+      requiredVersion: '^2.0.0',
+      shareScope: 'custom',
+      pool: 'p1',
+      includeSecondaries: true,
+    });
   });
 
   it('respects explicit feature flags', () => {
