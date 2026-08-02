@@ -55,18 +55,22 @@ describe('resolvePackageInfo', () => {
     expect(info).toMatchObject({ entryPoint: nm('pkg/index.js') });
   });
 
-  it('returns null and warns when no version is present', () => {
-    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+  it('returns null and logs a debug message when no version is present', () => {
+    const debug = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
     const repo = repoWith({ main: './index.js' });
     expect(resolvePackageInfo(repo, 'pkg', WS)).toBeNull();
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('No version'));
+    expect(debug).toHaveBeenCalledWith(expect.stringContaining('No version'));
   });
 
-  it('returns null and warns when no entry point can be resolved', () => {
+  // A single probe of one candidate root: a miss is expected, so it must not warn.
+  // Only getPackageInfo, after every root has failed, decides that is a problem.
+  it('returns null and does not warn when no entry point can be resolved', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const debug = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
     const repo = repoWith({ version: '6.0.0' });
     expect(resolvePackageInfo(repo, 'pkg', WS)).toBeNull();
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('No entry point'));
+    expect(debug).toHaveBeenCalledWith(expect.stringContaining('No entry point'));
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it('returns null when the dependency package.json is missing', () => {
