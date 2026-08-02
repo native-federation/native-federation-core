@@ -23,10 +23,6 @@ export interface MemoryIo extends IoPort {
 
 const toKey = (p: string): string => path.resolve(p).replace(/\\/g, '/');
 
-// Unicode noncharacter placeholder, so the single-`*` replacement does not
-// re-process a `*` we just emitted. Cannot appear in a real path.
-const ANY = '￿';
-
 export function createMemoryIo(): MemoryIo {
   const files = new Map<string, Uint8Array>();
   const dirs = new Set<string>();
@@ -45,14 +41,18 @@ export function createMemoryIo(): MemoryIo {
     }
   };
 
+  // Segment-aware on purpose: fast-glob only honours '**' as a globstar when it is a whole
+  // segment, and a double that lets 'ui-**' span separators hides real pattern bugs.
   const matcher = (pattern: string): RegExp => {
-    const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-    const body = escaped
-      .replace(/\*\*\/\*/g, ANY)
-      .replace(/\*\*/g, ANY)
-      .replace(/\*/g, '[^/]*')
-      .split(ANY)
-      .join('.*');
+    const segments = pattern.split('/');
+    const body = segments
+      .map((segment, i) => {
+        const last = i === segments.length - 1;
+        if (segment === '**') return last ? '(?:[^/]+/)*[^/]+' : '(?:[^/]+/)*';
+        const escaped = segment.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*');
+        return last ? escaped : escaped + '/';
+      })
+      .join('');
     return new RegExp('^' + body + '$');
   };
 
@@ -148,11 +148,14 @@ export function createMemoryIo(): MemoryIo {
     globFiles(pattern, opts) {
       const cwd = toKey(opts.cwd);
       const re = matcher(pattern);
+      const ignored = (opts.ignore ?? []).map(matcher);
       const out: string[] = [];
       for (const key of files.keys()) {
         if (!key.startsWith(cwd + '/')) continue;
         const rel = key.slice(cwd.length + 1);
-        if (re.test(rel)) out.push(rel);
+        if (!re.test(rel)) continue;
+        if (ignored.some(i => i.test(rel))) continue;
+        out.push(rel);
       }
       return out;
     },

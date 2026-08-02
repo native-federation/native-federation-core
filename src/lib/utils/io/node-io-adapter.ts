@@ -69,7 +69,12 @@ export const nodeIo: IoPort = {
     fs.unlinkSync(path);
   },
   globFiles(pattern, opts) {
-    return fg.sync(pattern, { cwd: opts.cwd, onlyFiles: true, deep: Infinity });
+    return fg.sync(pattern, {
+      cwd: opts.cwd,
+      ignore: opts.ignore,
+      onlyFiles: true,
+      deep: Infinity,
+    });
   },
   hash(algorithm: HashAlgorithm, data: Uint8Array | string): Digest {
     const sum = crypto.createHash(algorithm).update(data);

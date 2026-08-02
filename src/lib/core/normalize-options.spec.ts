@@ -31,6 +31,7 @@ function makeConfig(
     exposes: { './Comp': { file: './src/comp.ts' } },
     shared: {},
     sharedMappings: {},
+    sharedMappingsConfig: {},
     skip: prepareSkipList([]),
     chunks: false,
     externals: [],
@@ -126,5 +127,128 @@ describe('normalizeFederationOptionsCore', () => {
     expect(result.config.sharedMappings).toEqual({ './b': 'lib/b' });
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
+  });
+
+  // resolveGlob materialises the pattern, so there is nothing left to warn about.
+  it('expands rather than drops a resolveGlob wildcard when ignoreUnusedDeps is off', async () => {
+    const io = createMemoryIo()
+      .setFile(CONFIG_PATH, '')
+      .setFile(path.join('/ws', 'libs/ui/button/index.ts'), '');
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+    const config = makeConfig({
+      sharedMappings: { [path.join('/ws', 'libs/ui/*/index.ts')]: '@org/ui/*' },
+      sharedMappingsConfig: {
+        '@org/ui/*': {
+          singleton: true,
+          strictVersion: true,
+          resolveGlob: true,
+        },
+      },
+    });
+
+    const result = await normalizeFederationOptionsCore(
+      { io, loadConfig: loaderFor(config) },
+      baseOptions,
+      cache
+    );
+
+    expect(result.config.sharedMappings).toEqual({
+      [path.join('/ws', 'libs/ui/button/index.ts')]: '@org/ui/button',
+    });
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  // The rule is "would it be published in remoteEntry.json?". Reachability puts a deep import
+  // there, so it throws; the two tests after this cover the paths that never publish one.
+  it('throws when a reachability-resolved mapping is not a barrel import', async () => {
+    const io = createMemoryIo().setFile(CONFIG_PATH, '');
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(logger, 'info').mockImplementation(() => undefined);
+
+    const config = makeConfig({ features: { ...makeConfig({}).features, ignoreUnusedDeps: true } });
+    const usedDependenciesFactory = () => () => ({
+      external: new Set<string>(),
+      internal: {
+        '/ws/libs/ui/button/button.component.ts': '@org/ui/button/button.component',
+      },
+    });
+
+    await expect(
+      normalizeFederationOptionsCore(
+        { io, loadConfig: loaderFor(config), usedDependenciesFactory },
+        baseOptions,
+        cache
+      )
+    ).rejects.toThrow(/Only barrel imports can be shared/);
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Only barrel imports can be shared'));
+  });
+
+  // Pruning already removed it, so it is never published and there is nothing to complain about.
+  it('does not throw for a non-barrel mapping that pruning removed', async () => {
+    const io = createMemoryIo().setFile(CONFIG_PATH, '');
+    vi.spyOn(logger, 'info').mockImplementation(() => undefined);
+
+    const config = makeConfig({
+      sharedMappings: { '/ws/libs/ui/button/button.component.ts': '@org/ui/button.component' },
+      features: { ...makeConfig({}).features, ignoreUnusedDeps: true },
+    });
+    const usedDependenciesFactory = () => () => ({
+      external: new Set<string>(),
+      internal: {},
+    });
+
+    const result = await normalizeFederationOptionsCore(
+      { io, loadConfig: loaderFor(config), usedDependenciesFactory },
+      baseOptions,
+      cache
+    );
+
+    expect(result.config.sharedMappings).toEqual({});
+    vi.restoreAllMocks();
+  });
+
+  // With pruning off nothing is dropped, so the same mapping does reach remoteEntry.json and
+  // therefore does throw. Turning pruning off is opting into publishing what you mapped.
+  it('throws for a non-barrel mapping when ignoreUnusedDeps is off', async () => {
+    const io = createMemoryIo().setFile(CONFIG_PATH, '');
+    vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+    const config = makeConfig({
+      sharedMappings: { '/ws/libs/ui/button/button.component.ts': '@org/ui/button.component' },
+    });
+
+    await expect(
+      normalizeFederationOptionsCore({ io, loadConfig: loaderFor(config) }, baseOptions, cache)
+    ).rejects.toThrow(/Only barrel imports can be shared/);
+
+    vi.restoreAllMocks();
+  });
+
+  // resolveGlob is a guess, so it drops non-barrel matches before they can be published.
+  it('does not throw for non-barrel files a resolveGlob wildcard matched', async () => {
+    const io = createMemoryIo()
+      .setFile(CONFIG_PATH, '')
+      .setFile(path.join('/ws', 'libs/ui/button/index.ts'), '')
+      .setFile(path.join('/ws', 'libs/ui/button/button.component.ts'), '');
+
+    const config = makeConfig({
+      sharedMappings: { [path.join('/ws', 'libs/ui/*')]: '@org/ui/*' },
+      sharedMappingsConfig: {
+        '@org/ui/*': { singleton: true, strictVersion: true, resolveGlob: true },
+      },
+    });
+
+    const result = await normalizeFederationOptionsCore(
+      { io, loadConfig: loaderFor(config) },
+      baseOptions,
+      cache
+    );
+
+    expect(result.config.sharedMappings).toEqual({
+      [path.join('/ws', 'libs/ui/button/index.ts')]: '@org/ui/button',
+    });
   });
 });

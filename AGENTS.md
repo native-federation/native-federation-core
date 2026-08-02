@@ -109,7 +109,7 @@ export default withNativeFederation({
 
   skip: ['some-lib'], // Skip sharing certain libs
 
-  sharedMappings: ['@my-org/*'], // Share specific monorepo libs
+  sharedMappings: ['@my-org/*'], // Share monorepo libs matching a pattern (omit to share all)
 
   chunks: true, // Enable code-splitting (default: true)
 
@@ -128,6 +128,7 @@ export default withNativeFederation({
 - **`singleton`**: Ensures only one instance of a dependency is loaded
 - **`strictVersion`**: Throws error on version mismatch instead of loading multiple versions
 - **`chunks`**: Can be set globally or per-package to control code-splitting
+- **`sharedMappings`**: Entries are patterns, and may be paired with an `ExternalConfig` as `[['@my-org/ui/*'], { singleton: false }]` (first matching entry wins). `mappingsFromWorkspace()` builds the same array. `includeSecondaries` exempts a mapping from `ignoreUnusedDeps` pruning, read exactly as for a shared package (`true` or `{ keepAll: true }`); wildcards additionally need `{ resolveGlob: true }`. Only barrel imports can be shared as a mapped path: a specifier with a dot in its last segment cannot be resolved from an import map ([vite#21036](https://github.com/vitejs/vite/issues/21036)). `assertBarrelMappings` therefore throws on anything that would reach `remoteEntry.json`; paths that are pruned or dropped by wildcard expansion are never published, so they are filtered silently instead. `build`, `platform`, `chunks` and `packageInfo` are not honoured for mappings and warn.
 - **`build: 'package'`**: Bundle a shared dependency in isolation (not in the shared bundle)
 
 ## File Watching & Development

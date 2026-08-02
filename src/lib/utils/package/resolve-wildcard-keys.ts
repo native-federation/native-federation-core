@@ -1,6 +1,12 @@
 import type { GlobPort } from '../../domain/utils/io-port.contract.js';
 import type { KeyValuePair } from '../../domain/utils/keyvaluepair.contract.js';
-import { captureWildcard, parseWildcard, substituteWildcard, toPosix } from '../path-patterns.js';
+import {
+  captureWildcard,
+  parseWildcard,
+  substituteWildcard,
+  toGlobPattern,
+  toPosix,
+} from '../path-patterns.js';
 
 export function resolvePackageJsonExportsWildcardCore(
   io: GlobPort,
@@ -13,8 +19,7 @@ export function resolvePackageJsonExportsWildcardCore(
     return [];
   }
 
-  // fast-glob requires **/* pattern for matching files at any depth
-  const files = io.globFiles(pattern.prefix + '**/*' + pattern.suffix, { cwd });
+  const files = io.globFiles(toGlobPattern(pattern), { cwd, ignore: ['**/node_modules/**'] });
 
   const keys: KeyValuePair[] = [];
 

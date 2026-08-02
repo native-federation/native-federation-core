@@ -127,6 +127,7 @@ function makeConfig(): NormalizedFederationConfig {
     exposes: {},
     shared: {},
     sharedMappings: {},
+    sharedMappingsConfig: {},
     skip: prepareSkipList([]),
     chunks: false,
     externals: [],

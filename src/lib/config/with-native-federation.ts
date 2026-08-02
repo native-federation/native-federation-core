@@ -5,32 +5,38 @@ import type {
   ExposeEntry,
   FederationConfig,
   NormalizedFederationConfig,
+  NormalizedSharedMappingConfigs,
+  SharedMappingConfigs,
 } from '../domain/config/federation-config.contract.js';
 import { isInSkipList, prepareSkipList } from './default-skip-list.js';
+import { normalizeMappingConfig, withoutSkippedMappings } from './mapping-utils.js';
 import { type PreparedSkipList } from '../domain/config/skip-list.contract.js';
 import type {
   NormalizedExternalConfig,
   NormalizedSharedExternalsConfig,
 } from '../domain/config/external-config.contract.js';
-import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { logger } from '../utils/logger.js';
 
 export function withNativeFederation(config: FederationConfig): NormalizedFederationConfig {
   const skip = prepareSkipList(config.skip ?? []);
 
   const chunks = config.chunks ?? true;
+  const mappingVersion = config.features?.mappingVersion ?? true;
+
+  const { paths, configs } = getRawMappedPaths(findRootTsConfigJson(), config.sharedMappings);
 
   const normalized: NormalizedFederationConfig = {
     $type: 'classic',
     name: config.name ?? '',
     exposes: normalizeExposes(config.exposes),
     shared: normalizeShared(config, skip, chunks),
-    sharedMappings: removeSkippedMappings(config, skip),
+    sharedMappings: withoutSkippedMappings(paths, skip),
+    sharedMappingsConfig: normalizeMappingConfigs(configs, mappingVersion),
     chunks,
     skip,
     externals: config.externals ?? [],
     features: {
-      mappingVersion: config.features?.mappingVersion ?? true,
+      mappingVersion,
       ignoreUnusedDeps: config.features?.ignoreUnusedDeps ?? true,
       denseChunking: config.features?.denseChunking ?? false,
       denseExternals: config.features?.denseExternals ?? false,
@@ -109,12 +115,21 @@ function normalizeShared(
   return result;
 }
 
-function removeSkippedMappings(config: FederationConfig, skipList: PreparedSkipList): PathToImport {
-  const rootTsConfigPath = findRootTsConfigJson();
+const IGNORED_MAPPING_PROPS = ['build', 'platform', 'chunks', 'packageInfo'] as const;
 
-  const paths = getRawMappedPaths(rootTsConfigPath, config.sharedMappings);
+function normalizeMappingConfigs(
+  configs: SharedMappingConfigs,
+  mappingVersion: boolean
+): NormalizedSharedMappingConfigs {
+  return Object.entries(configs).reduce((acc, [pattern, cfg]) => {
+    const ignored = IGNORED_MAPPING_PROPS.filter(prop => cfg[prop] !== undefined);
+    if (ignored.length > 0) {
+      logger.warn(
+        `Mapping '${pattern}' sets ${ignored.join(', ')}, which mapped paths do not honour (they all share one bundle). Ignored.`
+      );
+    }
 
-  return Object.entries(paths)
-    .filter(([, _import]) => !isInSkipList(_import, skipList))
-    .reduce((acc, [_path, _import]) => ({ ...acc, [_path]: _import }), {} as PathToImport);
+    acc[pattern] = normalizeMappingConfig(cfg, mappingVersion);
+    return acc;
+  }, {} as NormalizedSharedMappingConfigs);
 }
