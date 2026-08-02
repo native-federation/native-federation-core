@@ -32,7 +32,7 @@ export interface FileWriterPort {
 }
 
 export interface GlobPort {
-  globFiles(pattern: string, opts: { cwd: string }): string[];
+  globFiles(pattern: string, opts: { cwd: string; ignore?: string[] }): string[];
 }
 
 export interface HashPort {
@@ -54,16 +54,7 @@ export interface WatchPort {
    * filename relative to `path`; for a file it receives the path itself (or
    * null when the platform omits it).
    */
-  watch(
-    path: string,
-    opts: WatchOptions,
-    onEvent: (filename: string | null) => void
-  ): WatchHandle;
+  watch(path: string, opts: WatchOptions, onEvent: (filename: string | null) => void): WatchHandle;
 }
 
-export interface IoPort
-  extends FileReaderPort,
-    FileWriterPort,
-    GlobPort,
-    HashPort,
-    WatchPort {}
+export interface IoPort extends FileReaderPort, FileWriterPort, GlobPort, HashPort, WatchPort {}

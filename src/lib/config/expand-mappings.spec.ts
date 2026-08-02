@@ -38,9 +38,9 @@ describe('expandWildcardMapping', () => {
   it('strips the extension from a non-barrel module', () => {
     const io = createMemoryIo().setFile(abs('libs/ui/button.ts'), '');
 
-    expect(
-      expandWildcardMapping(abs('libs/ui/*'), '@org/ui/*', { io, workspaceRoot: WS })
-    ).toEqual({ [abs('libs/ui/button.ts')]: '@org/ui/button' });
+    expect(expandWildcardMapping(abs('libs/ui/*'), '@org/ui/*', { io, workspaceRoot: WS })).toEqual(
+      { [abs('libs/ui/button.ts')]: '@org/ui/button' }
+    );
   });
 
   it('keeps the pattern suffix shape working', () => {
@@ -49,6 +49,47 @@ describe('expandWildcardMapping', () => {
     expect(
       expandWildcardMapping(abs('libs/ui/*/src/index.ts'), '@org/ui/*', { io, workspaceRoot: WS })
     ).toEqual({ [abs('libs/ui/button/src/index.ts')]: '@org/ui/button' });
+  });
+
+  // '**' is a globstar only on a segment of its own, so a prefix that stops mid-segment has to
+  // be widened back to its directory before globbing: 'libs/ui-**' reads as 'libs/ui-*' and
+  // matches nothing a level down, which drops the mapping with a "matched no files" warning.
+  it('expands a wildcard whose prefix stops mid-segment', () => {
+    const io = createMemoryIo()
+      .setFile(abs('libs/ui-button/src/index.ts'), '')
+      .setFile(abs('libs/ui-card/src/index.ts'), '')
+      .setFile(abs('libs/data-access/src/index.ts'), '');
+
+    expect(
+      expandWildcardMapping(abs('libs/ui-*/src/index.ts'), '@org/ui-*', { io, workspaceRoot: WS })
+    ).toEqual({
+      [abs('libs/ui-button/src/index.ts')]: '@org/ui-button',
+      [abs('libs/ui-card/src/index.ts')]: '@org/ui-card',
+    });
+  });
+
+  // The widened glob reaches further than the mapping does, so matchMapping still has to be
+  // the thing that decides membership.
+  it('ignores siblings the widened glob picks up but the prefix excludes', () => {
+    const io = createMemoryIo()
+      .setFile(abs('libs/ui-button/src/index.ts'), '')
+      .setFile(abs('libs/other/nested/src/index.ts'), '');
+
+    expect(
+      expandWildcardMapping(abs('libs/ui-*/src/index.ts'), '@org/ui-*', { io, workspaceRoot: WS })
+    ).toEqual({ [abs('libs/ui-button/src/index.ts')]: '@org/ui-button' });
+  });
+
+  // Installed packages are modules with barrel-shaped specifiers, so nothing downstream would
+  // reject '@org/ui/node_modules/lodash' — the glob has to not see them in the first place.
+  it('does not expand into nested node_modules', () => {
+    const io = createMemoryIo()
+      .setFile(abs('libs/ui/button/index.ts'), '')
+      .setFile(abs('libs/ui/node_modules/lodash/index.js'), '');
+
+    expect(expandWildcardMapping(abs('libs/ui/*'), '@org/ui/*', { io, workspaceRoot: WS })).toEqual(
+      { [abs('libs/ui/button/index.ts')]: '@org/ui/button' }
+    );
   });
 
   // A '**/*' glob sees the whole subtree, so everything that is not a module has to be dropped
@@ -60,9 +101,9 @@ describe('expandWildcardMapping', () => {
       .setFile(abs('libs/ui/theme.scss'), '')
       .setFile(abs('libs/ui/button/index.d.ts'), '');
 
-    expect(
-      expandWildcardMapping(abs('libs/ui/*'), '@org/ui/*', { io, workspaceRoot: WS })
-    ).toEqual({ [abs('libs/ui/button/index.ts')]: '@org/ui/button' });
+    expect(expandWildcardMapping(abs('libs/ui/*'), '@org/ui/*', { io, workspaceRoot: WS })).toEqual(
+      { [abs('libs/ui/button/index.ts')]: '@org/ui/button' }
+    );
   });
 
   // A glob cannot tell a public entry point from an implementation file, so it only accepts
@@ -74,9 +115,9 @@ describe('expandWildcardMapping', () => {
       .setFile(abs('libs/ui/button/button.spec.ts'), '')
       .setFile(abs('libs/ui/card.service.ts'), '');
 
-    expect(
-      expandWildcardMapping(abs('libs/ui/*'), '@org/ui/*', { io, workspaceRoot: WS })
-    ).toEqual({ [abs('libs/ui/button/index.ts')]: '@org/ui/button' });
+    expect(expandWildcardMapping(abs('libs/ui/*'), '@org/ui/*', { io, workspaceRoot: WS })).toEqual(
+      { [abs('libs/ui/button/index.ts')]: '@org/ui/button' }
+    );
   });
 
   it('warns when only implementation files matched', () => {

@@ -35,3 +35,13 @@ export function captureWildcard(value: string, pattern: WildcardPattern): string
 export function substituteWildcard(template: string, captured: string): string {
   return template.replace('*', captured);
 }
+
+/**
+ * A glob that is a superset of the pattern, for callers that re-check the match themselves
+ * (`captureWildcard`, `matchMapping`). `**` only acts as a globstar on a segment of its own,
+ * so a prefix stopping mid-segment (`libs/ui-`) has to be widened back to its directory --
+ * `libs/ui-**` reads as `libs/ui-*` and silently matches nothing one level down.
+ */
+export function toGlobPattern({ prefix, suffix }: WildcardPattern): string {
+  return prefix.slice(0, prefix.lastIndexOf('/') + 1) + '**/*' + suffix;
+}

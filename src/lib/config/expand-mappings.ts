@@ -5,13 +5,20 @@ import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { resolveMappingConfig, withoutSkippedMappings } from './mapping-utils.js';
 import { isModuleFile, matchMapping } from './match-mapping.js';
 import { isNonBarrelImport } from './validate-mappings.js';
-import { parseWildcard, toPosix } from '../utils/path-patterns.js';
+import { parseWildcard, toGlobPattern, toPosix } from '../utils/path-patterns.js';
 import { logger } from '../utils/logger.js';
 
 export interface MappingExpansionContext {
   io: GlobPort;
   workspaceRoot: string;
 }
+
+/**
+ * The glob walks the whole subtree below the mapping, so it reaches installed packages and any
+ * nested workspace. Their files are modules with barrel-shaped specifiers, so nothing further
+ * down the pipeline would reject `@org/ui/node_modules/lodash`.
+ */
+const IGNORED_DIRS = ['**/node_modules/**'];
 
 export function isWildcardMapping(mappedPath: string, mappedImport: string): boolean {
   return mappedPath.includes('*') || mappedImport.includes('*');
@@ -38,9 +45,9 @@ export function expandWildcardMapping(
     return {};
   }
 
-  // fast-glob needs **/* to match files at any depth; a tsconfig '*' spans separators too.
-  const files = ctx.io.globFiles(pattern.prefix + '**/*' + pattern.suffix, {
+  const files = ctx.io.globFiles(toGlobPattern(pattern), {
     cwd: ctx.workspaceRoot,
+    ignore: IGNORED_DIRS,
   });
 
   const expanded: PathToImport = {};

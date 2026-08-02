@@ -4,6 +4,7 @@ import {
   matchesWildcard,
   parseWildcard,
   substituteWildcard,
+  toGlobPattern,
   toPosix,
 } from './path-patterns.js';
 
@@ -97,5 +98,21 @@ describe('substituteWildcard', () => {
 
   it('only replaces the first asterisk', () => {
     expect(substituteWildcard('a/*/b/*', 'X')).toBe('a/X/b/*');
+  });
+});
+
+describe('toGlobPattern', () => {
+  it('keeps a prefix that already ends on a separator', () => {
+    expect(toGlobPattern(parseWildcard('libs/ui/*'))).toBe('libs/ui/**/*');
+  });
+
+  // 'libs/ui-**' is not a globstar — fast-glob reads it as 'libs/ui-*', which needs one more
+  // directory level than the pattern does and so matches nothing.
+  it('widens a prefix that stops mid-segment back to its directory', () => {
+    expect(toGlobPattern(parseWildcard('libs/ui-*/src/index.ts'))).toBe('libs/**/*/src/index.ts');
+  });
+
+  it('drops to the workspace root when the prefix holds no separator', () => {
+    expect(toGlobPattern(parseWildcard('ui-*/index.ts'))).toBe('**/*/index.ts');
   });
 });
