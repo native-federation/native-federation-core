@@ -142,6 +142,38 @@ The library supports **watch mode** for development:
 
 - `src/lib/domain/core/build-notification-options.contract.ts` - Contract for notifications
 - `src/lib/core/rebuild-for-federation.ts` - Incremental rebuild logic
+- `src/lib/utils/file-watcher.ts` - `createNfWatcher` / `syncNfFileWatcher`
+
+### The watcher (`createNfWatcher`)
+
+An `fs.watch`-based watcher adapters can use to drive their rebuild loop. It has **two
+channels, both always live**:
+
+- **push** — the `onChange` callback, for waking a rebuild loop
+- **pull** — `get()` / `clear()` / `mutate()`, for reading _which_ files changed
+
+A listener-only consumer must still call `clear()`, or the dirty set grows for the process
+lifetime.
+
+`syncNfFileWatcher(watcher, sources, linkedDirs)` subscribes to the inputs of the last build.
+`sources` is either the input paths themselves or a bundler cache **keyed by input path**;
+a cache that records its inputs elsewhere yields an empty watch set and, silently, a dev
+server serving stale bundles until restart (angular-adapter#94). `linkedDirs` (from
+`linkedSharedDirs`) are polled rather than natively watched, because ng-packagr's atomic
+dist rewrites change the inode and defeat `fs.watch`.
+
+### Replay dedupe
+
+Events whose mtime is unchanged since the last one seen for that path are dropped before
+they reach either channel (`dedupeReplays`, default **on**). macOS FSEvents re-delivers
+'changed' for recently edited files roughly every 30s; with a watch list of a few thousand
+sources that replay alone keeps a rebuild loop awake forever.
+
+An unchanged-mtime event still passes inside `replayGraceMs` (default 2000) of the recorded
+mtime. That window is load-bearing, not cosmetic: it covers a second save inside one mtime
+tick (1s granularity on gRPC-FUSE/NFS/WSL2 drvfs) and an edit landing between the build
+finishing and `addPaths` seeding the already-new mtime. Dropping a real edit is the very
+bug the dedupe exists to prevent, so the check errs toward delivering.
 
 ## Caching System
 
