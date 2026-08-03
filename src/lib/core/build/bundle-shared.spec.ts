@@ -9,7 +9,10 @@ import {
   readBuilderPackageJson,
 } from './bundle-shared.js';
 import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
-import { createFakeBuildAdapter } from './__test-helpers__/fake-build-adapter.js';
+import {
+  createFakeBuildAdapter,
+  type FakeBuildAdapter,
+} from './__test-helpers__/fake-build-adapter.js';
 import { prepareSkipList } from '../../config/default-skip-list.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
 import type { IoPort } from '../../domain/utils/io-port.contract.js';
@@ -487,9 +490,9 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     expect(await buildWith(false)).toBe(await buildWith(true));
   });
 
-  // The shareAll shape: no `version` on the config and no configured packageInfo, so the
-  // installed version is the only thing that can tell two builds apart.
-  const inferredFoo = (): Record<string, NormalizedExternalConfig> => ({
+  const fooWith = (
+    extra: Partial<NormalizedExternalConfig> = {}
+  ): Record<string, NormalizedExternalConfig> => ({
     foo: {
       singleton: true,
       strictVersion: false,
@@ -497,6 +500,7 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       chunks: false,
       platform: 'browser',
       build: 'default',
+      ...extra,
     },
   });
 
@@ -507,11 +511,15 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     exists: () => false,
   });
 
-  const cachedBuild = async (mem: ReturnType<typeof createMemoryIo>, version: string) => {
+  const cachedBuild = async (
+    mem: ReturnType<typeof createMemoryIo>,
+    version: string,
+    sharedBundles: Record<string, NormalizedExternalConfig> = fooWith()
+  ) => {
     const adapter = createFakeBuildAdapter({ io: mem });
     const result = await bundleSharedCore(
       { io: mem, repo: repoAtVersion(version), adapter },
-      inferredFoo(),
+      sharedBundles,
       makeConfig(),
       makeFedOptions({ cacheExternalArtifacts: true }),
       [],
@@ -520,23 +528,90 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     return { adapter, result };
   };
 
-  it('re-uses the cached externals when the installed version is unchanged', async () => {
-    const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+  // All three config styles must invalidate on an installed-version bump. `shareAll` and
+  // `requiredVersion: 'auto'` leave `version` unset; an explicit range pins it to something that
+  // stays constant across the bump — which is exactly how the stale bundle used to survive.
+  const CONFIG_STYLES: Array<[string, Record<string, NormalizedExternalConfig>]> = [
+    ['shareAll (no declared version)', fooWith()],
+    ["share + requiredVersion 'auto'", fooWith({ requiredVersion: 'auto' })],
+    ['share + explicit declared range', fooWith({ version: '^2.0.0' })],
+  ];
 
-    await cachedBuild(mem, '2.0.0');
-    const { adapter, result } = await cachedBuild(mem, '2.0.0');
+  describe.each(CONFIG_STYLES)('installed-version invalidation — %s', (_label, sharedBundles) => {
+    it('re-uses the cached externals when the installed version is unchanged', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
 
-    expect(adapter.calls.setup).toHaveLength(0);
-    expect(result.externals[0]).toMatchObject({ packageName: 'foo', version: '2.0.0' });
+      await cachedBuild(mem, '2.0.0', sharedBundles);
+      const { adapter, result } = await cachedBuild(mem, '2.0.0', sharedBundles);
+
+      expect(adapter.calls.setup).toHaveLength(0);
+      expect(result.externals[0]).toMatchObject({ packageName: 'foo', version: '2.0.0' });
+    });
+
+    it('rebuilds when the installed version changed under an unchanged config', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+
+      await cachedBuild(mem, '2.0.0', sharedBundles);
+      const { adapter, result } = await cachedBuild(mem, '2.0.1', sharedBundles);
+
+      expect(adapter.calls.setup).toHaveLength(1);
+      expect(result.externals[0]).toMatchObject({ packageName: 'foo', version: '2.0.1' });
+    });
   });
 
-  it('rebuilds when the installed version changed under an unchanged config', async () => {
+  // A configured packageInfo makes the build skip node_modules entirely, so the key must not
+  // track it either — even when that packageInfo carries no version of its own. The missing
+  // `version` is reachable in practice: ExternalConfig declares it optional and
+  // with-native-federation.ts:99 casts rather than defaulting it.
+  it('ignores the installed version when packageInfo is configured without a version', async () => {
     const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+    const configured = fooWith({
+      packageInfo: { entryPoint: 'foo/vendored.js', esm: true } as NonNullable<
+        NormalizedExternalConfig['packageInfo']
+      >,
+    });
 
-    await cachedBuild(mem, '2.0.0');
-    const { adapter, result } = await cachedBuild(mem, '2.0.1');
+    await cachedBuild(mem, '2.0.0', configured);
+    const { adapter } = await cachedBuild(mem, '2.0.1', configured);
 
-    expect(adapter.calls.setup).toHaveLength(1);
-    expect(result.externals[0]).toMatchObject({ packageName: 'foo', version: '2.0.1' });
+    expect(adapter.calls.setup).toHaveLength(0);
+  });
+
+  // copyFiles runs on the fresh-build path too, so every name in the persisted metadata must
+  // exist in the cache dir. Sourcemaps are the risky case: rewriteImports renames the entry to a
+  // content hash and deletes the original, while the .map keeps its version-based name.
+  it('copies sourcemaps alongside content-hashed entries without tripping the missing-file guard', async () => {
+    const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+    const adapter: FakeBuildAdapter = createFakeBuildAdapter({
+      io: mem,
+      results: name => {
+        const setup = [...adapter.calls.setup].reverse().find(s => s.name === name)!;
+        return setup.options.entryPoints.flatMap(ep => [
+          { fileName: path.join(setup.options.outdir, ep.outName) },
+          { fileName: path.join(setup.options.outdir, `${ep.outName}.map`) },
+        ]);
+      },
+    });
+
+    const result = await bundleSharedCore(
+      { io: mem, repo: repoAtVersion('2.0.0'), adapter },
+      fooWith(),
+      makeConfig(),
+      makeFedOptions({ cacheExternalArtifacts: true }),
+      [],
+      BUILD_OPTIONS
+    );
+
+    const outFileName = result.externals[0]!.outFileName;
+    expect(mem.isFile(path.join('/ws/dist', outFileName))).toBe(true);
+
+    const persisted: { files: string[] } = JSON.parse(
+      mem.readText(path.join('/cache', 'shared.meta.json'))
+    );
+    expect(persisted.files).toContain(outFileName);
+    expect(persisted.files.filter(f => f.endsWith('.map'))).toHaveLength(1);
+    for (const file of persisted.files) {
+      expect(mem.isFile(path.join('/ws/dist', file))).toBe(true);
+    }
   });
 });

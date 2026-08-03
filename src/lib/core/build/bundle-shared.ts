@@ -100,9 +100,10 @@ export async function bundleSharedCore(
   );
 
   const resolvedVersions = installedVersions(Object.keys(sharedBundles), folder, deps.repo);
-  // A configured packageInfo short-circuits resolution below, so the key must follow that source.
+  // A configured packageInfo short-circuits resolution below, so the key must follow that source —
+  // including when it carries no version, where node_modules cannot affect the bundled bytes.
   for (const [key, cfg] of Object.entries(sharedBundles)) {
-    if (cfg.packageInfo?.version) resolvedVersions[key] = cfg.packageInfo.version;
+    if (cfg.packageInfo) resolvedVersions[key] = cfg.packageInfo.version ?? '';
   }
 
   const checksum = getChecksumCore(
