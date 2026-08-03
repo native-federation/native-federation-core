@@ -123,7 +123,11 @@ export function createMemoryIo(): MemoryIo {
       const key = toKey(p);
       const isSymbolicLink = symlinks.has(key);
       if (!isSymbolicLink && !files.has(key) && !dirs.has(key)) return null;
-      return { mtimeMs: mtimes.get(key) ?? 0, isSymbolicLink };
+      return {
+        mtimeMs: mtimes.get(key) ?? 0,
+        size: files.get(key)?.byteLength ?? 0,
+        isSymbolicLink,
+      };
     },
     writeText(p, data) {
       const key = toKey(p);

@@ -72,15 +72,23 @@ describe('createNfWatcherCore', () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
-  it('logs (and swallows) when a path cannot be watched', () => {
+  // A directory watch that never opened takes every source under it down with it,
+  // so the first failure is a warning rather than a debug line. Subsequent ones
+  // drop back to debug: descriptor exhaustion fails every directory after the first.
+  it('warns once (and swallows) when a path cannot be watched', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     const debug = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
     const io = createMemoryIo();
     io.watch = () => {
       throw new Error('boom');
     };
 
-    expect(() => createNfWatcherCore(io, {}).addPaths('/nope')).not.toThrow();
-    expect(debug).toHaveBeenCalled();
+    const watcher = createNfWatcherCore(io, {});
+    expect(() => watcher.addPaths(['/a/one.ts', '/b/two.ts', '/c/three.ts'])).not.toThrow();
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('/a');
+    expect(debug).toHaveBeenCalledTimes(2);
   });
 
   it('passes the poll option to io.watch for polled paths', () => {
@@ -297,6 +305,55 @@ describe('createNfWatcherCore replay dedupe', () => {
     watcher.clear();
     io.emit(dir, 'a.ts');
     expect(watcher.get().size).toBe(0);
+  });
+
+  // The clock is only consulted when mtime *and* length both match. A save that
+  // changed how much it wrote is settled without it, which is what keeps a wrong
+  // age (event-loop stall, server-clock skew) from swallowing the common case.
+  it('passes an aged same-mtime event whose length changed', () => {
+    const io = seeded();
+    const watcher = createNfWatcherCore(io, {}, clock);
+
+    watcher.addPaths(file);
+    io.setFile(file, 'export const a = 1;\n'); // mtime deliberately left at AGED
+    emitFile(io, file);
+
+    expect([...watcher.get()]).toEqual([posix(file)]);
+  });
+
+  // A network mount whose server clock runs ahead stamps mtimes in the future, so
+  // the age goes negative. That has to read as recent (deliver), not as aged: the
+  // dedupe going quiet costs a spurious rebuild, dropping the event costs an edit.
+  it('delivers when the mtime is in the future', () => {
+    const io = createMemoryIo()
+      .setFile(file, '')
+      .setMtime(file, NOW + 60_000);
+    const watcher = createNfWatcherCore(io, {}, clock);
+
+    watcher.addPaths(file);
+    emitFile(io, file);
+
+    expect([...watcher.get()]).toEqual([posix(file)]);
+  });
+
+  // Otherwise debounceMs is subtracted from the window: the event below has 100ms
+  // of grace left on arrival and none by the time the flush runs.
+  it('measures the grace window from event arrival, not from the debounced flush', () => {
+    vi.useFakeTimers();
+    let t = NOW;
+    const io = createMemoryIo()
+      .setFile(file, '')
+      .setMtime(file, NOW - 1900);
+    const onChange = vi.fn();
+    const watcher = createNfWatcherCore(io, { onChange, debounceMs: 300 }, () => t);
+
+    watcher.addPaths(file);
+    emitFile(io, file);
+    t = NOW + 300;
+    vi.advanceTimersByTime(300);
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 
   it('delivers every event when dedupeReplays is off', () => {

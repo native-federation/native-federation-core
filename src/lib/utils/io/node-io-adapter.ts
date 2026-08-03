@@ -51,7 +51,7 @@ export const nodeIo: IoPort = {
   stat(path): StatInfo | null {
     try {
       const s = fs.lstatSync(path);
-      return { mtimeMs: s.mtimeMs, isSymbolicLink: s.isSymbolicLink() };
+      return { mtimeMs: s.mtimeMs, size: s.size, isSymbolicLink: s.isSymbolicLink() };
     } catch {
       return null;
     }

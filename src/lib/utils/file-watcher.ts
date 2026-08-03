@@ -21,42 +21,51 @@ export function createNfWatcherCore(
   const replayGraceMs = options.replayGraceMs ?? 2000;
   const watchers = new Map<string, WatchHandle>();
   const dirtyPaths = new Set<string>();
-  const mtimes = new Map<string, number>();
-  // Files are watched through their containing directory rather than individually:
-  // a per-file handle dies when an editor saves by rename-replace (JetBrains' "safe
-  // write", vim backupcopy=no), after which every later edit goes unreported. The
-  // directory watch survives that, and collapses thousands of sources onto a few
-  // hundred handles. trackedFiles keeps the event surface identical to per-file
-  // watching -- untracked neighbours in the same directory are filtered out.
+  const lastSeen = new Map<string, FileIdentity>();
+  // Files are watched through their containing directory, never individually;
+  // trackedFiles narrows the directory's events back down to them. See AGENTS.md
+  // "File watches go through the directory".
   const trackedFiles = new Set<string>();
   const fileDirWatchers = new Map<string, WatchHandle>();
   const recursiveDirs: string[] = [];
 
-  // io.stat is lstat-based, so a symlinked file reports the link's own mtime.
-  // Follow it, as maxMtime does in resolve-shared-dirs.ts.
-  const mtimeOf = (path: string): number | null => {
+  // io.stat is lstat-based, so a symlink reports its own mtime and length, not the
+  // target's. Follow it, as maxMtime does in resolve-shared-dirs.ts.
+  const identityOf = (path: string): FileIdentity | null => {
     let stat = io.stat(path);
     if (stat?.isSymbolicLink) stat = io.stat(io.realpath(path));
-    return stat?.mtimeMs ?? null;
+    return stat ? { mtimeMs: stat.mtimeMs, size: stat.size } : null;
   };
 
-  const isReplay = (path: string): boolean => {
-    const mtime = mtimeOf(path);
-    if (mtime === null) {
-      mtimes.delete(path); // deleted or renamed away — a rebuild must see it
+  // Identity first, clock only for what identity cannot settle; a negative age
+  // delivers. See AGENTS.md "Replay dedupe" for why 2000 is the default.
+  const isReplay = (path: string, at: number): boolean => {
+    const current = identityOf(path);
+    if (!current) {
+      lastSeen.delete(path); // deleted or renamed away — a rebuild must see it
       return false;
     }
-    if (mtimes.get(path) !== mtime) {
-      mtimes.set(path, mtime);
+    const previous = lastSeen.get(path);
+    lastSeen.set(path, current);
+    if (!previous || previous.mtimeMs !== current.mtimeMs || previous.size !== current.size) {
       return false;
     }
-    // Same mtime. Only a replay once it is old enough to rule out a second save
-    // inside one mtime tick and the addPaths seed race (see NfFileWatcherOptions).
-    return now() - mtime >= replayGraceMs;
+    return at - current.mtimeMs >= replayGraceMs;
   };
 
-  const deliver = (path: string) => {
-    if (dedupeReplays && isReplay(path)) return;
+  // Warn once, then fall back to debug: descriptor exhaustion fails every
+  // subsequent directory too. See AGENTS.md "Watch failures are visible".
+  let watchFailures = 0;
+  const watchFailed = (path: string) => {
+    if (++watchFailures > 1) return logger.debug(`Could not watch path '${path}'.`);
+    logger.warn(
+      `Could not watch '${path}'. Changes there will not trigger a rebuild; ` +
+        `run with verbose logging to see any further watch failures.`
+    );
+  };
+
+  const deliver = (path: string, at: number) => {
+    if (dedupeReplays && isReplay(path, at)) return;
     // Record before notifying: a listener may read get() synchronously and must
     // see itself.
     dirtyPaths.add(path);
@@ -64,15 +73,18 @@ export function createNfWatcherCore(
   };
 
   // Coalesce bursts (ng-packagr emits several writes per rebuild) into one flush.
-  const pending = new Set<string>();
+  // Each path keeps the time its first event arrived, so debounceMs is not
+  // subtracted from the replay grace window.
+  const pending = new Map<string, number>();
   let flushTimer: ReturnType<typeof setTimeout> | undefined;
   const flush = () => {
-    for (const p of pending) deliver(p);
+    for (const [p, at] of pending) deliver(p, at);
     pending.clear();
   };
   const notify = (path: string) => {
-    if (debounceMs <= 0) return deliver(path);
-    pending.add(path);
+    const at = now();
+    if (debounceMs <= 0) return deliver(path, at);
+    if (!pending.has(path)) pending.set(path, at);
     if (flushTimer) clearTimeout(flushTimer);
     flushTimer = setTimeout(flush, debounceMs);
     flushTimer.unref?.();
@@ -94,7 +106,7 @@ export function createNfWatcherCore(
             );
             recursiveDirs.push(toPosix(p));
           } catch {
-            logger.debug(`Could not watch path '${p}'.`);
+            watchFailed(p);
           }
           continue;
         }
@@ -103,9 +115,9 @@ export function createNfWatcherCore(
         if (trackedFiles.has(key)) continue;
         trackedFiles.add(key);
         // Seed so the first replay after startup is already recognised as one.
-        if (dedupeReplays && !mtimes.has(key)) {
-          const mtime = mtimeOf(key);
-          if (mtime !== null) mtimes.set(key, mtime);
+        if (dedupeReplays && !lastSeen.has(key)) {
+          const identity = identityOf(key);
+          if (identity) lastSeen.set(key, identity);
         }
 
         // An explicitly watched directory already reports this file recursively.
@@ -122,7 +134,7 @@ export function createNfWatcherCore(
             })
           );
         } catch {
-          logger.debug(`Could not watch path '${dir}'.`);
+          watchFailed(dir);
         }
       }
     },
@@ -138,11 +150,18 @@ export function createNfWatcherCore(
       }
       watchers.clear();
       fileDirWatchers.clear();
-      // Both gate watch creation, so a re-add after close() has to reopen.
+      // All three gate work in addPaths, so a re-add after close() has to redo it:
+      // reopen the watches, and re-seed rather than trust a stale identity.
       trackedFiles.clear();
       recursiveDirs.length = 0;
+      lastSeen.clear();
     },
   };
+}
+
+interface FileIdentity {
+  mtimeMs: number;
+  size: number;
 }
 
 /** A bundler cache keyed by input path, or the input paths themselves. */

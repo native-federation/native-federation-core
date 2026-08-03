@@ -7,6 +7,8 @@ export interface Digest {
 
 export interface StatInfo {
   mtimeMs: number;
+  /** Byte length; 0 for directories. */
+  size: number;
   isSymbolicLink: boolean;
 }
 

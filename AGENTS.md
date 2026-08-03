@@ -181,16 +181,45 @@ explicitly keep their recursive watch and deliver every entry.
 
 ### Replay dedupe
 
-Events whose mtime is unchanged since the last one seen for that path are dropped before
-they reach either channel (`dedupeReplays`, default **on**). macOS FSEvents re-delivers
-'changed' for recently edited files roughly every 30s; with a watch list of a few thousand
-sources that replay alone keeps a rebuild loop awake forever.
+Events whose recorded identity — mtime **and** byte length — is unchanged since the last one
+seen for that path are dropped before they reach either channel (`dedupeReplays`, default
+**on**). macOS FSEvents re-delivers 'changed' for recently edited files roughly every 30s;
+with a watch list of a few thousand sources that replay alone keeps a rebuild loop awake
+forever.
 
-An unchanged-mtime event still passes inside `replayGraceMs` (default 2000) of the recorded
-mtime. That window is load-bearing, not cosmetic: it covers a second save inside one mtime
-tick (1s granularity on gRPC-FUSE/NFS/WSL2 drvfs) and an edit landing between the build
-finishing and `addPaths` seeding the already-new mtime. Dropping a real edit is the very
-bug the dedupe exists to prevent, so the check errs toward delivering.
+Length is paired with mtime so that the common ambiguous case — a second save landing inside
+one mtime tick, on a filesystem with coarse mtime granularity — is settled on data rather
+than on a clock. Only a save that also left byte length untouched reaches the time check.
+
+That check is `replayGraceMs` (default 2000): an event whose identity matches still passes
+while the mtime is recent. The default is a derived bound, not a tuned constant. A filesystem
+truncating mtime to granularity `g` records a value up to `g` before the write, so two writes
+can only collide in mtime within `2g` — and `g` is 1s on the coarsest filesystems in play
+(gRPC-FUSE, NFS, WSL2 drvfs, HFS+). On ext4 and APFS `g` is nanoseconds, so a real save always
+advances mtime and the window is never reached.
+
+Age is measured from when the event *arrived*, not from when a debounced flush got round to
+it, so `debounceMs` is not silently subtracted from the window. Two limits are worth knowing:
+a stall inside the event loop delays the `fs.watch` callback itself, which no local bookkeeping
+can correct; and on a network mount the age is a cross-clock subtraction, since mtime carries
+the server's clock. A server clock running ahead yields a negative age, which reads as recent
+and delivers — the safe direction. Running behind shortens the window, and there the only
+remedy is a larger `replayGraceMs` or `dedupeReplays: false`.
+
+Dropping a real edit is the bug the dedupe exists to prevent, so every ambiguous case errs
+toward delivering; a spurious rebuild is the cheaper mistake.
+
+### Watch failures are visible
+
+A watch that fails to open is silent staleness — the paths it covered never report a change
+and the dev server serves the last bundle until restart. Because watches are per directory,
+one failure can take a whole directory of sources down, so the first is a `logger.warn`.
+Later ones drop to debug: descriptor exhaustion fails every subsequent directory too, and a
+line per path would flood.
+
+Not covered by any of this: events the platform itself drops (inotify `IN_Q_OVERFLOW` under
+`git checkout` or `npm install` churn). Recovering those needs a reconciliation sweep that
+re-stats the tracked set — deliberately out of scope here, own issue.
 
 ## Caching System
 
