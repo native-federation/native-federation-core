@@ -32,12 +32,8 @@ export const getChecksum = (
 ): string =>
   getChecksumCore(nodeIo, shared, dev, builderVersion, features, contentSignals, resolvedVersions);
 
-type FeatureFlags = Partial<NormalizedFederationConfig['features']>;
+export type FeatureFlags = Partial<NormalizedFederationConfig['features']>;
 
-// Every flag participates, sorted by name so the record's key order cannot perturb the hash.
-// Deliberately not cherry-picked to the flags that reach the bundler: a flag that turns out to
-// affect the bundled bytes is a correctness bug, whereas one that does not costs a single
-// needless rebuild on the rare occasion someone toggles it.
 const featureState = (features: FeatureFlags): string =>
   Object.entries(features)
     .sort(([a], [b]) => (a < b ? -1 : 1))
@@ -79,8 +75,7 @@ export const getChecksumCore = (
     .reduce((clean, external) => {
       const installed = resolvedVersions[external];
       const declared = shared[external]!.version;
-      // Distinct sigils: a version read from node_modules must never hash like the same string
-      // merely declared, or a key going from unresolvable to installed would look unchanged.
+
       const version = installed ? `~${installed}` : declared ? `@${declared}` : '';
       const signal = contentSignals[external] ? `#${contentSignals[external]}` : '';
       return clean + ':' + external + version + sharedInfoState(shared[external]!) + signal;
