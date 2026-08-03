@@ -155,12 +155,29 @@ channels, both always live**:
 A listener-only consumer must still call `clear()`, or the dirty set grows for the process
 lifetime.
 
+### What to watch
+
 `syncNfFileWatcher(watcher, sources, linkedDirs)` subscribes to the inputs of the last build.
 `sources` is either the input paths themselves or a bundler cache **keyed by input path**;
 a cache that records its inputs elsewhere yields an empty watch set and, silently, a dev
 server serving stale bundles until restart (angular-adapter#94). `linkedDirs` (from
 `linkedSharedDirs`) are polled rather than natively watched, because ng-packagr's atomic
 dist rewrites change the inode and defeat `fs.watch`.
+
+`sharedMappingDirs(config)` is the config-only alternative: the source dir of every
+`sharedMappings` entry point. It is coarser than a build's compiled inputs and covers what
+they cannot — files added to a lib since the last build — but it does not follow imports out
+of the lib. An adapter that can enumerate its build inputs should watch both.
+
+### File watches go through the directory
+
+`addPaths` never opens a handle on a file. A per-file `fs.watch` holds an inode, and an editor
+that saves by rename-replace (JetBrains "safe write", vim `backupcopy=no`) replaces it — the
+handle then reports nothing, so the second save onward is silently lost. Each tracked file is
+covered by a non-recursive watch on its containing directory instead, filtered back down to the
+tracked set so the event surface is unchanged. This also collapses thousands of sources onto a
+few hundred handles, and reports files created after they were added. Directories passed
+explicitly keep their recursive watch and deliver every entry.
 
 ### Replay dedupe
 

@@ -61,6 +61,22 @@ export function linkedSharedDirs(
   return [...new Set(entries.filter(e => e.isSymlink).map(e => e.realDir))];
 }
 
+/**
+ * Source directories of the workspace libs in `config.sharedMappings` — the watch set
+ * for mappings, derived from config alone rather than from a bundler cache.
+ *
+ * Coarser than the inputs a build actually compiled, and deliberately so: it covers
+ * files added to a lib after the last build, which a compiled-inputs watch set cannot
+ * know about yet. It does not follow imports out of the lib, so an adapter that can
+ * enumerate its build inputs should watch both. See angular-adapter#94.
+ */
+export function sharedMappingDirs(config: NormalizedFederationConfig): string[] {
+  const dirs = Object.keys(config.sharedMappings)
+    .map(entryPoint => toPosix(path.dirname(entryPoint)))
+    .filter(dir => !dir.includes('node_modules'));
+  return [...new Set(dirs)];
+}
+
 function maxMtime(io: FileReaderPort, dir: string): number {
   let max = 0;
   const walk = (d: string) => {

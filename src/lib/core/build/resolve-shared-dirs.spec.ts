@@ -4,6 +4,7 @@ import {
   linkedContentSignals,
   linkedSharedDirs,
   resolveSharedPackageDirs,
+  sharedMappingDirs,
 } from './resolve-shared-dirs.js';
 import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
@@ -51,7 +52,9 @@ describe('resolveSharedPackageDirs', () => {
     };
   }
 
-  const config = { shared: { '@scope/lib': {}, missing: {} } } as unknown as NormalizedFederationConfig;
+  const config = {
+    shared: { '@scope/lib': {}, missing: {} },
+  } as unknown as NormalizedFederationConfig;
   const fedOptions = { workspaceRoot: '/ws' } as NormalizedFederationOptions;
 
   it('maps each key to its realpath, following symlinks', () => {
@@ -98,6 +101,43 @@ describe('linkedSharedDirs', () => {
     });
 
     expect(linkedSharedDirs(cfg, fedOptions, io, repo)).toEqual(['/dev/lib']);
+  });
+});
+
+describe('sharedMappingDirs', () => {
+  const dirsFor = (sharedMappings: Record<string, string>): string[] =>
+    sharedMappingDirs({ sharedMappings } as unknown as NormalizedFederationConfig);
+
+  // getRawMappedPaths keys config.sharedMappings by the absolute entry-point file.
+  it('returns the source dir of each mapping entry point', () => {
+    expect(
+      dirsFor({
+        '/ws/libs/shell/src/index.ts': '@apex/shell',
+        '/ws/libs/ui/src/index.ts': '@apex/ui',
+      })
+    ).toEqual(['/ws/libs/shell/src', '/ws/libs/ui/src']);
+  });
+
+  it('dedupes libs that expose several entry points from one dir', () => {
+    expect(
+      dirsFor({
+        '/ws/libs/ui/src/index.ts': '@apex/ui',
+        '/ws/libs/ui/src/testing.ts': '@apex/ui/testing',
+      })
+    ).toEqual(['/ws/libs/ui/src']);
+  });
+
+  it('drops a mapping resolving into node_modules', () => {
+    expect(
+      dirsFor({
+        '/ws/node_modules/@apex/vendor/index.ts': '@apex/vendor',
+        '/ws/libs/ui/src/index.ts': '@apex/ui',
+      })
+    ).toEqual(['/ws/libs/ui/src']);
+  });
+
+  it('returns empty when nothing is mapped', () => {
+    expect(dirsFor({})).toEqual([]);
   });
 });
 

@@ -1,9 +1,9 @@
-import { join } from 'path';
+import { dirname, join } from 'path';
 import type { WatchHandle, WatchPort, FileReaderPort } from '../domain/utils/io-port.contract.js';
 import type { NfFileWatcher, NfFileWatcherOptions } from '../domain/utils/file-watcher.contract.js';
 import { nodeIo } from './io/node-io-adapter.js';
 import { logger } from './logger.js';
-import { toPosix } from './path-patterns.js';
+import { isUnderAnyDir, toPosix } from './path-patterns.js';
 
 export function createNfWatcher(options: NfFileWatcherOptions = {}): NfFileWatcher {
   return createNfWatcherCore(nodeIo, options);
@@ -22,6 +22,15 @@ export function createNfWatcherCore(
   const watchers = new Map<string, WatchHandle>();
   const dirtyPaths = new Set<string>();
   const mtimes = new Map<string, number>();
+  // Files are watched through their containing directory rather than individually:
+  // a per-file handle dies when an editor saves by rename-replace (JetBrains' "safe
+  // write", vim backupcopy=no), after which every later edit goes unreported. The
+  // directory watch survives that, and collapses thousands of sources onto a few
+  // hundred handles. trackedFiles keeps the event surface identical to per-file
+  // watching -- untracked neighbours in the same directory are filtered out.
+  const trackedFiles = new Set<string>();
+  const fileDirWatchers = new Map<string, WatchHandle>();
+  const recursiveDirs: string[] = [];
 
   // io.stat is lstat-based, so a symlinked file reports the link's own mtime.
   // Follow it, as maxMtime does in resolve-shared-dirs.ts.
@@ -74,28 +83,46 @@ export function createNfWatcherCore(
       const list = typeof paths === 'string' ? [paths] : [...paths];
       const poll = opts?.poll ? { intervalMs: pollIntervalMs } : undefined;
       for (const p of list) {
-        if (watchers.has(p)) continue;
-        const isDir = io.isDirectory(p);
-        try {
-          const handle = isDir
-            ? io.watch(p, { recursive: true, poll }, filename => {
+        if (io.isDirectory(p)) {
+          if (watchers.has(p)) continue;
+          try {
+            watchers.set(
+              p,
+              io.watch(p, { recursive: true, poll }, filename => {
                 if (filename) notify(toPosix(join(p, filename)));
               })
-            : io.watch(p, { recursive: false, poll }, () => notify(toPosix(p)));
-          watchers.set(p, handle);
-        } catch {
-          logger.debug(`Could not watch path '${p}'.`);
+            );
+            recursiveDirs.push(toPosix(p));
+          } catch {
+            logger.debug(`Could not watch path '${p}'.`);
+          }
           continue;
         }
+
+        const key = toPosix(p);
+        if (trackedFiles.has(key)) continue;
+        trackedFiles.add(key);
         // Seed so the first replay after startup is already recognised as one.
-        // Directories are skipped: seeding a recursive watch means walking the tree,
-        // and their entries seed themselves on the event that first reports them.
-        if (dedupeReplays && !isDir) {
-          const key = toPosix(p);
-          if (!mtimes.has(key)) {
-            const mtime = mtimeOf(key);
-            if (mtime !== null) mtimes.set(key, mtime);
-          }
+        if (dedupeReplays && !mtimes.has(key)) {
+          const mtime = mtimeOf(key);
+          if (mtime !== null) mtimes.set(key, mtime);
+        }
+
+        // An explicitly watched directory already reports this file recursively.
+        if (isUnderAnyDir(key, recursiveDirs)) continue;
+        const dir = toPosix(dirname(p));
+        if (fileDirWatchers.has(dir)) continue;
+        try {
+          fileDirWatchers.set(
+            dir,
+            io.watch(dir, { recursive: false, poll }, filename => {
+              if (!filename) return;
+              const changed = toPosix(join(dir, filename));
+              if (trackedFiles.has(changed)) notify(changed);
+            })
+          );
+        } catch {
+          logger.debug(`Could not watch path '${dir}'.`);
         }
       }
     },
@@ -106,10 +133,14 @@ export function createNfWatcherCore(
 
     async close() {
       if (flushTimer) clearTimeout(flushTimer);
-      for (const handle of watchers.values()) {
+      for (const handle of [...watchers.values(), ...fileDirWatchers.values()]) {
         handle.close();
       }
       watchers.clear();
+      fileDirWatchers.clear();
+      // Both gate watch creation, so a re-add after close() has to reopen.
+      trackedFiles.clear();
+      recursiveDirs.length = 0;
     },
   };
 }

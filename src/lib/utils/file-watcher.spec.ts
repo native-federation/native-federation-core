@@ -12,6 +12,11 @@ const clock = () => NOW;
 const AGED = NOW - 60_000; // well outside the grace window
 const posix = (p: string): string => path.resolve(p).replace(/\\/g, '/');
 
+// Tracked files are watched through their containing directory, so an event for one
+// arrives on that directory carrying the entry name.
+const emitFile = (io: ReturnType<typeof createMemoryIo>, file: string): void =>
+  io.emit(path.dirname(file), path.basename(file));
+
 describe('createNfWatcherCore', () => {
   it('accumulates changed paths in dirtyPaths when no onChange handler is given', () => {
     const dir = path.resolve('/proj/src');
@@ -34,7 +39,7 @@ describe('createNfWatcherCore', () => {
 
     watcher.addPaths(file);
     io.setMtime(file, NOW); // the save the event reports
-    io.emit(file);
+    emitFile(io, file);
 
     expect(onChange).toHaveBeenCalledWith(posix(file));
     expect([...watcher.get()]).toEqual([posix(file)]);
@@ -52,7 +57,7 @@ describe('createNfWatcherCore', () => {
 
     watcher.addPaths(file);
     io.setMtime(file, NOW);
-    io.emit(file);
+    emitFile(io, file);
 
     expect(seen).toEqual([[posix(file)]]);
   });
@@ -133,6 +138,92 @@ describe('createNfWatcherCore', () => {
   });
 });
 
+// A per-file fs.watch handle dies when an editor saves by rename-replace (JetBrains
+// "safe write", vim backupcopy=no): the inode it holds is gone and every later edit
+// goes unreported. Watching the containing directory survives that.
+describe('createNfWatcherCore file watches', () => {
+  const dir = path.resolve('/proj/src');
+  const a = path.join(dir, 'a.ts');
+  const b = path.join(dir, 'b.ts');
+
+  it('watches the containing directory rather than the file itself', () => {
+    const io = createMemoryIo().setFile(a, '');
+    const spy = vi.spyOn(io, 'watch');
+
+    createNfWatcherCore(io, {}, clock).addPaths(a);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith(
+      posix(dir),
+      expect.objectContaining({ recursive: false }),
+      expect.any(Function)
+    );
+  });
+
+  it('opens one watch for every tracked file sharing a directory', () => {
+    const io = createMemoryIo().setFile(a, '').setFile(b, '');
+    const spy = vi.spyOn(io, 'watch');
+
+    createNfWatcherCore(io, {}, clock).addPaths([a, b]);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  // The directory reports every entry, so the tracked set has to narrow it back
+  // down to the event surface per-file watching had.
+  it('ignores events for untracked neighbours in a watched directory', () => {
+    const io = createMemoryIo().setFile(a, '').setMtime(a, AGED).setFile(b, '');
+    const watcher = createNfWatcherCore(io, {}, clock);
+
+    watcher.addPaths(a);
+    io.emit(dir, 'b.ts');
+    expect(watcher.get().size).toBe(0);
+
+    io.setMtime(a, NOW);
+    io.emit(dir, 'a.ts');
+    expect([...watcher.get()]).toEqual([posix(a)]);
+  });
+
+  it('reports a file created after it was added', () => {
+    const io = createMemoryIo().setDir(dir);
+    const watcher = createNfWatcherCore(io, {}, clock);
+
+    watcher.addPaths(a); // does not exist yet — nothing to seed
+    io.setFile(a, '').setMtime(a, NOW);
+    io.emit(dir, 'a.ts');
+
+    expect([...watcher.get()]).toEqual([posix(a)]);
+  });
+
+  it('does not add a second watch when a recursive directory already covers the file', () => {
+    const io = createMemoryIo().setDir(dir).setFile(a, '');
+    const spy = vi.spyOn(io, 'watch');
+    const watcher = createNfWatcherCore(io, {}, clock);
+
+    watcher.addPaths(dir);
+    watcher.addPaths(a);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith(
+      dir,
+      expect.objectContaining({ recursive: true }),
+      expect.any(Function)
+    );
+  });
+
+  it('close() stops the directory watches opened for files', async () => {
+    const io = createMemoryIo().setFile(a, '').setMtime(a, AGED);
+    const watcher = createNfWatcherCore(io, {}, clock);
+
+    watcher.addPaths(a);
+    await watcher.close();
+
+    io.setMtime(a, NOW);
+    io.emit(dir, 'a.ts');
+    expect(watcher.get().size).toBe(0);
+  });
+});
+
 // macOS FSEvents re-delivers 'changed' for recently edited files roughly every 30s
 // with mtime untouched. Once the watch list covers every compiled source, that
 // replay alone keeps a rebuild loop awake forever (angular-adapter#96).
@@ -146,8 +237,8 @@ describe('createNfWatcherCore replay dedupe', () => {
     const watcher = createNfWatcherCore(io, { onChange }, clock);
 
     watcher.addPaths(file);
-    io.emit(file);
-    io.emit(file);
+    emitFile(io, file);
+    emitFile(io, file);
 
     expect(onChange).not.toHaveBeenCalled();
     expect(watcher.get().size).toBe(0);
@@ -162,7 +253,7 @@ describe('createNfWatcherCore replay dedupe', () => {
     const watcher = createNfWatcherCore(io, {}, clock);
 
     watcher.addPaths(file);
-    io.emit(file);
+    emitFile(io, file);
 
     expect([...watcher.get()]).toEqual([posix(file)]);
   });
@@ -174,8 +265,8 @@ describe('createNfWatcherCore replay dedupe', () => {
 
     watcher.addPaths(file);
     io.setMtime(file, NOW - 30_000);
-    io.emit(file);
-    io.emit(file);
+    emitFile(io, file);
+    emitFile(io, file);
 
     expect(onChange).toHaveBeenCalledTimes(1);
   });
@@ -186,7 +277,7 @@ describe('createNfWatcherCore replay dedupe', () => {
 
     watcher.addPaths(file);
     io.remove(file);
-    io.emit(file);
+    emitFile(io, file);
 
     expect([...watcher.get()]).toEqual([posix(file)]);
   });
@@ -214,8 +305,8 @@ describe('createNfWatcherCore replay dedupe', () => {
     const watcher = createNfWatcherCore(io, { onChange, dedupeReplays: false }, clock);
 
     watcher.addPaths(file);
-    io.emit(file);
-    io.emit(file);
+    emitFile(io, file);
+    emitFile(io, file);
 
     expect(onChange).toHaveBeenCalledTimes(2);
   });
@@ -235,7 +326,7 @@ describe('createNfWatcherCore replay dedupe', () => {
     watcher.addPaths(link);
     io.setMtime(target, NOW - 10_000); // target edited; the link's own mtime stands
 
-    io.emit(link);
+    emitFile(io, link);
 
     expect([...watcher.get()]).toEqual([posix(link)]);
   });

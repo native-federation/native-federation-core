@@ -39,7 +39,7 @@ export type {
   NfFileWatcherOptions,
 } from './lib/domain/utils/file-watcher.contract.js';
 export { syncNfFileWatcher, createNfWatcher, type WatchSources } from './lib/utils/file-watcher.js';
-export { linkedSharedDirs } from './lib/core/build/resolve-shared-dirs.js';
+export { linkedSharedDirs, sharedMappingDirs } from './lib/core/build/resolve-shared-dirs.js';
 // Correlates watcher paths with linkedSharedDirs output; both are posix, so consumers
 // must not hand-roll the prefix check with path.sep.
 export { isUnderDir, isUnderAnyDir } from './lib/utils/path-patterns.js';
