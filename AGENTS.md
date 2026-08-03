@@ -147,18 +147,25 @@ The library supports **watch mode** for development:
 
 Native Federation uses an intelligent caching system to speed up builds:
 
-**Federation Cache** (`src/lib/core/federation-cache.ts`):
+**Externals cache** (`src/lib/core/cache/cache-persistence.ts`) — on disk, across builds:
 
-- Caches built shared dependencies by content hash
-- Reuses cached bundles when dependencies haven't changed
-- Stored in `node_modules/.federation` by default
-- Persisted across builds for fast rebuilds
+- Caches the bundled shared dependencies of each bundle, alongside a `.meta.json` describing them
+- Keyed by a checksum over the external names, their installed versions, the builder version and
+  the relevant feature flags (`getChecksum`)
+- Stored in `node_modules/.cache/native-federation` by default (`getDefaultCachePath`)
+- On a checksum match the cached artifacts are copied straight into the output path
+
+**Federation cache** (`src/lib/core/cache/federation-cache.ts`) — in memory, one build:
+
+- Accumulates the externals, chunks and integrity hashes that go into `remoteEntry.json`
 
 **Cache invalidation**:
 
-- Based on package version changes
-- Based on configuration changes
-- Can be manually cleared
+- Based on the installed versions of shared packages, not their declared ranges
+  (`installedVersions`)
+- Based on configuration changes and on the builder version
+- For symlinked (npm-linked) deps, additionally on a content signal (max mtime of the package dir)
+- Can be cleared by deleting the cache folder
 
 ## Testing
 
@@ -217,7 +224,7 @@ Native Federation uses an intelligent caching system to speed up builds:
 
 1. Check `federation.config.js` configuration
 2. Verify externals are properly excluded
-3. Check federation cache in `node_modules/.federation`
+3. Check the externals cache in `node_modules/.cache/native-federation`
 4. Enable verbose logging in `federationBuilder.init({ options: { verbose: true } })`
 5. Look at generated `remoteEntry.json` files
 6. Check the import map in browser DevTools

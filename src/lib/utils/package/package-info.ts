@@ -1,6 +1,6 @@
 import { logger } from '../logger.js';
 import { normalize } from '../normalize.js';
-import { sharedPackageJsonRepository } from '../io/package-json-repository.js';
+import { getPkgFolder, sharedPackageJsonRepository } from '../io/package-json-repository.js';
 import type {
   PackageInfo,
   PackageJsonRepository,
@@ -55,6 +55,37 @@ export function getPackageInfo(
   }
 
   return info;
+}
+
+/**
+ * Installed version per key, from each key's package root. Resolution is deduped by root:
+ * `findDepPackageJson` trims to the root anyway, and that root package.json is also where
+ * `resolvePackageInfo` reads the `version` it records as `PackageInfo.version`, so a secondary
+ * yields the same string as its main entry point. Unresolvable keys map to ''.
+ */
+export function installedVersions(
+  packageNames: string[],
+  workspaceRoot: string,
+  repo: PackageJsonRepository = sharedPackageJsonRepository
+): Record<string, string> {
+  workspaceRoot = normalize(workspaceRoot, true);
+
+  const byRoot = new Map<string, string>();
+  const result: Record<string, string> = {};
+
+  for (const packageName of packageNames) {
+    const root = getPkgFolder(packageName);
+
+    if (!byRoot.has(root)) {
+      const pkgJsonPath = repo.findDepPackageJson(root, workspaceRoot);
+      const version = pkgJsonPath ? (repo.readJson(pkgJsonPath)['version'] as string) : '';
+      byRoot.set(root, version ?? '');
+    }
+
+    result[packageName] = byRoot.get(root)!;
+  }
+
+  return result;
 }
 
 export function getVersionMaps(
