@@ -1,5 +1,6 @@
 import path from 'path';
 import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
+import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type {
   ChunkInfo,
   IntegrityMap,
@@ -25,44 +26,71 @@ export const getChecksum = (
   shared: Record<string, NormalizedExternalConfig>,
   dev: '1' | '0',
   builderVersion = '',
-  synthesizeCjsExports = true,
+  features: FeatureFlags = {},
   contentSignals: Record<string, string> = {},
   resolvedVersions: Record<string, string> = {}
 ): string =>
-  getChecksumCore(
-    nodeIo,
-    shared,
-    dev,
-    builderVersion,
-    synthesizeCjsExports,
-    contentSignals,
-    resolvedVersions
-  );
+  getChecksumCore(nodeIo, shared, dev, builderVersion, features, contentSignals, resolvedVersions);
+
+type FeatureFlags = Partial<NormalizedFederationConfig['features']>;
+
+// Every flag participates, sorted by name so the record's key order cannot perturb the hash.
+// Deliberately not cherry-picked to the flags that reach the bundler: a flag that turns out to
+// affect the bundled bytes is a correctness bug, whereas one that does not costs a single
+// needless rebuild on the rare occasion someone toggles it.
+const featureState = (features: FeatureFlags): string =>
+  Object.entries(features)
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([flag, on]) => `${flag}=${on ? '1' : '0'}`)
+    .join(',');
+
+// Fields `buildResult` copies from the config straight into SharedInfo, so they ship in
+// remoteEntry.json. A cache hit replays the recorded externals verbatim, so a change to any of
+// them must miss — otherwise the runtime negotiates versions against stale metadata.
+const SHARED_INFO_FIELDS = [
+  'requiredVersion',
+  'singleton',
+  'strictVersion',
+  'shareScope',
+  'pool',
+] as const;
+
+// JSON-encoded so a value containing a delimiter cannot forge one; fixed field order, so no sort.
+const sharedInfoState = (config: NormalizedExternalConfig): string => {
+  const values = SHARED_INFO_FIELDS.map(field => config[field] ?? null);
+  return values.every(value => value === null) ? '' : `!${JSON.stringify(values)}`;
+};
 
 export const getChecksumCore = (
   hash: HashPort,
   shared: Record<string, NormalizedExternalConfig>,
   dev: '1' | '0',
   builderVersion = '',
-  synthesizeCjsExports = true,
+  features: FeatureFlags = {},
   // Per-key content signal, set only for symlinked deps; empty map => version-only hash.
   contentSignals: Record<string, string> = {},
-  // Per-key installed version. `shared[].version` is the declared range and is absent on the
-  // shareAll path, so this is what actually ties the key to what is in node_modules.
+  // Per-key installed version — the only version that can change the bundled bytes, so it wins
+  // outright. An omitted map falls back to the declared range for every key, reproducing the
+  // pre-installed-version checksum byte for byte.
   resolvedVersions: Record<string, string> = {}
 ): string => {
   const denseExternals = Object.keys(shared)
     .sort()
     .reduce((clean, external) => {
-      const version = shared[external]!.version ? `@${shared[external]!.version}` : '';
-      const resolved = resolvedVersions[external] ? `~${resolvedVersions[external]}` : '';
+      const installed = resolvedVersions[external];
+      const declared = shared[external]!.version;
+      // Distinct sigils: a version read from node_modules must never hash like the same string
+      // merely declared, or a key going from unresolvable to installed would look unchanged.
+      const version = installed ? `~${installed}` : declared ? `@${declared}` : '';
       const signal = contentSignals[external] ? `#${contentSignals[external]}` : '';
-      return clean + ':' + external + version + resolved + signal;
+      return clean + ':' + external + version + sharedInfoState(shared[external]!) + signal;
     }, 'deps');
 
-  const cjs = synthesizeCjsExports ? '1' : '0';
   return hash
-    .hash('sha256', denseExternals + `:dev=${dev}:builder=${builderVersion}:cjs=${cjs}`)
+    .hash(
+      'sha256',
+      denseExternals + `:dev=${dev}:builder=${builderVersion}:features=${featureState(features)}`
+    )
     .hex();
 };
 

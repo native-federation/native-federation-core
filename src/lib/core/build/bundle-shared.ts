@@ -111,7 +111,7 @@ export async function bundleSharedCore(
     sharedBundles,
     fedOptions.dev ? '1' : '0',
     builderVersion,
-    config.features.synthesizeCjsExports,
+    config.features,
     contentSignals,
     resolvedVersions
   );

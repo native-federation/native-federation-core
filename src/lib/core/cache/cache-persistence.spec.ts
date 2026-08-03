@@ -56,39 +56,102 @@ describe('getChecksumCore', () => {
     );
   });
 
-  it('changes when the CJS-export synthesis flag changes', () => {
+  it('changes when any single feature flag flips', () => {
     const base = { react: ext('18') };
-    expect(getChecksumCore(io, base, '0', '1.0.0', true)).not.toBe(
-      getChecksumCore(io, base, '0', '1.0.0', false)
+    const flags = {
+      mappingVersion: false,
+      ignoreUnusedDeps: false,
+      denseChunking: false,
+      denseExternals: false,
+      integrityHashes: false,
+      synthesizeCjsExports: false,
+    };
+    const allOff = getChecksumCore(io, base, '0', '1.0.0', flags);
+
+    for (const flag of Object.keys(flags) as Array<keyof typeof flags>) {
+      expect(getChecksumCore(io, base, '0', '1.0.0', { ...flags, [flag]: true })).not.toBe(allOff);
+    }
+  });
+
+  // A flag present-and-false must not hash like a flag absent: adding a flag to the contract has
+  // to invalidate, even when it defaults off.
+  it('distinguishes an explicitly disabled flag from an absent one', () => {
+    const base = { react: ext('18') };
+    expect(getChecksumCore(io, base, '0', '1.0.0', { denseChunking: false })).not.toBe(
+      getChecksumCore(io, base, '0', '1.0.0', {})
     );
+  });
+
+  // These five reach remoteEntry.json via buildResult, and a cache hit replays the recorded
+  // externals verbatim — so each has to invalidate or the runtime gets stale negotiation metadata.
+  describe.each([
+    ['requiredVersion', { requiredVersion: '^2.0.0' }, { requiredVersion: '>=2.0.0' }],
+    ['singleton', { singleton: true }, { singleton: false }],
+    ['strictVersion', { strictVersion: true }, { strictVersion: false }],
+    ['shareScope', { shareScope: 'a' }, { shareScope: 'b' }],
+    ['pool', { pool: 'critical' }, { pool: 'lazy' }],
+  ])('shared-info field %s', (_field, left, right) => {
+    it('changes the checksum when it changes', () => {
+      const at = (over: Partial<NormalizedExternalConfig>) =>
+        getChecksumCore(io, { react: { ...ext('18'), ...over } }, '0');
+
+      expect(at(left)).not.toBe(at(right));
+    });
+
+    it('is stable when it does not', () => {
+      const at = (over: Partial<NormalizedExternalConfig>) =>
+        getChecksumCore(io, { react: { ...ext('18'), ...over } }, '0');
+
+      expect(at(left)).toBe(at(left));
+    });
+  });
+
+  // `singleton: false` and an absent `singleton` mean different things downstream, so they must
+  // not collide the way a plain falsy check would make them.
+  it('distinguishes an explicitly false shared-info field from an absent one', () => {
+    expect(getChecksumCore(io, { react: { ...ext('18'), singleton: false } }, '0')).not.toBe(
+      getChecksumCore(io, { react: ext('18') }, '0')
+    );
+  });
+
+  it('is independent of feature-flag key insertion order', () => {
+    const base = { react: ext('18') };
+    expect(
+      getChecksumCore(io, base, '0', '1.0.0', { denseChunking: true, mappingVersion: false })
+    ).toBe(getChecksumCore(io, base, '0', '1.0.0', { mappingVersion: false, denseChunking: true }));
   });
 
   it('matches a hand-computed sha256', () => {
     const expected = crypto
       .createHash('sha256')
-      .update('deps:react@18:dev=0:builder=2.0.0:cjs=1')
+      .update('deps:react@18:dev=0:builder=2.0.0:features=denseChunking=1,mappingVersion=0')
       .digest('hex');
-    expect(getChecksumCore(io, { react: ext('18') }, '0', '2.0.0')).toBe(expected);
+    expect(
+      getChecksumCore(io, { react: ext('18') }, '0', '2.0.0', {
+        mappingVersion: false,
+        denseChunking: true,
+      })
+    ).toBe(expected);
   });
 
   // Registry-dep regression guard: an empty content-signal map must not perturb the hash.
   it('is byte-identical whether contentSignals is omitted or empty', () => {
     const base = { react: ext('18') };
-    expect(getChecksumCore(io, base, '0', '2.0.0', true, {})).toBe(
+    expect(getChecksumCore(io, base, '0', '2.0.0', {}, {})).toBe(
       getChecksumCore(io, base, '0', '2.0.0')
     );
   });
 
   it('changes when a content signal is added for a (linked) package', () => {
     const base = { '@scope/lib': ext('1.0.0') };
-    expect(getChecksumCore(io, base, '0', '', true, { '@scope/lib': '111' })).not.toBe(
+    expect(getChecksumCore(io, base, '0', '', {}, { '@scope/lib': '111' })).not.toBe(
       getChecksumCore(io, base, '0')
     );
   });
 
   it('is byte-identical whether resolvedVersions is omitted or empty', () => {
     const base = { react: ext('18') };
-    expect(getChecksumCore(io, base, '0', '2.0.0', true, {}, {})).toBe(
+    expect(getChecksumCore(io, base, '0', '2.0.0', {}, {}, {})).toBe(
       getChecksumCore(io, base, '0', '2.0.0')
     );
   });
@@ -97,23 +160,24 @@ describe('getChecksumCore', () => {
   // installed version is the only thing that can distinguish two builds.
   it('changes when the installed version changes and the declared one does not', () => {
     const base = { react: ext() };
-    expect(getChecksumCore(io, base, '0', '', true, {}, { react: '18.0.0' })).not.toBe(
-      getChecksumCore(io, base, '0', '', true, {}, { react: '18.0.8' })
+    expect(getChecksumCore(io, base, '0', '', {}, {}, { react: '18.0.0' })).not.toBe(
+      getChecksumCore(io, base, '0', '', {}, {}, { react: '18.0.8' })
     );
   });
 
-  // Declared and installed occupy separate slots, so one cannot be mistaken for the other.
+  // One slot, but a distinct sigil per source: a key that goes from unresolvable-with-a-declared
+  // range to actually installed at that same string must still invalidate.
   it('distinguishes a declared version from the same string as an installed one', () => {
     expect(getChecksumCore(io, { react: ext('18.0.0') }, '0')).not.toBe(
-      getChecksumCore(io, { react: ext() }, '0', '', true, {}, { react: '18.0.0' })
+      getChecksumCore(io, { react: ext() }, '0', '', {}, {}, { react: '18.0.0' })
     );
   });
 
   it('changes when a content signal changes but is stable when it does not', () => {
     const base = { '@scope/lib': ext('1.0.0') };
-    const a = getChecksumCore(io, base, '0', '', true, { '@scope/lib': '111' });
-    const b = getChecksumCore(io, base, '0', '', true, { '@scope/lib': '222' });
-    const aAgain = getChecksumCore(io, base, '0', '', true, { '@scope/lib': '111' });
+    const a = getChecksumCore(io, base, '0', '', {}, { '@scope/lib': '111' });
+    const b = getChecksumCore(io, base, '0', '', {}, { '@scope/lib': '222' });
+    const aAgain = getChecksumCore(io, base, '0', '', {}, { '@scope/lib': '111' });
     expect(a).not.toBe(b);
     expect(a).toBe(aAgain);
   });
