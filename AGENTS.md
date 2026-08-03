@@ -142,6 +142,92 @@ The library supports **watch mode** for development:
 
 - `src/lib/domain/core/build-notification-options.contract.ts` - Contract for notifications
 - `src/lib/core/rebuild-for-federation.ts` - Incremental rebuild logic
+- `src/lib/utils/file-watcher.ts` - `createNfWatcher` / `syncNfFileWatcher`
+
+### The watcher (`createNfWatcher`)
+
+An `fs.watch`-based watcher adapters can use to drive their rebuild loop. It has **two
+channels, both always live**:
+
+- **push** — the `onChange` callback, for waking a rebuild loop
+- **pull** — `get()` / `clear()` / `mutate()`, for reading _which_ files changed
+
+A listener-only consumer must still call `clear()`, or the dirty set grows for the process
+lifetime.
+
+### What to watch
+
+`syncNfFileWatcher(watcher, sources, linkedDirs)` subscribes to the inputs of the last build.
+`sources` is either the input paths themselves or a bundler cache **keyed by input path**;
+a cache that records its inputs elsewhere yields an empty watch set and, silently, a dev
+server serving stale bundles until restart (angular-adapter#94). `linkedDirs` (from
+`linkedSharedDirs`) are polled rather than natively watched, because ng-packagr's atomic
+dist rewrites change the inode and defeat `fs.watch`.
+
+`sharedMappingDirs(config)` is the config-only alternative: the source dir of every
+`sharedMappings` entry point. It is coarser than a build's compiled inputs and covers what
+they cannot — files added to a lib since the last build — but it does not follow imports out
+of the lib. An adapter that can enumerate its build inputs should watch both.
+
+### File watches go through the directory
+
+`addPaths` never opens a handle on a file. A per-file `fs.watch` holds an inode, and an editor
+that saves by rename-replace (JetBrains "safe write", vim `backupcopy=no`) replaces it — the
+handle then reports nothing, so the second save onward is silently lost. Each tracked file is
+covered by a non-recursive watch on its containing directory instead, filtered back down to the
+tracked set so the event surface is unchanged. This also collapses thousands of sources onto a
+few hundred handles, and reports files created after they were added. Directories passed
+explicitly keep their recursive watch and deliver every entry.
+
+One directory is one handle regardless of how many tracked files live in it or how the path is
+spelled, and a recursive watch supersedes the narrower watches it covers — so adding a file and
+later the directory containing it (the order `syncNfFileWatcher` itself uses, and the order an
+adapter watching both a mapping dir and its compiled inputs hits) delivers each save once, not
+twice. The one asymmetry is polling: a polled watch survives the inode replacement a native one
+misses, so it can stand in for a native watch over the same tree but never the reverse. A polled
+`linkedDirs` entry is therefore never superseded by a native parent.
+
+### Replay dedupe
+
+Events whose recorded identity — mtime **and** byte length — is unchanged since the last one
+seen for that path are dropped before they reach either channel (`dedupeReplays`, default
+**on**). macOS FSEvents re-delivers 'changed' for recently edited files roughly every 30s;
+with a watch list of a few thousand sources that replay alone keeps a rebuild loop awake
+forever.
+
+Length is paired with mtime so that the common ambiguous case — a second save landing inside
+one mtime tick, on a filesystem with coarse mtime granularity — is settled on data rather
+than on a clock. Only a save that also left byte length untouched reaches the time check.
+
+That check is `replayGraceMs` (default 2000): an event whose identity matches still passes
+while the mtime is recent. The default is a derived bound, not a tuned constant. A filesystem
+truncating mtime to granularity `g` records a value up to `g` before the write, so two writes
+can only collide in mtime within `2g` — and `g` is 1s on the coarsest filesystems in play
+(gRPC-FUSE, NFS, WSL2 drvfs, HFS+). On ext4 and APFS `g` is nanoseconds, so a real save always
+advances mtime and the window is never reached.
+
+Age is measured from when the event *arrived*, not from when a debounced flush got round to
+it, so `debounceMs` is not silently subtracted from the window. Two limits are worth knowing:
+a stall inside the event loop delays the `fs.watch` callback itself, which no local bookkeeping
+can correct; and on a network mount the age is a cross-clock subtraction, since mtime carries
+the server's clock. A server clock running ahead yields a negative age, which reads as recent
+and delivers — the safe direction. Running behind shortens the window, and there the only
+remedy is a larger `replayGraceMs` or `dedupeReplays: false`.
+
+Dropping a real edit is the bug the dedupe exists to prevent, so every ambiguous case errs
+toward delivering; a spurious rebuild is the cheaper mistake.
+
+### Watch failures are visible
+
+A watch that fails to open is silent staleness — the paths it covered never report a change
+and the dev server serves the last bundle until restart. Because watches are per directory,
+one failure can take a whole directory of sources down, so the first is a `logger.warn`.
+Later ones drop to debug: descriptor exhaustion fails every subsequent directory too, and a
+line per path would flood.
+
+Not covered by any of this: events the platform itself drops (inotify `IN_Q_OVERFLOW` under
+`git checkout` or `npm install` churn). Recovering those needs a reconciliation sweep that
+re-stats the tracked set — deliberately out of scope here, own issue.
 
 ## Caching System
 

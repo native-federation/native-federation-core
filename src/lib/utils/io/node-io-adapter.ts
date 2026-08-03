@@ -51,7 +51,7 @@ export const nodeIo: IoPort = {
   stat(path): StatInfo | null {
     try {
       const s = fs.lstatSync(path);
-      return { mtimeMs: s.mtimeMs, isSymbolicLink: s.isSymbolicLink() };
+      return { mtimeMs: s.mtimeMs, size: s.size, isSymbolicLink: s.isSymbolicLink() };
     } catch {
       return null;
     }
@@ -85,11 +85,9 @@ export const nodeIo: IoPort = {
   },
   watch(watchPath, opts, onEvent): WatchHandle {
     if (opts.poll) return pollWatch(watchPath, opts.recursive, opts.poll.intervalMs, onEvent);
-    const watcher = opts.recursive
-      ? fs.watch(watchPath, { recursive: true }, (_event, filename) =>
-          onEvent(filename ? filename.toString() : null)
-        )
-      : fs.watch(watchPath, () => onEvent(watchPath));
+    const watcher = fs.watch(watchPath, { recursive: opts.recursive }, (_event, filename) =>
+      onEvent(filename ? filename.toString() : null)
+    );
     return { close: () => watcher.close() };
   },
 };

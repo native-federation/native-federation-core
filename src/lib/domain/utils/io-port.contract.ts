@@ -7,6 +7,8 @@ export interface Digest {
 
 export interface StatInfo {
   mtimeMs: number;
+  /** Byte length; 0 for directories. */
+  size: number;
   isSymbolicLink: boolean;
 }
 
@@ -50,9 +52,9 @@ interface WatchOptions {
 
 export interface WatchPort {
   /**
-   * For a recursive directory watch `onEvent` receives the changed entry's
-   * filename relative to `path`; for a file it receives the path itself (or
-   * null when the platform omits it).
+   * `onEvent` receives the changed entry's filename relative to `path` (null when
+   * the platform omits it). Watching a file reports that file's own basename, so a
+   * caller that registered a file can ignore the argument.
    */
   watch(path: string, opts: WatchOptions, onEvent: (filename: string | null) => void): WatchHandle;
 }
