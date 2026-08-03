@@ -179,6 +179,14 @@ tracked set so the event surface is unchanged. This also collapses thousands of 
 few hundred handles, and reports files created after they were added. Directories passed
 explicitly keep their recursive watch and deliver every entry.
 
+One directory is one handle regardless of how many tracked files live in it or how the path is
+spelled, and a recursive watch supersedes the narrower watches it covers — so adding a file and
+later the directory containing it (the order `syncNfFileWatcher` itself uses, and the order an
+adapter watching both a mapping dir and its compiled inputs hits) delivers each save once, not
+twice. The one asymmetry is polling: a polled watch survives the inode replacement a native one
+misses, so it can stand in for a native watch over the same tree but never the reverse. A polled
+`linkedDirs` entry is therefore never superseded by a native parent.
+
 ### Replay dedupe
 
 Events whose recorded identity — mtime **and** byte length — is unchanged since the last one

@@ -3,7 +3,7 @@ import type { WatchHandle, WatchPort, FileReaderPort } from '../domain/utils/io-
 import type { NfFileWatcher, NfFileWatcherOptions } from '../domain/utils/file-watcher.contract.js';
 import { nodeIo } from './io/node-io-adapter.js';
 import { logger } from './logger.js';
-import { isUnderAnyDir, toPosix } from './path-patterns.js';
+import { isUnderDir, toPosix } from './path-patterns.js';
 
 export function createNfWatcher(options: NfFileWatcherOptions = {}): NfFileWatcher {
   return createNfWatcherCore(nodeIo, options);
@@ -19,15 +19,46 @@ export function createNfWatcherCore(
   const debounceMs = options.debounceMs ?? 0;
   const dedupeReplays = options.dedupeReplays ?? true;
   const replayGraceMs = options.replayGraceMs ?? 2000;
-  const watchers = new Map<string, WatchHandle>();
+  const watchers = new Map<string, DirWatch>();
   const dirtyPaths = new Set<string>();
   const lastSeen = new Map<string, FileIdentity>();
   // Files are watched through their containing directory, never individually;
   // trackedFiles narrows the directory's events back down to them. See AGENTS.md
   // "File watches go through the directory".
   const trackedFiles = new Set<string>();
-  const fileDirWatchers = new Map<string, WatchHandle>();
-  const recursiveDirs: string[] = [];
+  const fileDirWatchers = new Map<string, DirWatch>();
+
+  // One key per directory, so the same dir spelled two ways does not open a second
+  // handle. Both maps are keyed with it, and so are the coverage checks below.
+  const dirKey = (p: string): string => {
+    const posix = toPosix(p);
+    return posix.length > 1 ? posix.replace(/\/+$/, '') : posix;
+  };
+
+  // A polled watch survives the inode replacement a native one misses (the reason
+  // linkedDirs poll at all), so it can stand in for a native watch but never the
+  // other way round.
+  const covers = (path: string, poll: boolean): boolean => {
+    for (const [dir, watch] of watchers) {
+      if ((watch.poll || !poll) && isUnderDir(path, dir)) return true;
+    }
+    return false;
+  };
+
+  // A recursive watch reports every entry under it, so it supersedes the narrower
+  // watches it covers. Without this a file added before the directory containing it
+  // keeps its own watch and every save there reports twice.
+  const supersede = (dir: string, poll: boolean) => {
+    for (const map of [watchers, fileDirWatchers]) {
+      for (const [key, watch] of map) {
+        if (watch.poll && !poll) continue;
+        if (map === watchers && key === dir) continue;
+        if (!isUnderDir(key, dir)) continue;
+        watch.handle.close();
+        map.delete(key);
+      }
+    }
+  };
 
   // io.stat is lstat-based, so a symlink reports its own mtime and length, not the
   // target's. Follow it, as maxMtime does in resolve-shared-dirs.ts.
@@ -93,21 +124,24 @@ export function createNfWatcherCore(
   return {
     addPaths(paths, opts) {
       const list = typeof paths === 'string' ? [paths] : [...paths];
-      const poll = opts?.poll ? { intervalMs: pollIntervalMs } : undefined;
+      const shouldPoll = !!opts?.poll;
+      const poll = shouldPoll ? { intervalMs: pollIntervalMs } : undefined;
       for (const p of list) {
         if (io.isDirectory(p)) {
-          if (watchers.has(p)) continue;
+          const dir = dirKey(p);
+          if (watchers.has(dir) || covers(dir, shouldPoll)) continue;
           try {
-            watchers.set(
-              p,
-              io.watch(p, { recursive: true, poll }, filename => {
+            watchers.set(dir, {
+              handle: io.watch(p, { recursive: true, poll }, filename => {
                 if (filename) notify(toPosix(join(p, filename)));
-              })
-            );
-            recursiveDirs.push(toPosix(p));
+              }),
+              poll: shouldPoll,
+            });
           } catch {
             watchFailed(p);
+            continue;
           }
+          supersede(dir, shouldPoll);
           continue;
         }
 
@@ -121,18 +155,18 @@ export function createNfWatcherCore(
         }
 
         // An explicitly watched directory already reports this file recursively.
-        if (isUnderAnyDir(key, recursiveDirs)) continue;
-        const dir = toPosix(dirname(p));
+        if (covers(key, shouldPoll)) continue;
+        const dir = dirKey(dirname(p));
         if (fileDirWatchers.has(dir)) continue;
         try {
-          fileDirWatchers.set(
-            dir,
-            io.watch(dir, { recursive: false, poll }, filename => {
+          fileDirWatchers.set(dir, {
+            handle: io.watch(dir, { recursive: false, poll }, filename => {
               if (!filename) return;
               const changed = toPosix(join(dir, filename));
               if (trackedFiles.has(changed)) notify(changed);
-            })
-          );
+            }),
+            poll: shouldPoll,
+          });
         } catch {
           watchFailed(dir);
         }
@@ -145,16 +179,17 @@ export function createNfWatcherCore(
 
     async close() {
       if (flushTimer) clearTimeout(flushTimer);
-      for (const handle of [...watchers.values(), ...fileDirWatchers.values()]) {
+      for (const { handle } of [...watchers.values(), ...fileDirWatchers.values()]) {
         handle.close();
       }
       watchers.clear();
       fileDirWatchers.clear();
-      // All three gate work in addPaths, so a re-add after close() has to redo it:
-      // reopen the watches, and re-seed rather than trust a stale identity.
+      // Everything below gates work in addPaths, so a re-add after close() has to
+      // redo it: reopen the watches, re-seed rather than trust a stale identity, and
+      // warn again on the first failure.
       trackedFiles.clear();
-      recursiveDirs.length = 0;
       lastSeen.clear();
+      watchFailures = 0;
     },
   };
 }
@@ -162,6 +197,12 @@ export function createNfWatcherCore(
 interface FileIdentity {
   mtimeMs: number;
   size: number;
+}
+
+interface DirWatch {
+  handle: WatchHandle;
+  /** Polled rather than natively watched, so it also survives inode replacement. */
+  poll: boolean;
 }
 
 /** A bundler cache keyed by input path, or the input paths themselves. */

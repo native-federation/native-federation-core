@@ -69,6 +69,12 @@ export function linkedSharedDirs(
  * files added to a lib after the last build, which a compiled-inputs watch set cannot
  * know about yet. It does not follow imports out of the lib, so an adapter that can
  * enumerate its build inputs should watch both. See angular-adapter#94.
+ *
+ * How coarse is the caller's to bound: an entry point that is not a lib barrel widens the
+ * watch to whatever directory it sits in (`'@app/env': ['src/environments/environment.ts']`
+ * to that folder, `'@shared': ['src/index.ts']` to all of `src`), and with `sharedMappings`
+ * unset every tsconfig path becomes a mapping. Watch these natively rather than polled —
+ * they are source trees, not the dist output `linkedSharedDirs` exists for.
  */
 export function sharedMappingDirs(config: NormalizedFederationConfig): string[] {
   const dirs = Object.keys(config.sharedMappings)

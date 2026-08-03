@@ -89,6 +89,26 @@ describe('createNfWatcherCore', () => {
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0][0]).toContain('/a');
     expect(debug).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
+    debug.mockRestore();
+  });
+
+  // close() reopens everything on the next add, so the visibility resets with it.
+  it('warns again on the first failure after close()', async () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+    const io = createMemoryIo();
+    io.watch = () => {
+      throw new Error('boom');
+    };
+
+    const watcher = createNfWatcherCore(io, {});
+    watcher.addPaths('/a/one.ts');
+    await watcher.close();
+    watcher.addPaths('/b/two.ts');
+
+    expect(warn).toHaveBeenCalledTimes(2);
+    vi.restoreAllMocks();
   });
 
   it('passes the poll option to io.watch for polled paths', () => {
@@ -219,6 +239,53 @@ describe('createNfWatcherCore file watches', () => {
     );
   });
 
+  // syncNfFileWatcher adds the build's input files before its directories, and an
+  // adapter watching both a mapping dir and its compiled inputs hits the same order.
+  // Both watches would then report the same save.
+  it('supersedes a file watch when the directory covering it is added afterwards', () => {
+    const io = createMemoryIo().setDir(dir).setFile(a, '').setMtime(a, AGED);
+    const spy = vi.spyOn(io, 'watch');
+    const onChange = vi.fn();
+    const watcher = createNfWatcherCore(io, { onChange }, clock);
+
+    watcher.addPaths(a);
+    watcher.addPaths(dir);
+
+    io.setMtime(a, NOW);
+    emitFile(io, a);
+
+    expect(spy).toHaveBeenCalledTimes(2); // the file's dir, then the recursive dir
+    expect(onChange).toHaveBeenCalledTimes(1); // ...but only one live handle
+    expect([...watcher.get()]).toEqual([posix(a)]);
+  });
+
+  it('supersedes a narrower directory watch when a broader one is added', () => {
+    const nested = path.join(dir, 'nested');
+    const file = path.join(nested, 'other.ts');
+    const io = createMemoryIo().setDir(dir).setDir(nested).setFile(file, '').setMtime(file, AGED);
+    const onChange = vi.fn();
+    const watcher = createNfWatcherCore(io, { onChange }, clock);
+
+    watcher.addPaths([nested, dir]);
+
+    io.setMtime(file, NOW);
+    io.emit(nested, 'other.ts'); // the superseded handle is closed, so nothing here
+    expect(onChange).not.toHaveBeenCalled();
+
+    io.emit(dir, path.join('nested', 'other.ts'));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect([...watcher.get()]).toEqual([posix(file)]);
+  });
+
+  it('treats the same directory spelled two ways as one watch', () => {
+    const io = createMemoryIo().setDir(dir);
+    const spy = vi.spyOn(io, 'watch');
+
+    createNfWatcherCore(io, {}, clock).addPaths([dir, dir + path.sep, dir + '/']);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
   it('close() stops the directory watches opened for files', async () => {
     const io = createMemoryIo().setFile(a, '').setMtime(a, AGED);
     const watcher = createNfWatcherCore(io, {}, clock);
@@ -229,6 +296,57 @@ describe('createNfWatcherCore file watches', () => {
     io.setMtime(a, NOW);
     io.emit(dir, 'a.ts');
     expect(watcher.get().size).toBe(0);
+  });
+});
+
+// linkedDirs are polled because ng-packagr's atomic dist rewrites change the inode and
+// defeat fs.watch, so a native watch must never stand in for a polled one -- only the
+// other way round.
+describe('createNfWatcherCore poll coverage', () => {
+  const parent = path.resolve('/dev/lib');
+  const dist = path.join(parent, 'dist');
+  const emitted = path.join(dist, 'index.mjs');
+  const io = () => createMemoryIo().setDir(parent).setDir(dist);
+
+  it('keeps a polled watch when a native directory covering it is added after', () => {
+    const memory = io();
+    const watcher = createNfWatcherCore(memory, {}, clock);
+
+    watcher.addPaths(dist, { poll: true });
+    watcher.addPaths(parent);
+
+    memory.emit(dist, 'index.mjs'); // polled handle still live
+    expect([...watcher.get()]).toEqual([posix(emitted)]);
+  });
+
+  it('still opens a polled watch when a native directory already covers it', () => {
+    const memory = io();
+    const spy = vi.spyOn(memory, 'watch');
+    const watcher = createNfWatcherCore(memory, { pollIntervalMs: 250 }, clock);
+
+    watcher.addPaths(parent);
+    watcher.addPaths(dist, { poll: true });
+
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(spy).toHaveBeenLastCalledWith(
+      dist,
+      expect.objectContaining({ poll: { intervalMs: 250 } }),
+      expect.any(Function)
+    );
+  });
+
+  it('lets a polled directory supersede a native watch under it', () => {
+    const memory = io();
+    const watcher = createNfWatcherCore(memory, {}, clock);
+
+    watcher.addPaths(dist);
+    watcher.addPaths(parent, { poll: true });
+
+    memory.emit(dist, 'index.mjs'); // native handle closed
+    expect(watcher.get().size).toBe(0);
+
+    memory.emit(parent, path.join('dist', 'index.mjs'));
+    expect([...watcher.get()]).toEqual([posix(emitted)]);
   });
 });
 

@@ -176,8 +176,12 @@ export function createMemoryIo(): MemoryIo {
       list.push(onEvent);
       watchers.set(key, list);
       return {
+        // Per listener, not per key: two handles can watch one path, and closing
+        // one must leave the other delivering as real fs.watch handles do.
         close: () => {
-          watchers.delete(key);
+          const remaining = (watchers.get(key) ?? []).filter(fn => fn !== onEvent);
+          if (remaining.length) watchers.set(key, remaining);
+          else watchers.delete(key);
         },
       };
     },
