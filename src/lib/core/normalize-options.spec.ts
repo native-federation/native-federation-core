@@ -7,6 +7,8 @@ import { logger } from '../utils/logger.js';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
 import type { FederationOptions } from '../domain/core/federation-options.contract.js';
 import type { FederationCache } from '../domain/core/federation-cache.contract.js';
+import type { SharedInfo } from '../domain/core/federation-info.contract.js';
+import { addExternalsToCache } from './cache/federation-cache.js';
 
 const CONFIG_PATH = path.join('/ws', 'federation.config.js');
 
@@ -128,6 +130,30 @@ describe('normalizeFederationOptionsCore', () => {
       expect(second.options.federationCache.cachePath).toBe(
         first.options.federationCache.cachePath
       );
+    });
+
+    // A build pushes onto externals (addExternalsToCache) but replaces it wholesale on an
+    // invalidating rebuild. Sharing the array would let a re-normalize pick up the pre-reset
+    // entries and emit every shared package twice.
+    it('isolates externals so a build cannot write back into the supplied cache', async () => {
+      const io = createMemoryIo().setFile(CONFIG_PATH, '');
+      const supplied: FederationCache = { externals: [], bundlerCache: undefined, cachePath: '/c' };
+
+      const result = await normalizeFederationOptionsCore(
+        { io, loadConfig: loaderFor(makeConfig()) },
+        baseOptions,
+        supplied
+      );
+
+      expect(result.options.federationCache.externals).not.toBe(supplied.externals);
+
+      addExternalsToCache(result.options.federationCache, {
+        externals: [{ packageName: 'a', outFileName: 'a.js' } as SharedInfo],
+        chunks: { 'browser-shared': ['chunk-a.js'] },
+      });
+
+      expect(supplied.externals).toEqual([]);
+      expect(supplied.chunks).toBeUndefined();
     });
 
     it('keeps the bundler cache identity so callers can still reach into it', async () => {
