@@ -7,9 +7,7 @@ import type { DenseSharedInfo, SharedInfo } from '../../domain/core/federation-i
 vi.mock('../output/write-federation-info.js', () => ({ writeFederationInfo: vi.fn() }));
 vi.mock('../output/write-import-map.js', () => ({ writeImportMap: vi.fn() }));
 vi.mock('./bundle-exposed-and-mappings.js', () => ({
-  bundleExposedAndMappings: vi.fn(async () => undefined),
-  describeExposed: vi.fn(() => []),
-  describeSharedMappings: vi.fn(() => []),
+  bundleExposedAndMappings: vi.fn(async () => ({ mappings: [], exposes: [] })),
 }));
 vi.mock('../cache/cache-persistence.js', () => ({
   cacheEntryCore: vi.fn(() => ({ clear: vi.fn() })),
@@ -28,7 +26,15 @@ vi.mock('./build-for-federation.js', () => ({
 const { rebuildForFederation } = await import('./rebuild-for-federation.js');
 const { executeSharedBundlePlans } = await import('./build-for-federation.js');
 const { affectedSharedKeys } = await import('./resolve-shared-dirs.js');
-const { describeSharedMappings } = await import('./bundle-exposed-and-mappings.js');
+const { bundleExposedAndMappings } = await import('./bundle-exposed-and-mappings.js');
+
+// Fresh objects per call, like the real implementation, so a shareScope default written in place
+// cannot survive from one rebuild into the next.
+const mappingsPerCall = (mappings: () => SharedInfo[]) =>
+  vi.mocked(bundleExposedAndMappings).mockImplementation(async () => ({
+    mappings: mappings(),
+    exposes: [],
+  }));
 
 function config(
   overrides: { denseExternals?: boolean; shareScope?: string } = {}
@@ -121,7 +127,7 @@ describe('rebuildForFederation — denseExternals', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(describeSharedMappings).mockReturnValue([]);
+    mappingsPerCall(() => []);
   });
 
   it('groups secondary entry points under their parent package when the flag is on', async () => {
@@ -170,12 +176,10 @@ describe('rebuildForFederation — denseExternals', () => {
 describe('rebuildForFederation — shareScope default', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  // The mocked describeSharedMappings returns a fresh object per call, like the real one, so a
-  // default that only reached the (long-lived) cached externals would leave this one bare.
+  // The mock re-describes mappings per call, like the real one, so a default that only reached the
+  // (long-lived) cached externals would leave this one bare.
   it('applies the configured scope to cached externals and freshly described mappings', async () => {
-    vi.mocked(describeSharedMappings).mockReturnValue([
-      { packageName: '@my/lib', outFileName: 'my-lib.js' } as SharedInfo,
-    ]);
+    mappingsPerCall(() => [{ packageName: '@my/lib', outFileName: 'my-lib.js' } as SharedInfo]);
     const cached: SharedInfo[] = [{ packageName: 'a', outFileName: 'a.cached.js' } as SharedInfo];
 
     const info = await rebuildForFederation(
@@ -192,7 +196,7 @@ describe('rebuildForFederation — shareScope default', () => {
   });
 
   it('keeps an explicit per-external scope', async () => {
-    vi.mocked(describeSharedMappings).mockReturnValue([]);
+    mappingsPerCall(() => []);
     const cached: SharedInfo[] = [
       { packageName: 'a', outFileName: 'a.cached.js', shareScope: 'own-scope' } as SharedInfo,
     ];

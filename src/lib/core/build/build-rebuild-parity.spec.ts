@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import type { SharedInfo } from '../../domain/core/federation-info.contract.js';
+import type { ArtifactInfo, SharedInfo } from '../../domain/core/federation-info.contract.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
 import { prepareSkipList } from '../../config/default-skip-list.js';
@@ -8,21 +8,28 @@ import { prepareSkipList } from '../../config/default-skip-list.js';
 // one and not the other. Everything below the assembly layer is stubbed so only that logic runs.
 vi.mock('../output/write-federation-info.js', () => ({ writeFederationInfo: vi.fn() }));
 vi.mock('../output/write-import-map.js', () => ({ writeImportMap: vi.fn() }));
+// Fresh objects on every call, exactly like the real implementation — so a default applied by
+// mutating cached externals cannot accidentally cover shared mappings too. chunks and integrity are
+// populated so the merge with the federation cache's own entries is exercised, not just spread over
+// an empty object.
 vi.mock('./bundle-exposed-and-mappings.js', () => ({
-  bundleExposedAndMappings: vi.fn(async () => undefined),
-  describeExposed: vi.fn(() => [{ key: './Cmp', outFileName: 'cmp.js' }]),
-  // Fresh objects on every call, exactly like the real implementation — so a default applied by
-  // mutating cached externals cannot accidentally cover shared mappings too.
-  describeSharedMappings: vi.fn((): SharedInfo[] => [
-    {
-      singleton: true,
-      strictVersion: true,
-      requiredVersion: '^1.0.0',
-      version: '1.0.0',
-      packageName: '@my/lib',
-      outFileName: 'my-lib.js',
-    },
-  ]),
+  bundleExposedAndMappings: vi.fn(
+    async (): Promise<ArtifactInfo> => ({
+      exposes: [{ key: './Cmp', outFileName: 'cmp.js' }],
+      mappings: [
+        {
+          singleton: true,
+          strictVersion: true,
+          requiredVersion: '^1.0.0',
+          version: '1.0.0',
+          packageName: '@my/lib',
+          outFileName: 'my-lib.js',
+        },
+      ],
+      chunks: { 'mapping-or-exposed': ['chunk-b.js'] },
+      integrity: { 'cmp.js': 'sha384-artifact' },
+    })
+  ),
 }));
 
 const { buildForFederation } = await import('./build-for-federation.js');
@@ -96,7 +103,9 @@ function makeFedOptions(): NormalizedFederationOptions {
   };
 }
 
-const matrix = [
+type ConfigOverrides = NonNullable<Parameters<typeof makeConfig>[0]>;
+
+const matrix: { name: string; overrides: ConfigOverrides }[] = [
   { name: 'defaults', overrides: {} },
   { name: 'denseExternals', overrides: { denseExternals: true } },
   { name: 'shareScope', overrides: { shareScope: 'my-scope' } },
@@ -109,7 +118,7 @@ const matrix = [
     name: 'all features',
     overrides: { denseExternals: true, shareScope: 'my-scope', integrityHashes: true },
   },
-] as const;
+];
 
 describe('buildForFederation / rebuildForFederation — assembly parity', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -127,6 +136,17 @@ describe('buildForFederation / rebuildForFederation — assembly parity', () => 
     if (overrides.shareScope) {
       expect(built.shared.every(s => s.shareScope === overrides.shareScope)).toBe(true);
     }
+
+    // Both sources have to survive the merge: the cache's chunks and the artifact's.
+    expect(built.chunks).toEqual({
+      'browser-shared': ['chunk-a.js'],
+      'mapping-or-exposed': ['chunk-b.js'],
+    });
+    expect(built.integrity).toEqual(
+      overrides.integrityHashes
+        ? { 'core.js': 'sha384-cached', 'cmp.js': 'sha384-artifact' }
+        : undefined
+    );
   });
 
   // A rebuild reuses the live fedOptions the initial build already touched, so parity has to

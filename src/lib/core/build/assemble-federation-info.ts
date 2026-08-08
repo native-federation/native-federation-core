@@ -8,7 +8,6 @@ import type { NormalizedFederationOptions } from '../../domain/core/federation-o
 import { densifyExternals } from '../output/densify-externals.js';
 import { writeFederationInfo } from '../output/write-federation-info.js';
 import { writeImportMap } from '../output/write-import-map.js';
-import { describeExposed, describeSharedMappings } from './bundle-exposed-and-mappings.js';
 
 /**
  * Turns the populated federation cache into `remoteEntry.json` + `importmap.json`. Shared by the
@@ -18,25 +17,20 @@ import { describeExposed, describeSharedMappings } from './bundle-exposed-and-ma
 export function assembleFederationInfo(
   config: NormalizedFederationConfig,
   fedOptions: NormalizedFederationOptions,
-  artifactInfo: ArtifactInfo | undefined
+  artifactInfo: ArtifactInfo
 ): FederationInfo {
   const federationCache = fedOptions.federationCache;
 
-  const exposedInfo = !artifactInfo ? describeExposed(config, fedOptions) : artifactInfo.exposes;
-  const sharedMappingInfo = !artifactInfo
-    ? describeSharedMappings(config, fedOptions)
-    : artifactInfo.mappings;
-
   // Scope before densify: `densifyExternals` groups by shareScope and copies it onto the group.
   const sharedExternals = applyShareScope(
-    [...federationCache.externals, ...sharedMappingInfo],
+    [...federationCache.externals, ...artifactInfo.mappings],
     config.shareScope
   );
 
   const federationInfo: FederationInfo = {
     name: config.name,
     shared: config.features.denseExternals ? densifyExternals(sharedExternals) : sharedExternals,
-    exposes: exposedInfo,
+    exposes: artifactInfo.exposes,
     buildNotificationsEndpoint:
       fedOptions.buildNotifications?.enable && fedOptions.dev
         ? fedOptions.buildNotifications?.endpoint
@@ -46,14 +40,14 @@ export function assembleFederationInfo(
   if (federationCache.chunks) {
     federationInfo.chunks = federationCache.chunks;
   }
-  if (artifactInfo?.chunks) {
+  if (artifactInfo.chunks) {
     federationInfo.chunks = { ...(federationInfo.chunks ?? {}), ...artifactInfo.chunks };
   }
 
   if (config.features.integrityHashes) {
     federationInfo.integrity = {
       ...(federationCache.integrity ?? {}),
-      ...(artifactInfo?.integrity ?? {}),
+      ...(artifactInfo.integrity ?? {}),
     };
   }
 
