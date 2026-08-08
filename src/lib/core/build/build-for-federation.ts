@@ -8,7 +8,6 @@ import { AbortedError } from '../../utils/errors.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import { addExternalsToCache } from '../cache/federation-cache.js';
 import { planSharedBundles, type SharedBundlePlan } from './shared-bundle-plan.js';
-import path from 'path';
 
 export async function buildForFederation(
   config: NormalizedFederationConfig,
@@ -17,10 +16,6 @@ export async function buildForFederation(
   signal?: AbortSignal
 ): Promise<FederationInfo> {
   // 1. Setup
-  fedOptions.federationCache.cachePath = path.join(
-    fedOptions.federationCache.cachePath,
-    fedOptions.projectName
-  );
   logger.info('Building federation artifacts');
   logger.notice("Skip packages you don't want to share in your federation config");
 

@@ -74,16 +74,26 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
   /**
    * Step 2: normalizing options
    */
-  const federationCache =
+  const projectName = resolveProjectName(options.projectName ?? config.name);
+
+  const suppliedCache =
     cache ??
     (createFederationCache(
       getDefaultCachePath(options.workspaceRoot)
     ) as FederationCache<TBundlerCache>);
 
+  // Scoped here rather than in buildForFederation, which appended it per build and so nested the
+  // path a level deeper every time one cache object served more than one build. Copied rather than
+  // mutated so the caller's object stays reusable — `bundlerCache` keeps its identity.
+  const federationCache: FederationCache<TBundlerCache> = {
+    ...suppliedCache,
+    cachePath: path.join(suppliedCache.cachePath, projectName),
+  };
+
   const normalizedOptions: NormalizedFederationOptions<TBundlerCache> = {
     ...options,
     entryPoints: options.entryPoints ?? Object.values(config.exposes ?? {}).map(e => e.file),
-    projectName: resolveProjectName(options.projectName ?? config.name),
+    projectName,
     cacheExternalArtifacts: options.cacheExternalArtifacts ?? true,
     federationCache,
   };

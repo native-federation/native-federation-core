@@ -75,7 +75,78 @@ describe('normalizeFederationOptionsCore', () => {
     expect(result.options.entryPoints).toEqual(['./src/comp.ts']);
     expect(result.options.projectName).toBe('my_app');
     expect(result.options.cacheExternalArtifacts).toBe(true);
-    expect(result.options.federationCache).toBe(cache);
+    expect(result.options.federationCache).toEqual({
+      ...cache,
+      cachePath: path.join('/cache', 'my_app'),
+    });
+  });
+
+  describe('project-scoped cachePath', () => {
+    // buildForFederation used to append projectName on every call, so one cache object serving two
+    // builds ended up at '/cache/app/app'. Scoping here happens once per normalize instead.
+    it('scopes the supplied cache path to the project', async () => {
+      const io = createMemoryIo().setFile(CONFIG_PATH, '');
+
+      const result = await normalizeFederationOptionsCore(
+        { io, loadConfig: loaderFor(makeConfig()) },
+        baseOptions,
+        cache
+      );
+
+      expect(result.options.federationCache.cachePath).toBe(path.join('/cache', 'my_app'));
+    });
+
+    it('derives the scoped path from the workspace when no cache is supplied', async () => {
+      const io = createMemoryIo().setFile(CONFIG_PATH, '');
+
+      const result = await normalizeFederationOptionsCore(
+        { io, loadConfig: loaderFor(makeConfig()) },
+        baseOptions
+      );
+
+      expect(result.options.federationCache.cachePath).toBe(
+        path.join('/ws', 'node_modules/.cache/native-federation', 'my_app')
+      );
+    });
+
+    it('leaves the supplied cache untouched so it can be normalized again', async () => {
+      const io = createMemoryIo().setFile(CONFIG_PATH, '');
+      const supplied: FederationCache = { externals: [], bundlerCache: undefined, cachePath: '/c' };
+
+      const first = await normalizeFederationOptionsCore(
+        { io, loadConfig: loaderFor(makeConfig()) },
+        baseOptions,
+        supplied
+      );
+      const second = await normalizeFederationOptionsCore(
+        { io, loadConfig: loaderFor(makeConfig()) },
+        baseOptions,
+        supplied
+      );
+
+      expect(supplied.cachePath).toBe('/c');
+      expect(second.options.federationCache.cachePath).toBe(
+        first.options.federationCache.cachePath
+      );
+    });
+
+    it('keeps the bundler cache identity so callers can still reach into it', async () => {
+      const io = createMemoryIo().setFile(CONFIG_PATH, '');
+      const bundlerCache = { marker: true };
+      const supplied: FederationCache<typeof bundlerCache> = {
+        externals: [],
+        bundlerCache,
+        cachePath: '/c',
+      };
+
+      const result = await normalizeFederationOptionsCore(
+        { io, loadConfig: loaderFor(makeConfig()) },
+        baseOptions,
+        supplied
+      );
+
+      expect(result.options.federationCache.bundlerCache).toBe(bundlerCache);
+    });
   });
 
   it('loads the config through the injected ConfigLoader (no disk import)', async () => {
