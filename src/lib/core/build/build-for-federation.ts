@@ -1,14 +1,8 @@
 import type { FederationInfo } from '../../domain/core/federation-info.contract.js';
-import {
-  bundleExposedAndMappings,
-  describeExposed,
-  describeSharedMappings,
-} from './bundle-exposed-and-mappings.js';
+import { bundleExposedAndMappings } from './bundle-exposed-and-mappings.js';
 import { bundleShared } from './bundle-shared.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
-import { densifyExternals } from '../output/densify-externals.js';
-import { writeFederationInfo } from '../output/write-federation-info.js';
-import { writeImportMap } from '../output/write-import-map.js';
+import { assembleFederationInfo } from './assemble-federation-info.js';
 import { logger } from '../../utils/logger.js';
 import { AbortedError } from '../../utils/errors.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
@@ -48,52 +42,7 @@ export async function buildForFederation(
   if (signal?.aborted)
     throw new AbortedError('[buildForFederation] After exposed-and-mappings bundle');
 
-  const exposedInfo = !artifactInfo ? describeExposed(config, fedOptions) : artifactInfo.exposes;
-
-  const sharedMappingInfo = !artifactInfo
-    ? describeSharedMappings(config, fedOptions)
-    : artifactInfo.mappings;
-
-  const sharedExternals = [...fedOptions.federationCache.externals, ...sharedMappingInfo];
-
-  if (config?.shareScope) {
-    Object.values(sharedExternals).forEach(external => {
-      if (!external.shareScope) external.shareScope = config.shareScope;
-    });
-  }
-
-  const shared = config.features.denseExternals
-    ? densifyExternals(sharedExternals)
-    : sharedExternals;
-
-  const buildNotificationsEndpoint =
-    fedOptions.buildNotifications?.enable && fedOptions.dev
-      ? fedOptions.buildNotifications?.endpoint
-      : undefined;
-  const federationInfo: FederationInfo = {
-    name: config.name,
-    shared,
-    exposes: exposedInfo,
-    buildNotificationsEndpoint,
-  };
-  if (fedOptions.federationCache.chunks) {
-    federationInfo.chunks = fedOptions.federationCache.chunks;
-  }
-  if (artifactInfo?.chunks) {
-    federationInfo.chunks = { ...(federationInfo.chunks ?? {}), ...artifactInfo?.chunks };
-  }
-
-  if (config.features.integrityHashes) {
-    federationInfo.integrity = {
-      ...(fedOptions.federationCache.integrity ?? {}),
-      ...(artifactInfo?.integrity ?? {}),
-    };
-  }
-
-  writeFederationInfo(federationInfo, fedOptions);
-  writeImportMap(fedOptions.federationCache, fedOptions, federationInfo.integrity);
-
-  return federationInfo;
+  return assembleFederationInfo(config, fedOptions, artifactInfo);
 }
 
 /**
