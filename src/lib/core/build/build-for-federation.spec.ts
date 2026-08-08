@@ -54,7 +54,10 @@ function makeConfig(denseExternals: boolean): NormalizedFederationConfig {
   };
 }
 
-function makeFedOptions(externals: SharedInfo[]): NormalizedFederationOptions {
+function makeFedOptions(
+  externals: SharedInfo[],
+  overrides: Partial<NormalizedFederationOptions> = {}
+): NormalizedFederationOptions {
   return {
     workspaceRoot: '/ws',
     outputPath: 'dist',
@@ -67,6 +70,7 @@ function makeFedOptions(externals: SharedInfo[]): NormalizedFederationOptions {
       bundlerCache: {},
       cachePath: '/cache',
     },
+    ...overrides,
   };
 }
 
@@ -118,5 +122,46 @@ describe('buildForFederation — denseExternals wiring', () => {
     expect(onArg.externals).toEqual(offArg.externals);
     expect(onArg.externals).toEqual(seededExternals());
     expect(onArg.externals.every(s => 'outFileName' in s && !('entries' in s))).toBe(true);
+  });
+});
+
+describe('buildForFederation — build notification endpoint', () => {
+  const endpoint = '/nf:build-notifications';
+
+  // Remotes advertise the endpoint through remoteEntry.json, so this gate is what
+  // decides whether a consuming browser opens an event stream at all.
+  async function buildWith(overrides: Partial<NormalizedFederationOptions>) {
+    const info = await buildForFederation(
+      makeConfig(false),
+      makeFedOptions(seededExternals(), overrides),
+      []
+    );
+    return info.buildNotificationsEndpoint;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('publishes the endpoint for an enabled dev build', async () => {
+    expect(await buildWith({ dev: true, buildNotifications: { enable: true, endpoint } })).toBe(
+      endpoint
+    );
+  });
+
+  it('withholds the endpoint from a production build', async () => {
+    expect(
+      await buildWith({ dev: false, buildNotifications: { enable: true, endpoint } })
+    ).toBeUndefined();
+  });
+
+  it('withholds the endpoint when notifications are disabled', async () => {
+    expect(
+      await buildWith({ dev: true, buildNotifications: { enable: false, endpoint } })
+    ).toBeUndefined();
+  });
+
+  it('withholds the endpoint when notifications are unconfigured', async () => {
+    expect(await buildWith({ dev: true })).toBeUndefined();
   });
 });
