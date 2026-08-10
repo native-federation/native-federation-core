@@ -6,13 +6,10 @@ import type {
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
 import { densifyExternals } from '../output/densify-externals.js';
-import { writeFederationInfo } from '../output/write-federation-info.js';
-import { writeImportMap } from '../output/write-import-map.js';
 
 /**
- * Turns the populated federation cache into `remoteEntry.json` + `importmap.json`. Shared by the
- * initial build and the watch rebuild: both must emit byte-identical metadata for the same inputs,
- * so every field of `FederationInfo` is derived here and nowhere else.
+ * Derives the `remoteEntry.json` payload from the populated federation cache. Shared by the initial
+ * build and the watch rebuild.
  */
 export function assembleFederationInfo(
   config: NormalizedFederationConfig,
@@ -21,7 +18,8 @@ export function assembleFederationInfo(
 ): FederationInfo {
   const federationCache = fedOptions.federationCache;
 
-  // Scope before densify: `densifyExternals` groups by shareScope and copies it onto the group.
+  // Scope before densify: shareScope is part of the grouping signature, so an entry inheriting the
+  // default must carry it already or it splits from a sibling that set the same scope explicitly.
   const sharedExternals = applyShareScope(
     [...federationCache.externals, ...artifactInfo.mappings],
     config.shareScope
@@ -50,9 +48,6 @@ export function assembleFederationInfo(
       ...(artifactInfo.integrity ?? {}),
     };
   }
-
-  writeFederationInfo(federationInfo, fedOptions);
-  writeImportMap(federationCache, fedOptions, federationInfo.integrity);
 
   return federationInfo;
 }
