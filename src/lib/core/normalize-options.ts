@@ -82,11 +82,6 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
       getDefaultCachePath(options.workspaceRoot)
     ) as FederationCache<TBundlerCache>);
 
-  // Scoped here rather than in buildForFederation, which appended it per build and so nested the
-  // path a level deeper every time one cache object served more than one build. The supplied cache
-  // is a template: `externals` is copied because the build both pushes onto it and reassigns it
-  // (see rebuildAffectedExternals), and a shared array would make those two disagree about which
-  // object they affect. `bundlerCache` stays shared by reference — it is the bundler's own state.
   const federationCache: FederationCache<TBundlerCache> = {
     ...suppliedCache,
     cachePath: path.join(suppliedCache.cachePath, projectName),
