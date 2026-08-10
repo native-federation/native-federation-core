@@ -69,7 +69,7 @@ export async function executeSharedBundlePlans(
     addExternalsToCache(fedOptions.federationCache, info);
 
     if (signal?.aborted)
-      throw new AbortedError(`[buildForFederation] After ${plan.bundleName} bundle`);
+      throw new AbortedError(`[executeSharedBundlePlans] After ${plan.bundleName} bundle`);
   }
 
   const separatePlans = plans.filter(p => p.kind === 'separate');
@@ -87,6 +87,6 @@ export async function executeSharedBundlePlans(
     logger.measure(start, 'Step 2.2) Bundling all separate external packages');
     for (const info of results) addExternalsToCache(fedOptions.federationCache, info);
 
-    if (signal?.aborted) throw new AbortedError('[buildForFederation] After separate bundle');
+    if (signal?.aborted) throw new AbortedError('[executeSharedBundlePlans] After separate bundle');
   }
 }
