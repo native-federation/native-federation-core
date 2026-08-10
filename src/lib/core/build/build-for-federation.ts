@@ -1,20 +1,14 @@
 import type { FederationInfo } from '../../domain/core/federation-info.contract.js';
-import {
-  bundleExposedAndMappings,
-  describeExposed,
-  describeSharedMappings,
-} from './bundle-exposed-and-mappings.js';
+import { bundleExposedAndMappings } from './bundle-exposed-and-mappings.js';
 import { bundleShared } from './bundle-shared.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
-import { densifyExternals } from '../output/densify-externals.js';
-import { writeFederationInfo } from '../output/write-federation-info.js';
-import { writeImportMap } from '../output/write-import-map.js';
+import { assembleFederationInfo } from './assemble-federation-info.js';
+import { writeFederationOutputs } from '../output/write-federation-outputs.js';
 import { logger } from '../../utils/logger.js';
 import { AbortedError } from '../../utils/errors.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import { addExternalsToCache } from '../cache/federation-cache.js';
 import { planSharedBundles, type SharedBundlePlan } from './shared-bundle-plan.js';
-import path from 'path';
 
 export async function buildForFederation(
   config: NormalizedFederationConfig,
@@ -23,10 +17,6 @@ export async function buildForFederation(
   signal?: AbortSignal
 ): Promise<FederationInfo> {
   // 1. Setup
-  fedOptions.federationCache.cachePath = path.join(
-    fedOptions.federationCache.cachePath,
-    fedOptions.projectName
-  );
   logger.info('Building federation artifacts');
   logger.notice("Skip packages you don't want to share in your federation config");
 
@@ -48,50 +38,8 @@ export async function buildForFederation(
   if (signal?.aborted)
     throw new AbortedError('[buildForFederation] After exposed-and-mappings bundle');
 
-  const exposedInfo = !artifactInfo ? describeExposed(config, fedOptions) : artifactInfo.exposes;
-
-  const sharedMappingInfo = !artifactInfo
-    ? describeSharedMappings(config, fedOptions)
-    : artifactInfo.mappings;
-
-  const sharedExternals = [...fedOptions.federationCache.externals, ...sharedMappingInfo];
-
-  if (config?.shareScope) {
-    Object.values(sharedExternals).forEach(external => {
-      if (!external.shareScope) external.shareScope = config.shareScope;
-    });
-  }
-
-  const shared = config.features.denseExternals
-    ? densifyExternals(sharedExternals)
-    : sharedExternals;
-
-  const buildNotificationsEndpoint =
-    fedOptions.buildNotifications?.enable && fedOptions.dev
-      ? fedOptions.buildNotifications?.endpoint
-      : undefined;
-  const federationInfo: FederationInfo = {
-    name: config.name,
-    shared,
-    exposes: exposedInfo,
-    buildNotificationsEndpoint,
-  };
-  if (fedOptions.federationCache.chunks) {
-    federationInfo.chunks = fedOptions.federationCache.chunks;
-  }
-  if (artifactInfo?.chunks) {
-    federationInfo.chunks = { ...(federationInfo.chunks ?? {}), ...artifactInfo?.chunks };
-  }
-
-  if (config.features.integrityHashes) {
-    federationInfo.integrity = {
-      ...(fedOptions.federationCache.integrity ?? {}),
-      ...(artifactInfo?.integrity ?? {}),
-    };
-  }
-
-  writeFederationInfo(federationInfo, fedOptions);
-  writeImportMap(fedOptions.federationCache, fedOptions, federationInfo.integrity);
+  const federationInfo = assembleFederationInfo(config, fedOptions, artifactInfo);
+  writeFederationOutputs(federationInfo, fedOptions);
 
   return federationInfo;
 }
@@ -121,7 +69,7 @@ export async function executeSharedBundlePlans(
     addExternalsToCache(fedOptions.federationCache, info);
 
     if (signal?.aborted)
-      throw new AbortedError(`[buildForFederation] After ${plan.bundleName} bundle`);
+      throw new AbortedError(`[executeSharedBundlePlans] After ${plan.bundleName} bundle`);
   }
 
   const separatePlans = plans.filter(p => p.kind === 'separate');
@@ -139,6 +87,6 @@ export async function executeSharedBundlePlans(
     logger.measure(start, 'Step 2.2) Bundling all separate external packages');
     for (const info of results) addExternalsToCache(fedOptions.federationCache, info);
 
-    if (signal?.aborted) throw new AbortedError('[buildForFederation] After separate bundle');
+    if (signal?.aborted) throw new AbortedError('[executeSharedBundlePlans] After separate bundle');
   }
 }

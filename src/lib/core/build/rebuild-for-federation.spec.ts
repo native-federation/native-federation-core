@@ -2,14 +2,12 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
-import type { SharedInfo } from '../../domain/core/federation-info.contract.js';
+import type { DenseSharedInfo, SharedInfo } from '../../domain/core/federation-info.contract.js';
 
 vi.mock('../output/write-federation-info.js', () => ({ writeFederationInfo: vi.fn() }));
 vi.mock('../output/write-import-map.js', () => ({ writeImportMap: vi.fn() }));
 vi.mock('./bundle-exposed-and-mappings.js', () => ({
-  bundleExposedAndMappings: vi.fn(async () => undefined),
-  describeExposed: vi.fn(() => []),
-  describeSharedMappings: vi.fn(() => []),
+  bundleExposedAndMappings: vi.fn(async () => ({ mappings: [], exposes: [] })),
 }));
 vi.mock('../cache/cache-persistence.js', () => ({
   cacheEntryCore: vi.fn(() => ({ clear: vi.fn() })),
@@ -28,15 +26,27 @@ vi.mock('./build-for-federation.js', () => ({
 const { rebuildForFederation } = await import('./rebuild-for-federation.js');
 const { executeSharedBundlePlans } = await import('./build-for-federation.js');
 const { affectedSharedKeys } = await import('./resolve-shared-dirs.js');
+const { bundleExposedAndMappings } = await import('./bundle-exposed-and-mappings.js');
 
-function config(): NormalizedFederationConfig {
+// Fresh objects per call, like the real implementation, so a shareScope default written in place
+// cannot survive from one rebuild into the next.
+const mappingsPerCall = (mappings: () => SharedInfo[]) =>
+  vi.mocked(bundleExposedAndMappings).mockImplementation(async () => ({
+    mappings: mappings(),
+    exposes: [],
+  }));
+
+function config(
+  overrides: { denseExternals?: boolean; shareScope?: string } = {}
+): NormalizedFederationConfig {
   return {
     name: 'app',
     chunks: false,
     shared: {
       a: { platform: 'browser', build: 'default', chunks: false } as NormalizedExternalConfig,
     },
-    features: {},
+    ...(overrides.shareScope ? { shareScope: overrides.shareScope } : {}),
+    features: { denseExternals: overrides.denseExternals ?? false },
   } as unknown as NormalizedFederationConfig;
 }
 
@@ -97,6 +107,108 @@ describe('rebuildForFederation — affected-external re-bundling', () => {
 
     expect(affectedSharedKeys).not.toHaveBeenCalled();
     expect(executeSharedBundlePlans).not.toHaveBeenCalled();
+  });
+});
+
+// Issue #109: a rebuild that emitted flat entries while the remotes stayed dense let a secondary
+// entry point (e.g. @angular/core/rxjs-interop) resolve to a different provider than its primary,
+// loading Angular twice.
+describe('rebuildForFederation — denseExternals', () => {
+  const angular = (): SharedInfo[] =>
+    [
+      { packageName: '@angular/core', outFileName: 'core.js', version: '21.0.0', singleton: true },
+      {
+        packageName: '@angular/core/rxjs-interop',
+        outFileName: 'core-rxjs-interop.js',
+        version: '21.0.0',
+        singleton: true,
+      },
+    ] as SharedInfo[];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mappingsPerCall(() => []);
+  });
+
+  it('groups secondary entry points under their parent package when the flag is on', async () => {
+    const info = await rebuildForFederation(
+      config({ denseExternals: true }),
+      fedOptions(angular()),
+      ['@angular/core'],
+      []
+    );
+
+    expect(info.shared).toHaveLength(1);
+    const [core] = info.shared as [DenseSharedInfo];
+    expect(core.packageName).toBe('@angular/core');
+    expect(core.entries).toEqual({
+      '@angular/core': 'core.js',
+      '@angular/core/rxjs-interop': 'core-rxjs-interop.js',
+    });
+  });
+
+  it('leaves shared flat when the flag is off', async () => {
+    const externals = angular();
+    const info = await rebuildForFederation(config(), fedOptions(externals), ['@angular/core'], []);
+
+    expect(info.shared).toEqual(externals);
+  });
+
+  it('stays stable across consecutive rebuilds on the same fedOptions', async () => {
+    const options = fedOptions(angular());
+    const first = await rebuildForFederation(
+      config({ denseExternals: true }),
+      options,
+      ['@angular/core'],
+      []
+    );
+    const second = await rebuildForFederation(
+      config({ denseExternals: true }),
+      options,
+      ['@angular/core'],
+      []
+    );
+
+    expect(second).toEqual(first);
+  });
+});
+
+describe('rebuildForFederation — shareScope default', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  // The mock re-describes mappings per call, like the real one, so a default that only reached the
+  // (long-lived) cached externals would leave this one bare.
+  it('applies the configured scope to cached externals and freshly described mappings', async () => {
+    mappingsPerCall(() => [{ packageName: '@my/lib', outFileName: 'my-lib.js' } as SharedInfo]);
+    const cached: SharedInfo[] = [{ packageName: 'a', outFileName: 'a.cached.js' } as SharedInfo];
+
+    const info = await rebuildForFederation(
+      config({ shareScope: 'my-scope' }),
+      fedOptions(cached),
+      ['a'],
+      []
+    );
+
+    expect(info.shared.map(s => [s.packageName, s.shareScope])).toEqual([
+      ['a', 'my-scope'],
+      ['@my/lib', 'my-scope'],
+    ]);
+  });
+
+  it('keeps an explicit per-external scope', async () => {
+    mappingsPerCall(() => []);
+    const cached: SharedInfo[] = [
+      { packageName: 'a', outFileName: 'a.cached.js', shareScope: 'own-scope' } as SharedInfo,
+    ];
+
+    const info = await rebuildForFederation(
+      config({ shareScope: 'my-scope' }),
+      fedOptions(cached),
+      ['a'],
+      []
+    );
+
+    expect(info.shared[0]!.shareScope).toBe('own-scope');
   });
 });
 

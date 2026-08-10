@@ -8,9 +8,7 @@ import { prepareSkipList } from '../../config/default-skip-list.js';
 vi.mock('../output/write-federation-info.js', () => ({ writeFederationInfo: vi.fn() }));
 vi.mock('../output/write-import-map.js', () => ({ writeImportMap: vi.fn() }));
 vi.mock('./bundle-exposed-and-mappings.js', () => ({
-  bundleExposedAndMappings: vi.fn(async () => undefined),
-  describeExposed: vi.fn(() => []),
-  describeSharedMappings: vi.fn(() => []),
+  bundleExposedAndMappings: vi.fn(async () => ({ mappings: [], exposes: [] })),
 }));
 
 const { buildForFederation } = await import('./build-for-federation.js');

@@ -74,16 +74,24 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
   /**
    * Step 2: normalizing options
    */
-  const federationCache =
+  const projectName = resolveProjectName(options.projectName ?? config.name);
+
+  const suppliedCache =
     cache ??
     (createFederationCache(
       getDefaultCachePath(options.workspaceRoot)
     ) as FederationCache<TBundlerCache>);
 
+  const federationCache: FederationCache<TBundlerCache> = {
+    ...suppliedCache,
+    cachePath: path.join(suppliedCache.cachePath, projectName),
+    externals: [...suppliedCache.externals],
+  };
+
   const normalizedOptions: NormalizedFederationOptions<TBundlerCache> = {
     ...options,
     entryPoints: options.entryPoints ?? Object.values(config.exposes ?? {}).map(e => e.file),
-    projectName: resolveProjectName(options.projectName ?? config.name),
+    projectName,
     cacheExternalArtifacts: options.cacheExternalArtifacts ?? true,
     federationCache,
   };
