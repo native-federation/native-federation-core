@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ProjectData } from '@softarc/sheriff-core';
 import {
   getUsedDependenciesFactoryCore,
@@ -7,6 +7,8 @@ import {
 import { isSharedMapping, matchMapping } from './match-mapping.js';
 import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
 import { createPackageJsonRepository } from '../utils/io/package-json-repository.js';
+import { logger } from '../utils/logger.js';
+import * as path from 'path';
 
 describe('getUsedDependenciesFactoryCore', () => {
   // Build deps backed by memory-io: `projectData` is the canned sheriff output
@@ -83,6 +85,69 @@ describe('getUsedDependenciesFactoryCore', () => {
     });
 
     expect(used.internal).toEqual({ '/ws/libs/ui/button.ts': '@org/ui/button' });
+  });
+
+  // The reported failure mode: mapping keys spelled 'C:/ws/…' (from cwd) against imports built
+  // on 'c:/ws' (from Nx). Every affected library is pruned and silently missing from
+  // remoteEntry.json, so the walk reports what the pruned set alone cannot distinguish.
+  describe('case-only mapping misses', () => {
+    const caseOnly = /land in a shared mapping only when case is ignored/;
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    function runWith(sharedMappings: Record<string, string>, workspaceRoot = 'c:/ws') {
+      const deps = makeDeps({
+        'src/comp.ts': {
+          imports: ['libs/ui/button.ts'],
+          externalLibraries: [],
+          unresolvedImports: [],
+        },
+      } as unknown as ProjectData);
+
+      return getUsedDependenciesFactoryCore(deps, workspaceRoot)({
+        exposes: { './Comp': { file: 'src/comp.ts' } },
+        sharedMappings,
+      });
+    }
+
+    it('warns and prunes when the mapping key differs from the import by case alone', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      const used = runWith({ 'C:/ws/libs/ui/*': '@org/ui/*' });
+
+      expect(used.internal).toEqual({});
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(caseOnly));
+    });
+
+    it('names one of the affected imports so the mismatch is visible', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      runWith({ 'C:/ws/libs/ui/*': '@org/ui/*' });
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining(path.join('c:/ws', 'libs/ui/button.ts'))
+      );
+    });
+
+    it('stays silent when the import genuinely reaches no mapping', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      const used = runWith({ 'c:/ws/libs/unrelated/*': '@org/unrelated/*' });
+
+      expect(used.internal).toEqual({});
+      expect(warn).not.toHaveBeenCalledWith(expect.stringMatching(caseOnly));
+    });
+
+    it('stays silent when the mapping matches on the nose', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      const used = runWith({ [path.join('c:/ws', 'libs/ui') + '/*']: '@org/ui/*' });
+
+      expect(Object.keys(used.internal)).toHaveLength(1);
+      expect(warn).not.toHaveBeenCalledWith(expect.stringMatching(caseOnly));
+    });
   });
 
   it('falls back to the provided entry points when no exposes are present', () => {

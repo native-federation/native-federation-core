@@ -18,14 +18,27 @@ export function removeUnusedDeps(
     .filter(([shared, meta]) => !!meta.includeSecondaries || usedDependencies.external.has(shared))
     .reduce((acc, [shared, meta]) => ({ ...acc, [shared]: meta }), {});
 
+  // Both halves can contain wildcard-expanded imports, which the skip list has not seen yet.
+  const sharedMappings = withoutSkippedMappings(
+    { ...keptMappings(config, ctx), ...usedDependencies.internal },
+    config.skip
+  );
+
+  // Only a trace: a project that reaches none of the workspace's mappings prunes them all,
+  // and in a workspace whose tsconfig declares one path per library that is the common case.
+  // The mismatch this used to warn about is reported from resolveUsedMappings, which can tell
+  // the two apart.
+  if (Object.keys(config.sharedMappings).length > 0 && Object.keys(sharedMappings).length === 0) {
+    logger.debug(
+      'All shared mappings were pruned as unreachable from the entry points. Disable the ' +
+        "'ignoreUnusedDeps' feature to publish them anyway."
+    );
+  }
+
   return {
     ...config,
     shared: filteredDependencies,
-    // Both halves can contain wildcard-expanded imports, which the skip list has not seen yet.
-    sharedMappings: withoutSkippedMappings(
-      { ...keptMappings(config, ctx), ...usedDependencies.internal },
-      config.skip
-    ),
+    sharedMappings,
   };
 }
 

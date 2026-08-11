@@ -8,7 +8,8 @@ import { type FileReaderPort } from '../domain/utils/io-port.contract.js';
 import { type PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { type UsedDependencies } from '../domain/utils/used-dependencies.contract.js';
 import { type ExposeEntry } from '../domain/config/federation-config.contract.js';
-import { isSharedMapping, matchMapping } from './match-mapping.js';
+import { createCaseInsensitiveMatcher, isSharedMapping, matchMapping } from './match-mapping.js';
+import { logger } from '../utils/logger.js';
 import * as path from 'path';
 
 type GetProjectData = (
@@ -123,6 +124,8 @@ function resolveUsedMappings(
   sharedMappings: PathToImport
 ): PathToImport {
   const usedMappings: PathToImport = {};
+  const matchesIgnoringCase = createCaseInsensitiveMatcher(sharedMappings);
+  const caseOnlyMisses = new Set<string>();
 
   for (const fileName of Object.keys(fileInfos)) {
     const fullFileName = path.join(workspaceRoot, fileName);
@@ -137,9 +140,29 @@ function resolveUsedMappings(
       const fullImport = path.join(workspaceRoot, imp);
       const match = matchMapping(fullImport, sharedMappings);
       if (match) usedMappings[fullImport] = match;
+      else if (matchesIgnoringCase(fullImport)) caseOnlyMisses.add(fullImport);
     }
   }
 
+  warnOnCaseOnlyMisses(caseOnlyMisses);
+
   return usedMappings;
+}
+
+/**
+ * Reaching a mapping only once case is ignored means this build's workspace root and the mapping
+ * keys spell the same directory differently, so the libraries behind them are pruned as
+ * unreachable and go missing from remoteEntry.json with nothing failing. Distinguishing that
+ * from a project that legitimately reaches none of the workspace's mappings is the whole point
+ * of testing the misses rather than the emptied set.
+ */
+function warnOnCaseOnlyMisses(misses: ReadonlySet<string>): void {
+  if (misses.size === 0) return;
+
+  logger.warn(
+    `${misses.size} import(s) land in a shared mapping only when case is ignored, so they were ` +
+      `pruned as unreachable — e.g. '${[...misses][0]}'. The emitted remoteEntry.json will not ` +
+      'advertise those workspace libraries.'
+  );
 }
 
