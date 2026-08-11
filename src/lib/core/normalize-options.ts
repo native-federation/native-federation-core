@@ -16,6 +16,7 @@ import { getDefaultCachePath } from './cache/cache-persistence.js';
 import { getUsedDependenciesFactory } from '../config/get-used-dependencies.js';
 import { logger } from '../utils/logger.js';
 import { normalizePackageName } from '../utils/normalize.js';
+import { toDiskCase } from '../utils/disk-case.js';
 
 type ConfigLoader = (fullConfigPath: string) => Promise<NormalizedFederationConfig>;
 
@@ -63,7 +64,12 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
   /**
    * Step 1: normalizing config
    */
-  const fullConfigPath = path.join(options.workspaceRoot, options.federationConfig);
+
+  // Before loadConfig: withNativeFederation() runs during that import and derives the
+  // sharedMappings keys, which are string-compared against paths built from this root.
+  const workspaceRoot = toDiskCase(deps.io, options.workspaceRoot);
+
+  const fullConfigPath = path.join(workspaceRoot, options.federationConfig);
 
   if (!deps.io.exists(fullConfigPath)) {
     throw new Error('Expected ' + fullConfigPath);
@@ -79,7 +85,7 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
   const suppliedCache =
     cache ??
     (createFederationCache(
-      getDefaultCachePath(options.workspaceRoot)
+      getDefaultCachePath(workspaceRoot)
     ) as FederationCache<TBundlerCache>);
 
   const federationCache: FederationCache<TBundlerCache> = {
@@ -90,6 +96,7 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
 
   const normalizedOptions: NormalizedFederationOptions<TBundlerCache> = {
     ...options,
+    workspaceRoot,
     entryPoints: options.entryPoints ?? Object.values(config.exposes ?? {}).map(e => e.file),
     projectName,
     cacheExternalArtifacts: options.cacheExternalArtifacts ?? true,
@@ -107,12 +114,12 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
     logger.debug('Nothing is shared, skipping the used dependency scan.');
   } else if (config.features.ignoreUnusedDeps) {
     const getUsedDeps = (deps.usedDependenciesFactory ?? getUsedDependenciesFactory)(
-      options.workspaceRoot,
+      workspaceRoot,
       options.entryPoints
     );
     config = removeUnusedDeps(getUsedDeps(config), config, {
       io: deps.io,
-      workspaceRoot: options.workspaceRoot,
+      workspaceRoot,
     });
     logger.info('Removed unused dependencies.');
     logger.debug(
@@ -121,7 +128,7 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
   } else {
     config.sharedMappings = expandOrDropWildcards(config, {
       io: deps.io,
-      workspaceRoot: options.workspaceRoot,
+      workspaceRoot,
     });
   }
 

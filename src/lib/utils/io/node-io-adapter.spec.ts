@@ -31,6 +31,22 @@ describe('nodeIo', () => {
     });
   });
 
+  describe('realpathNative', () => {
+    it('resolves a symlink to its target', () => {
+      const target = path.join(root, 'target');
+      const link = path.join(root, 'link');
+      fs.mkdirSync(target);
+      fs.symlinkSync(target, link, 'dir');
+
+      expect(nodeIo.realpathNative(link)).toBe(fs.realpathSync.native(target));
+    });
+
+    it('returns the input unchanged when the path does not exist', () => {
+      const missing = path.join(root, 'nope');
+      expect(nodeIo.realpathNative(missing)).toBe(missing);
+    });
+  });
+
   describe('stat', () => {
     it('flags a symlink without following it', () => {
       const target = path.join(root, 'target');

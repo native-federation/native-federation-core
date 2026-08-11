@@ -3,13 +3,14 @@ import { cwd } from 'process';
 import { getConfigContext } from './configuration-context.js';
 import { nodeIo } from '../utils/io/node-io-adapter.js';
 import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
+import { toDiskCase } from '../utils/disk-case.js';
 
 export function findRootTsConfigJson(): string {
   return findRootTsConfigJsonCore(nodeIo);
 }
 
 export function findRootTsConfigJsonCore(io: FileReaderPort): string {
-  const packageJson = findPackageJson(io, cwd());
+  const packageJson = findPackageJson(io, toDiskCase(io, cwd()));
   const projectRoot = path.dirname(packageJson);
   const tsConfigBaseJson = path.join(projectRoot, 'tsconfig.base.json');
   const tsConfigJson = path.join(projectRoot, 'tsconfig.json');
@@ -38,7 +39,10 @@ export function findPackageJson(io: FileReaderPort, folder: string): string {
   );
 }
 
-export function inferProjectPath(projectPath: string | undefined): string {
+export function inferProjectPath(
+  projectPath: string | undefined,
+  io: FileReaderPort = nodeIo
+): string {
   if (!projectPath && getConfigContext().packageJson) {
     projectPath = path.dirname(getConfigContext().packageJson || '');
   }
@@ -48,7 +52,7 @@ export function inferProjectPath(projectPath: string | undefined): string {
   }
 
   if (!projectPath) {
-    projectPath = cwd();
+    projectPath = toDiskCase(io, cwd());
   }
   return projectPath;
 }

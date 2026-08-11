@@ -15,6 +15,8 @@ export interface MemoryIo extends IoPort {
   setDir(dirPath: string): MemoryIo;
   /** Register `linkPath` as a symlink resolving to `target` (for realpath/stat). */
   setSymlink(linkPath: string, target: string): MemoryIo;
+  /** Register the on-disk spelling `realpathNative` should report for `path`. */
+  setDiskCase(path: string, spelling: string): MemoryIo;
   /** Set an entry's mtime (ms) reported by `stat`. */
   setMtime(filePath: string, mtimeMs: number): MemoryIo;
   files(): string[];
@@ -29,9 +31,18 @@ export function createMemoryIo(): MemoryIo {
   const watchers = new Map<string, Array<(filename: string | null) => void>>();
   const symlinks = new Map<string, string>();
   const mtimes = new Map<string, number>();
+  const diskCase = new Map<string, string>();
 
   const encode = (data: string | Uint8Array): Uint8Array =>
     typeof data === 'string' ? new TextEncoder().encode(data) : data;
+
+  const resolveLinks = (key: string): string => {
+    for (const [link, target] of symlinks) {
+      if (key === link) return target;
+      if (key.startsWith(link + '/')) return target + key.slice(link.length);
+    }
+    return key;
+  };
 
   const registerDirs = (key: string) => {
     let dir = path.posix.dirname(key);
@@ -69,6 +80,10 @@ export function createMemoryIo(): MemoryIo {
     },
     setSymlink(linkPath, target) {
       symlinks.set(toKey(linkPath), toKey(target));
+      return io;
+    },
+    setDiskCase(p, spelling) {
+      diskCase.set(toKey(p), spelling);
       return io;
     },
     setMtime(filePath, mtimeMs) {
@@ -112,12 +127,14 @@ export function createMemoryIo(): MemoryIo {
       return [...names];
     },
     realpath(p) {
+      return resolveLinks(toKey(p));
+    },
+    // A registered spelling is returned verbatim: toKey() would re-resolve it against the
+    // real cwd, which on a case-sensitive host would defeat the case-only comparison the
+    // caller is about to make.
+    realpathNative(p) {
       const key = toKey(p);
-      for (const [link, target] of symlinks) {
-        if (key === link) return target;
-        if (key.startsWith(link + '/')) return target + key.slice(link.length);
-      }
-      return key;
+      return diskCase.get(key) ?? resolveLinks(key);
     },
     stat(p): StatInfo | null {
       const key = toKey(p);
