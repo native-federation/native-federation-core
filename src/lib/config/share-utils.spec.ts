@@ -136,4 +136,56 @@ describe('shareCore (end-to-end via injected repository)', () => {
 
     expect(result['mylib'].requiredVersion).toBe(complex);
   });
+
+  it('applies tilde prefix when requested for exact semver', () => {
+    const io = createMemoryIo().setFile(
+      path.join(PROJECT, 'package.json'),
+      JSON.stringify({ dependencies: { mylib: '1.2.3' } })
+    );
+    const repo = createPackageJsonRepository(io);
+
+    const result = shareCore(
+      io,
+      { mylib: { singleton: true, requiredVersion: { mode: 'auto', prefix: '~' }, includeSecondaries: false } },
+      PROJECT,
+      DEFAULT_SKIP_LIST,
+      repo
+    );
+
+    expect(result['mylib']).toMatchObject({
+      singleton: true,
+      requiredVersion: '~1.2.3',
+      version: '1.2.3',
+    });
+  });
+
+  it('does not overwrite an existing range prefix unless force is set', () => {
+    const io = createMemoryIo().setFile(
+      path.join(PROJECT, 'package.json'),
+      JSON.stringify({ dependencies: { mylib: '^1.2.3' } })
+    );
+    const repo = createPackageJsonRepository(io);
+
+    // prefix '~' but force is false: should keep '^1.2.3'
+    const resultNoForce = shareCore(
+      io,
+      { mylib: { singleton: true, requiredVersion: { mode: 'auto', prefix: '~', force: false }, includeSecondaries: false } },
+      PROJECT,
+      DEFAULT_SKIP_LIST,
+      repo
+    );
+
+    expect(resultNoForce['mylib'].requiredVersion).toBe('^1.2.3');
+
+    // same but force=true: should become '~1.2.3'
+    const resultForce = shareCore(
+      io,
+      { mylib: { singleton: true, requiredVersion: { mode: 'auto', prefix: '~', force: true }, includeSecondaries: false } },
+      PROJECT,
+      DEFAULT_SKIP_LIST,
+      repo
+    );
+
+    expect(resultForce['mylib'].requiredVersion).toBe('~1.2.3');
+  });
 });
