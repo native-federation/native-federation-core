@@ -74,6 +74,7 @@ describe('shareCore (end-to-end via injected repository)', () => {
     expect(Object.keys(result)).toEqual(['mylib']);
   });
 
+  // New tests for auto requiredVersion with prefix/force behaviour
   it('applies prefix when requiredVersion is auto with prefix and base is exact semver', () => {
     const io = createMemoryIo().setFile(
       path.join(PROJECT, 'package.json'),
@@ -187,5 +188,102 @@ describe('shareCore (end-to-end via injected repository)', () => {
     );
 
     expect(resultForce['mylib'].requiredVersion).toBe('~1.2.3');
+  });
+});
+
+describe('shareAllCore (end-to-end via injected repository)', () => {
+  const PROJECT = path.resolve('/ws/app');
+
+  it('builds shared externals from the dependency map, honouring skip list and overrides', () => {
+    const io = createMemoryIo().setFile(
+      path.join(PROJECT, 'package.json'),
+      JSON.stringify({ dependencies: { mylib: '^1.2.3', skipme: '^2.0.0', overridden: '^3.0.0' } })
+    );
+    const repo = createPackageJsonRepository(io);
+
+    const result = shareAllCore(
+      io,
+      { singleton: true, includeSecondaries: false },
+      {
+        projectPath: PROJECT,
+        skipList: ['skipme'],
+        overrides: {
+          overridden: { singleton: false, requiredVersion: '~3.1.0', includeSecondaries: false },
+        },
+      },
+      repo
+    );
+
+    expect(Object.keys(result!).sort()).toEqual(['mylib', 'overridden']);
+    expect(result!['mylib']).toMatchObject({ singleton: true, requiredVersion: '^1.2.3' });
+    expect(result!['overridden']).toMatchObject({ singleton: false, requiredVersion: '~3.1.0' });
+  });
+
+  it('patches a shared external in place', () => {
+    const io = createMemoryIo().setFile(
+      path.join(PROJECT, 'package.json'),
+      JSON.stringify({ dependencies: { mylib: '^1.2.3' } })
+    );
+    const repo = createPackageJsonRepository(io);
+
+    const result = shareAllCore(
+      io,
+      { singleton: true, includeSecondaries: false },
+      { projectPath: PROJECT, patchList: { mylib: { singleton: false, strictVersion: true } } },
+      repo
+    );
+
+    expect(result!['mylib']).toMatchObject({
+      singleton: false,
+      strictVersion: true,
+      requiredVersion: '^1.2.3',
+    });
+  });
+
+  it('ignores a patch for an external that is not shared and warns', () => {
+    const io = createMemoryIo().setFile(
+      path.join(PROJECT, 'package.json'),
+      JSON.stringify({ dependencies: { mylib: '^1.2.3' } })
+    );
+    const repo = createPackageJsonRepository(io);
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    const result = shareAllCore(
+      io,
+      { singleton: true, includeSecondaries: false },
+      { projectPath: PROJECT, patchList: { doesnotexist: { singleton: false } } },
+      repo
+    );
+
+    expect(Object.keys(result!)).toEqual(['mylib']);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('not a shared external'));
+    warn.mockRestore();
+  });
+
+  it('ignores a patch for an external that is shadowed by overrides and warns', () => {
+    const io = createMemoryIo().setFile(
+      path.join(PROJECT, 'package.json'),
+      JSON.stringify({ dependencies: { overridden: '^3.0.0' } })
+    );
+    const repo = createPackageJsonRepository(io);
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    const result = shareAllCore(
+      io,
+      { singleton: true, includeSecondaries: false },
+      {
+        projectPath: PROJECT,
+        overrides: {
+          overridden: { singleton: false, requiredVersion: '~3.1.0', includeSecondaries: false },
+        },
+        patchList: { overridden: { singleton: true } },
+      },
+      repo
+    );
+
+    // The override value wins; the patch is not applied.
+    expect(result!['overridden']).toMatchObject({ singleton: false, requiredVersion: '~3.1.0' });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('mutually exclusive'));
+    warn.mockRestore();
   });
 });
