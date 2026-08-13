@@ -74,7 +74,6 @@ describe('shareCore (end-to-end via injected repository)', () => {
     expect(Object.keys(result)).toEqual(['mylib']);
   });
 
-  // New tests for auto requiredVersion with prefix/force behaviour
   it('applies prefix when requiredVersion is auto with prefix and base is exact semver', () => {
     const io = createMemoryIo().setFile(
       path.join(PROJECT, 'package.json'),
