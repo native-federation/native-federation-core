@@ -19,7 +19,7 @@ import type {
   ShareExternalsOptions,
 } from '../domain/config/external-config.contract.js';
 import { findPackageJson, inferProjectPath } from './project-paths.js';
-import { isInferVersion, lookupVersion } from './version-lookup.js';
+import { isInferVersion, lookupVersion, resolveAutoRequiredVersion, applyAutoRequiredOptions } from './version-lookup.js';
 import { addSecondaries, getSecondaries } from './secondaries.js';
 
 export const fromPackageJson = (baseCfg: ShareAllExternalsOptions, projectPath?: string) => {
@@ -95,8 +95,27 @@ export function shareAllCore(
         continue;
       }
 
-      const inferVersion = !config.requiredVersion || config.requiredVersion === 'auto';
-      const requiredVersion = inferVersion ? versions[key] : config.requiredVersion;
+      const cfgRequired = (config.requiredVersion ?? undefined) as any;
+      const inferVersion =
+        !cfgRequired ||
+        cfgRequired === 'auto' ||
+        (typeof cfgRequired === 'object' && cfgRequired.mode === 'auto');
+
+      let requiredVersion: string;
+      if (inferVersion) {
+        // versions[key] is the raw value from package.json (e.g. '^1.2.3' or '1.2.3')
+        const base = versions[key];
+        if (typeof cfgRequired === 'object') {
+          requiredVersion = applyAutoRequiredOptions(base, {
+            prefix: cfgRequired.prefix,
+            force: !!cfgRequired.force,
+          });
+        } else {
+          requiredVersion = base;
+        }
+      } else {
+        requiredVersion = config.requiredVersion as string;
+      }
 
       if (!sharedExternals[key]) {
         sharedExternals[key] = { ...config, requiredVersion };
@@ -178,12 +197,25 @@ export function shareCore(
     if (
       shareObject.requiredVersion === 'auto' ||
       (isInferVersion() && typeof shareObject.requiredVersion === 'undefined') ||
+      (typeof shareObject.requiredVersion === 'object' &&
+        (shareObject.requiredVersion as any).mode === 'auto') ||
       (shareObject.requiredVersion?.length ?? 1) < 1
     ) {
-      const version = lookupVersion(key, projectPath, repo);
+      // Determine actual requiredVersion value, optionally applying prefix/force.
+      const raw = lookupVersion(key, projectPath, repo);
 
-      shareObject.requiredVersion = version;
-      shareObject.version = version.replace(/^\D*/, '');
+      if (typeof shareObject.requiredVersion === 'object') {
+        const opts = shareObject.requiredVersion as any;
+        const resolved = applyAutoRequiredOptions(raw, {
+          prefix: opts.prefix,
+          force: !!opts.force,
+        });
+        shareObject.requiredVersion = resolved;
+      } else {
+        shareObject.requiredVersion = raw;
+      }
+      // Keep the numeric version for cache/installed-version tracking (strip non-digits).
+      shareObject.version = raw.replace(/^\D*/, '');
     }
 
     if (typeof shareObject.includeSecondaries === 'undefined') {

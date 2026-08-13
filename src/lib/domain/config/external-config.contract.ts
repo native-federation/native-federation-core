@@ -1,10 +1,23 @@
 export type IncludeSecondariesOptions =
   { skip?: string | string[]; resolveGlob?: boolean; keepAll?: boolean } | boolean;
 
+export interface AutoRequiredOptions {
+  /** Explicitly indicates auto-resolution. */ 
+  mode?: 'auto';
+  /** Prefix to prepend to the resolved package.json value (e.g. 'v', '^', '~', ''). */
+  prefix?: string;
+  /** When true, strip existing range/prefix characters and replace with prefix. */
+  force?: boolean;
+}
+
 export interface ExternalConfig {
   singleton?: boolean;
   strictVersion?: boolean;
-  requiredVersion?: string;
+  /**
+   * Either a concrete required range string (e.g. '^1.2.3') or an AutoRequiredOptions
+   * object to resolve the value from package.json with optional prefix/force behaviour.
+   */
+  requiredVersion?: string | AutoRequiredOptions;
   version?: string;
   includeSecondaries?: IncludeSecondariesOptions;
   platform?: 'browser' | 'node';

@@ -44,3 +44,60 @@ function lookupVersionInMap(key: string, versions: VersionMap): string | null {
   }
   return versions[key]!;
 }
+
+/**
+ * Apply auto-options to a base version string (the value read from package.json).
+ * - If opts is undefined, returns baseVersion unchanged.
+ * - If opts.prefix is provided, tries to prepend it to a simple semver or (when force)
+ *   strip any leading range/prefix chars and replace them.
+ *
+ * Conservative behaviour: complex ranges are left unchanged unless they are a single token
+ * that matches a semver with optional leading range chars.
+ */
+export function applyAutoRequiredOptions(
+  baseVersion: string,
+  opts?: { prefix?: string; force?: boolean }
+): string {
+  if (!opts || (!opts.prefix && !opts.force)) return baseVersion;
+
+  const prefix = opts.prefix ?? '';
+  const force = !!opts.force;
+
+  const raw = (baseVersion ?? '').trim();
+  // Recognize a single-version token possibly prefixed by common chars: ^ ~ = v >= <=
+  // Examples matched: '^1.2.3', '1.2.3', 'v1.2.3', '~1.2.3', '>=1.2.3'
+  const singleTokenMatch = raw.match(/^\s*([=^~v<>]*\s*)?(\d+\.\d+\.\d+(?:[-+.][\w.]+)?)\s*$/);
+  if (!singleTokenMatch) {
+    // Not a simple single token — do not attempt to rewrite complex ranges.
+    return raw;
+  }
+
+  const bareVersion = singleTokenMatch[2];
+
+  if (force) {
+    return `${prefix}${bareVersion}`;
+  }
+
+  // Not force: only add prefix when the raw is an exact semver without range chars
+  const hasRangePrefix = /^[\s]*[=^~<>v]/.test(raw);
+  if (!hasRangePrefix) {
+    return `${prefix}${bareVersion}`;
+  }
+
+  // Already has a range/prefix — leave unchanged.
+  return raw;
+}
+
+/**
+ * Convenience resolver: lookupVersion(key, ...) then apply auto options if provided.
+ * opts may be undefined (no prefixing).
+ */
+export function resolveAutoRequiredVersion(
+  key: string,
+  workspaceRoot: string,
+  repo: PackageJsonRepository,
+  opts?: { prefix?: string; force?: boolean }
+): string {
+  const base = lookupVersion(key, workspaceRoot, repo);
+  return applyAutoRequiredOptions(base, opts);
+}

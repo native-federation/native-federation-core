@@ -73,101 +73,67 @@ describe('shareCore (end-to-end via injected repository)', () => {
 
     expect(Object.keys(result)).toEqual(['mylib']);
   });
-});
 
-describe('shareAllCore (end-to-end via injected repository)', () => {
-  const PROJECT = path.resolve('/ws/app');
-
-  it('builds shared externals from the dependency map, honouring skip list and overrides', () => {
+  it('applies prefix when requiredVersion is auto with prefix and base is exact semver', () => {
     const io = createMemoryIo().setFile(
       path.join(PROJECT, 'package.json'),
-      JSON.stringify({ dependencies: { mylib: '^1.2.3', skipme: '^2.0.0', overridden: '^3.0.0' } })
+      JSON.stringify({ dependencies: { mylib: '1.2.3' } })
     );
     const repo = createPackageJsonRepository(io);
 
-    const result = shareAllCore(
+    const result = shareCore(
       io,
-      { singleton: true, includeSecondaries: false },
-      {
-        projectPath: PROJECT,
-        skipList: ['skipme'],
-        overrides: {
-          overridden: { singleton: false, requiredVersion: '~3.1.0', includeSecondaries: false },
-        },
-      },
+      { mylib: { singleton: true, requiredVersion: { mode: 'auto', prefix: 'v' }, includeSecondaries: false } },
+      PROJECT,
+      DEFAULT_SKIP_LIST,
       repo
     );
 
-    expect(Object.keys(result!).sort()).toEqual(['mylib', 'overridden']);
-    expect(result!['mylib']).toMatchObject({ singleton: true, requiredVersion: '^1.2.3' });
-    expect(result!['overridden']).toMatchObject({ singleton: false, requiredVersion: '~3.1.0' });
-  });
-
-  it('patches a shared external in place', () => {
-    const io = createMemoryIo().setFile(
-      path.join(PROJECT, 'package.json'),
-      JSON.stringify({ dependencies: { mylib: '^1.2.3' } })
-    );
-    const repo = createPackageJsonRepository(io);
-
-    const result = shareAllCore(
-      io,
-      { singleton: true, includeSecondaries: false },
-      { projectPath: PROJECT, patchList: { mylib: { singleton: false, strictVersion: true } } },
-      repo
-    );
-
-    expect(result!['mylib']).toMatchObject({
-      singleton: false,
-      strictVersion: true,
-      requiredVersion: '^1.2.3',
+    expect(result['mylib']).toMatchObject({
+      singleton: true,
+      requiredVersion: 'v1.2.3',
+      version: '1.2.3',
     });
   });
 
-  it('ignores a patch for an external that is not shared and warns', () => {
+  it('force-replaces prefix for caret when force=true', () => {
     const io = createMemoryIo().setFile(
       path.join(PROJECT, 'package.json'),
       JSON.stringify({ dependencies: { mylib: '^1.2.3' } })
     );
     const repo = createPackageJsonRepository(io);
-    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
-    const result = shareAllCore(
+    const result = shareCore(
       io,
-      { singleton: true, includeSecondaries: false },
-      { projectPath: PROJECT, patchList: { doesnotexist: { singleton: false } } },
+      { mylib: { singleton: true, requiredVersion: { mode: 'auto', prefix: 'v', force: true }, includeSecondaries: false } },
+      PROJECT,
+      DEFAULT_SKIP_LIST,
       repo
     );
 
-    expect(Object.keys(result!)).toEqual(['mylib']);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('not a shared external'));
-    warn.mockRestore();
+    expect(result['mylib']).toMatchObject({
+      singleton: true,
+      requiredVersion: 'v1.2.3',
+      version: '1.2.3',
+    });
   });
 
-  it('ignores a patch for an external that is shadowed by overrides and warns', () => {
+  it('does not change complex ranges when applying auto prefix', () => {
+    const complex = '>=1.0.0 <2.0.0';
     const io = createMemoryIo().setFile(
       path.join(PROJECT, 'package.json'),
-      JSON.stringify({ dependencies: { overridden: '^3.0.0' } })
+      JSON.stringify({ dependencies: { mylib: complex } })
     );
     const repo = createPackageJsonRepository(io);
-    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
-    const result = shareAllCore(
+    const result = shareCore(
       io,
-      { singleton: true, includeSecondaries: false },
-      {
-        projectPath: PROJECT,
-        overrides: {
-          overridden: { singleton: false, requiredVersion: '~3.1.0', includeSecondaries: false },
-        },
-        patchList: { overridden: { singleton: true } },
-      },
+      { mylib: { singleton: true, requiredVersion: { mode: 'auto', prefix: 'v' }, includeSecondaries: false } },
+      PROJECT,
+      DEFAULT_SKIP_LIST,
       repo
     );
 
-    // The override value wins; the patch is not applied.
-    expect(result!['overridden']).toMatchObject({ singleton: false, requiredVersion: '~3.1.0' });
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('mutually exclusive'));
-    warn.mockRestore();
+    expect(result['mylib'].requiredVersion).toBe(complex);
   });
 });
