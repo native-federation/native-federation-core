@@ -19,7 +19,7 @@ import type {
   ShareExternalsOptions,
 } from '../domain/config/external-config.contract.js';
 import { findPackageJson, inferProjectPath } from './project-paths.js';
-import { isInferVersion, lookupVersion, resolveAutoRequiredVersion, applyAutoRequiredOptions } from './version-lookup.js';
+import { isInferVersion, lookupVersion, applyAutoRequiredOptions } from './version-lookup.js';
 import { addSecondaries, getSecondaries } from './secondaries.js';
 
 export const fromPackageJson = (baseCfg: ShareAllExternalsOptions, projectPath?: string) => {

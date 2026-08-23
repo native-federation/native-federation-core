@@ -84,17 +84,3 @@ export function applyAutoRequiredOptions(
       return raw;
   }
 }
-
-/**
- * Convenience resolver: lookupVersion(key, ...) then apply auto options if provided.
- * opts may be undefined (no formatting).
- */
-export function resolveAutoRequiredVersion(
-  key: string,
-  workspaceRoot: string,
-  repo: PackageJsonRepository,
-  opts?: { range?: 'exact' | '^' | '~' | 'minor' | 'patch' }
-): string {
-  const base = lookupVersion(key, workspaceRoot, repo);
-  return applyAutoRequiredOptions(base, opts);
-}
