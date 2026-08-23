@@ -62,13 +62,14 @@ export function applyAutoRequiredOptions(
   const raw = (baseVersion ?? '').trim();
   // Recognize a single-version token possibly prefixed by common chars: ^ ~ = v >= <=
   // Examples matched: '^1.2.3', '1.2.3', 'v1.2.3', '~1.2.3', '>=1.2.3'
-  const singleTokenMatch = raw.match(/^\s*([=^~v<>]*\s*)?(\d+\.\d+\.\d+(?:[-+.][\w.]+)?)\s*$/);
+  // Use a stricter regex to avoid matching non-semver suffixes (allow prerelease/build with - or + only)
+  const singleTokenMatch = raw.match(/^\s*(?:[~^<>=]*\s*)?v?(\d+\.\d+\.\d+(?:[-+][\w.]+)?)\s*$/);
   if (!singleTokenMatch) {
     // Not a simple single token — do not attempt to rewrite complex ranges.
     return raw;
   }
 
-  const bareVersion = singleTokenMatch[2];
+  const bareVersion = singleTokenMatch[1];
 
   // Map named options to emitted form. 'minor' => '^', 'patch' => '~'.
   switch (requested) {
