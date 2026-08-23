@@ -74,7 +74,7 @@ describe('shareCore (end-to-end via injected repository)', () => {
     expect(Object.keys(result)).toEqual(['mylib']);
   });
 
-  it('applies prefix when requiredVersion is auto with prefix and base is exact semver', () => {
+  it('applies caret range when requiredVersion is auto with range "^" and base is exact semver', () => {
     const io = createMemoryIo().setFile(
       path.join(PROJECT, 'package.json'),
       JSON.stringify({ dependencies: { mylib: '1.2.3' } })
@@ -83,7 +83,7 @@ describe('shareCore (end-to-end via injected repository)', () => {
 
     const result = shareCore(
       io,
-      { mylib: { singleton: true, requiredVersion: { mode: 'auto', prefix: 'v' }, includeSecondaries: false } },
+      { mylib: { singleton: true, requiredVersion: { range: '^' }, includeSecondaries: false } },
       PROJECT,
       DEFAULT_SKIP_LIST,
       repo
@@ -91,53 +91,12 @@ describe('shareCore (end-to-end via injected repository)', () => {
 
     expect(result['mylib']).toMatchObject({
       singleton: true,
-      requiredVersion: 'v1.2.3',
+      requiredVersion: '^1.2.3',
       version: '1.2.3',
     });
   });
 
-  it('force-replaces prefix for caret when force=true', () => {
-    const io = createMemoryIo().setFile(
-      path.join(PROJECT, 'package.json'),
-      JSON.stringify({ dependencies: { mylib: '^1.2.3' } })
-    );
-    const repo = createPackageJsonRepository(io);
-
-    const result = shareCore(
-      io,
-      { mylib: { singleton: true, requiredVersion: { mode: 'auto', prefix: 'v', force: true }, includeSecondaries: false } },
-      PROJECT,
-      DEFAULT_SKIP_LIST,
-      repo
-    );
-
-    expect(result['mylib']).toMatchObject({
-      singleton: true,
-      requiredVersion: 'v1.2.3',
-      version: '1.2.3',
-    });
-  });
-
-  it('does not change complex ranges when applying auto prefix', () => {
-    const complex = '>=1.0.0 <2.0.0';
-    const io = createMemoryIo().setFile(
-      path.join(PROJECT, 'package.json'),
-      JSON.stringify({ dependencies: { mylib: complex } })
-    );
-    const repo = createPackageJsonRepository(io);
-
-    const result = shareCore(
-      io,
-      { mylib: { singleton: true, requiredVersion: { mode: 'auto', prefix: 'v' }, includeSecondaries: false } },
-      PROJECT,
-      DEFAULT_SKIP_LIST,
-      repo
-    );
-
-    expect(result['mylib'].requiredVersion).toBe(complex);
-  });
-
-  it('applies tilde prefix when requested for exact semver', () => {
+  it('applies tilde range when requested for exact semver', () => {
     const io = createMemoryIo().setFile(
       path.join(PROJECT, 'package.json'),
       JSON.stringify({ dependencies: { mylib: '1.2.3' } })
@@ -146,7 +105,7 @@ describe('shareCore (end-to-end via injected repository)', () => {
 
     const result = shareCore(
       io,
-      { mylib: { singleton: true, requiredVersion: { mode: 'auto', prefix: '~' }, includeSecondaries: false } },
+      { mylib: { singleton: true, requiredVersion: { range: '~' }, includeSecondaries: false } },
       PROJECT,
       DEFAULT_SKIP_LIST,
       repo
@@ -159,34 +118,69 @@ describe('shareCore (end-to-end via injected repository)', () => {
     });
   });
 
-  it('does not overwrite an existing range prefix unless force is set', () => {
+  it('minor -> caret and patch -> tilde mapping', () => {
+    const io = createMemoryIo().setFile(
+      path.join(PROJECT, 'package.json'),
+      JSON.stringify({ dependencies: { mylib: '1.2.3' } })
+    );
+    const repo = createPackageJsonRepository(io);
+
+    const rMinor = shareCore(
+      io,
+      { mylib: { singleton: true, requiredVersion: { range: 'minor' }, includeSecondaries: false } },
+      PROJECT,
+      DEFAULT_SKIP_LIST,
+      repo
+    );
+
+    const rPatch = shareCore(
+      io,
+      { mylib: { singleton: true, requiredVersion: { range: 'patch' }, includeSecondaries: false } },
+      PROJECT,
+      DEFAULT_SKIP_LIST,
+      repo
+    );
+
+    expect(rMinor['mylib'].requiredVersion).toBe('^1.2.3');
+    expect(rPatch['mylib'].requiredVersion).toBe('~1.2.3');
+  });
+
+  it('overwrites existing simple prefix when range is provided', () => {
     const io = createMemoryIo().setFile(
       path.join(PROJECT, 'package.json'),
       JSON.stringify({ dependencies: { mylib: '^1.2.3' } })
     );
     const repo = createPackageJsonRepository(io);
 
-    // prefix '~' but force is false: should keep '^1.2.3'
-    const resultNoForce = shareCore(
+    // range '~' should overwrite '^1.2.3' -> '~1.2.3'
+    const result = shareCore(
       io,
-      { mylib: { singleton: true, requiredVersion: { mode: 'auto', prefix: '~', force: false }, includeSecondaries: false } },
+      { mylib: { singleton: true, requiredVersion: { range: '~' }, includeSecondaries: false } },
       PROJECT,
       DEFAULT_SKIP_LIST,
       repo
     );
 
-    expect(resultNoForce['mylib'].requiredVersion).toBe('^1.2.3');
+    expect(result['mylib'].requiredVersion).toBe('~1.2.3');
+  });
 
-    // same but force=true: should become '~1.2.3'
-    const resultForce = shareCore(
+  it('does not change complex ranges when applying auto range', () => {
+    const complex = '>=1.0.0 <2.0.0';
+    const io = createMemoryIo().setFile(
+      path.join(PROJECT, 'package.json'),
+      JSON.stringify({ dependencies: { mylib: complex } })
+    );
+    const repo = createPackageJsonRepository(io);
+
+    const result = shareCore(
       io,
-      { mylib: { singleton: true, requiredVersion: { mode: 'auto', prefix: '~', force: true }, includeSecondaries: false } },
+      { mylib: { singleton: true, requiredVersion: { range: '^' }, includeSecondaries: false } },
       PROJECT,
       DEFAULT_SKIP_LIST,
       repo
     );
 
-    expect(resultForce['mylib'].requiredVersion).toBe('~1.2.3');
+    expect(result['mylib'].requiredVersion).toBe(complex);
   });
 });
 

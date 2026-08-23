@@ -47,21 +47,17 @@ function lookupVersionInMap(key: string, versions: VersionMap): string | null {
 
 /**
  * Apply auto-options to a base version string (the value read from package.json).
- * - If opts is undefined, returns baseVersion unchanged.
- * - If opts.prefix is provided, tries to prepend it to a simple semver or (when force)
- *   strip any leading range/prefix chars and replace them.
- *
- * Conservative behaviour: complex ranges are left unchanged unless they are a single token
- * that matches a semver with optional leading range chars.
+ * - If opts is undefined or opts.range is not provided, returns baseVersion unchanged.
+ * - If opts.range is provided, attempts to format a single-token semver according to the
+ *   requested range. Complex multi-comparator ranges are left unchanged.
  */
 export function applyAutoRequiredOptions(
   baseVersion: string,
-  opts?: { prefix?: string; force?: boolean }
+  opts?: { range?: 'exact' | '^' | '~' | 'minor' | 'patch' }
 ): string {
-  if (!opts || (!opts.prefix && !opts.force)) return baseVersion;
+  if (!opts || !opts.range) return baseVersion;
 
-  const prefix = opts.prefix ?? '';
-  const force = !!opts.force;
+  const requested = opts.range;
 
   const raw = (baseVersion ?? '').trim();
   // Recognize a single-version token possibly prefixed by common chars: ^ ~ = v >= <=
@@ -74,29 +70,30 @@ export function applyAutoRequiredOptions(
 
   const bareVersion = singleTokenMatch[2];
 
-  if (force) {
-    return `${prefix}${bareVersion}`;
+  // Map named options to emitted form. 'minor' => '^', 'patch' => '~'.
+  switch (requested) {
+    case 'exact':
+      return `${bareVersion}`;
+    case '^':
+    case 'minor':
+      return `^${bareVersion}`;
+    case '~':
+    case 'patch':
+      return `~${bareVersion}`;
+    default:
+      return raw;
   }
-
-  // Not force: only add prefix when the raw is an exact semver without range chars
-  const hasRangePrefix = /^[\s]*[=^~<>v]/.test(raw);
-  if (!hasRangePrefix) {
-    return `${prefix}${bareVersion}`;
-  }
-
-  // Already has a range/prefix — leave unchanged.
-  return raw;
 }
 
 /**
  * Convenience resolver: lookupVersion(key, ...) then apply auto options if provided.
- * opts may be undefined (no prefixing).
+ * opts may be undefined (no formatting).
  */
 export function resolveAutoRequiredVersion(
   key: string,
   workspaceRoot: string,
   repo: PackageJsonRepository,
-  opts?: { prefix?: string; force?: boolean }
+  opts?: { range?: 'exact' | '^' | '~' | 'minor' | 'patch' }
 ): string {
   const base = lookupVersion(key, workspaceRoot, repo);
   return applyAutoRequiredOptions(base, opts);

@@ -2,12 +2,15 @@ export type IncludeSecondariesOptions =
   { skip?: string | string[]; resolveGlob?: boolean; keepAll?: boolean } | boolean;
 
 export interface AutoRequiredOptions {
-  /** Explicitly indicates auto-resolution. */ 
-  mode?: 'auto';
-  /** Prefix to prepend to the resolved package.json value (e.g. 'v', '^', '~', ''). */
-  prefix?: string;
-  /** When true, strip existing range/prefix characters and replace with prefix. */
-  force?: boolean;
+  /** Optional mode: 'auto' when omitted. */
+  mode?: 'auto' | 'version';
+  /** Controls how the resolved package.json version is emitted.
+   * - 'exact' => "1.2.3"
+   * - '^' | '~' => '^1.2.3' or '~1.2.3'
+   * - 'minor' => maps to '^' (allow minor bumps)
+   * - 'patch' => maps to '~' (allow patch bumps)
+   */
+  range?: 'exact' | '^' | '~' | 'minor' | 'patch';
 }
 
 export interface ExternalConfig {
@@ -15,7 +18,7 @@ export interface ExternalConfig {
   strictVersion?: boolean;
   /**
    * Either a concrete required range string (e.g. '^1.2.3') or an AutoRequiredOptions
-   * object to resolve the value from package.json with optional prefix/force behaviour.
+   * object to resolve the value from package.json with optional range formatting.
    */
   requiredVersion?: string | AutoRequiredOptions;
   version?: string;

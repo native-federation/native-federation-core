@@ -99,16 +99,15 @@ export function shareAllCore(
       const inferVersion =
         !cfgRequired ||
         cfgRequired === 'auto' ||
-        (typeof cfgRequired === 'object' && cfgRequired.mode === 'auto');
+        (typeof cfgRequired === 'object' && (cfgRequired.mode === undefined || cfgRequired.mode === 'auto'));
 
       let requiredVersion: string;
       if (inferVersion) {
         // versions[key] is the raw value from package.json (e.g. '^1.2.3' or '1.2.3')
         const base = versions[key];
-        if (typeof cfgRequired === 'object') {
+        if (typeof cfgRequired === 'object' && cfgRequired.range) {
           requiredVersion = applyAutoRequiredOptions(base, {
-            prefix: cfgRequired.prefix,
-            force: !!cfgRequired.force,
+            range: cfgRequired.range,
           });
         } else {
           requiredVersion = base;
@@ -198,22 +197,22 @@ export function shareCore(
       shareObject.requiredVersion === 'auto' ||
       (isInferVersion() && typeof shareObject.requiredVersion === 'undefined') ||
       (typeof shareObject.requiredVersion === 'object' &&
-        (shareObject.requiredVersion as any).mode === 'auto') ||
+        (shareObject.requiredVersion as any).mode === undefined) ||
       (shareObject.requiredVersion?.length ?? 1) < 1
     ) {
-      // Determine actual requiredVersion value, optionally applying prefix/force.
+      // Determine actual requiredVersion value, optionally applying range formatting.
       const raw = lookupVersion(key, projectPath, repo);
 
-      if (typeof shareObject.requiredVersion === 'object') {
+      if (typeof shareObject.requiredVersion === 'object' && (shareObject.requiredVersion as any).range) {
         const opts = shareObject.requiredVersion as any;
         const resolved = applyAutoRequiredOptions(raw, {
-          prefix: opts.prefix,
-          force: !!opts.force,
+          range: opts.range,
         });
         shareObject.requiredVersion = resolved;
       } else {
         shareObject.requiredVersion = raw;
       }
+
       // Keep the numeric version for cache/installed-version tracking (strip non-digits).
       shareObject.version = raw.replace(/^\D*/, '');
     }
