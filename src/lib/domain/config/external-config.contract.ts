@@ -16,10 +16,7 @@ export interface AutoRequiredOptions {
 export interface ExternalConfig {
   singleton?: boolean;
   strictVersion?: boolean;
-  /**
-   * Either a concrete required range string (e.g. '^1.2.3') or an AutoRequiredOptions
-   * object to resolve the value from package.json with optional range formatting.
-   */
+  // Version string (e.g. '^1.2.3') or auto-resolve options.
   requiredVersion?: string | AutoRequiredOptions;
   version?: string;
   includeSecondaries?: IncludeSecondariesOptions;
