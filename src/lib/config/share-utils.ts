@@ -107,11 +107,12 @@ export function shareAllCore(
       if (inferVersion) {
         // versions[key] is the raw value from package.json (e.g. '^1.2.3' or '1.2.3').
         const base = versions[key]!;
-        const autoOpts = isAutoObject ? requiredVersionCfg : undefined;
-        requiredVersion = applyAutoRequiredOptions(base, {
-          range: autoOpts?.range,
-          version: autoOpts?.version ?? config.version,
-        });
+        requiredVersion = isAutoObject
+          ? applyAutoRequiredOptions(base, {
+              range: requiredVersionCfg.range,
+              version: requiredVersionCfg.version ?? config.version,
+            })
+          : base;
       } else {
         requiredVersion = requiredVersionCfg as string;
       }
@@ -205,8 +206,9 @@ export function shareCore(
         | undefined;
       const isAutoObject = typeof requiredVersionCfg === 'object';
 
-      const explicitVersion =
-        (isAutoObject ? requiredVersionCfg.version : undefined) ?? shareObject.version;
+      const explicitVersion = isAutoObject
+        ? requiredVersionCfg.version ?? shareObject.version
+        : undefined;
       const resolvedVersion =
         explicitVersion && explicitVersion !== 'auto' ? explicitVersion : undefined;
 
