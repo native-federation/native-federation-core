@@ -15,7 +15,7 @@ export interface AutoRequiredOptions {
 export interface ExternalConfig {
   singleton?: boolean;
   strictVersion?: boolean;
-  requiredVersion?: string | AutoRequiredOptions;
+  requiredVersion?: string;
   version?: string;
   includeSecondaries?: IncludeSecondariesOptions;
   platform?: 'browser' | 'node';
@@ -52,9 +52,11 @@ export type SharedExternalsConfig = Record<string, ExternalConfig>;
 
 export type NormalizedSharedExternalsConfig = Record<string, NormalizedExternalConfig>;
 
-export type ShareAllExternalsOptions = ExternalConfig;
+export type ShareAllExternalsOptions = Omit<ExternalConfig, 'requiredVersion'> & {
+  requiredVersion?: string | AutoRequiredOptions;
+};
 
-export type ShareExternalsOptions = SharedExternalsConfig;
+export type ShareExternalsOptions = Record<string, ShareAllExternalsOptions>;
 
 export type ResolvedExternalConfig = Omit<ExternalConfig, 'includeSecondaries'> & {
   includeSecondaries?: boolean;

@@ -192,18 +192,20 @@ export function shareCore(
 
   for (const key in shareObjects) {
     let includeSecondaries: IncludeSecondariesOptions = false;
-    const shareObject = shareObjects[key]!;
+    const { requiredVersion: requiredVersionCfg, ...rest } = shareObjects[key]!;
+    const shareObject: ExternalConfig = {
+      ...rest,
+      ...(typeof requiredVersionCfg === 'string' && {
+        requiredVersion: requiredVersionCfg,
+      }),
+    };
 
     if (
-      shareObject.requiredVersion === 'auto' ||
-      (isInferVersion() && typeof shareObject.requiredVersion === 'undefined') ||
-      typeof shareObject.requiredVersion === 'object' ||
-      (shareObject.requiredVersion?.length ?? 1) < 1
+      requiredVersionCfg === 'auto' ||
+      (isInferVersion() && typeof requiredVersionCfg === 'undefined') ||
+      typeof requiredVersionCfg === 'object' ||
+      (requiredVersionCfg?.length ?? 1) < 1
     ) {
-      const requiredVersionCfg = shareObject.requiredVersion as
-        | string
-        | AutoRequiredOptions
-        | undefined;
       const isAutoObject = typeof requiredVersionCfg === 'object';
 
       const explicitVersion = isAutoObject
