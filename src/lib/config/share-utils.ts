@@ -11,6 +11,7 @@ import { logger } from '../utils/logger.js';
 import { nodeIo } from '../utils/io/node-io-adapter.js';
 import type { FileReaderPort, GlobPort } from '../domain/utils/io-port.contract.js';
 import type {
+  AutoRequiredOptions,
   ExternalConfig,
   IncludeSecondariesOptions,
   ResolvedSharedExternalsConfig,
@@ -95,25 +96,24 @@ export function shareAllCore(
         continue;
       }
 
-      const cfgRequired = (config.requiredVersion ?? undefined) as any;
-      const inferVersion =
-        !cfgRequired ||
-        cfgRequired === 'auto' ||
-        (typeof cfgRequired === 'object' && (cfgRequired.mode === undefined || cfgRequired.mode === 'auto'));
+      const requiredVersionCfg = (config.requiredVersion ?? undefined) as
+        | string
+        | AutoRequiredOptions
+        | undefined;
+      const isAutoObject = typeof requiredVersionCfg === 'object';
+      const inferVersion = !requiredVersionCfg || requiredVersionCfg === 'auto' || isAutoObject;
 
       let requiredVersion: string;
       if (inferVersion) {
-        // versions[key] is the raw value from package.json (e.g. '^1.2.3' or '1.2.3')
-        const base = versions[key];
-        if (typeof cfgRequired === 'object' && cfgRequired.range) {
-          requiredVersion = applyAutoRequiredOptions(base, {
-            range: cfgRequired.range,
-          });
-        } else {
-          requiredVersion = base;
-        }
+        // versions[key] is the raw value from package.json (e.g. '^1.2.3' or '1.2.3').
+        const base = versions[key]!;
+        const autoOpts = isAutoObject ? requiredVersionCfg : undefined;
+        requiredVersion = applyAutoRequiredOptions(base, {
+          range: autoOpts?.range,
+          version: autoOpts?.version ?? config.version,
+        });
       } else {
-        requiredVersion = config.requiredVersion as string;
+        requiredVersion = requiredVersionCfg as string;
       }
 
       if (!sharedExternals[key]) {
@@ -196,22 +196,27 @@ export function shareCore(
     if (
       shareObject.requiredVersion === 'auto' ||
       (isInferVersion() && typeof shareObject.requiredVersion === 'undefined') ||
-      (typeof shareObject.requiredVersion === 'object' &&
-        (shareObject.requiredVersion as any).mode === undefined) ||
+      typeof shareObject.requiredVersion === 'object' ||
       (shareObject.requiredVersion?.length ?? 1) < 1
     ) {
-      // Determine actual requiredVersion value, optionally applying range formatting.
-      const raw = lookupVersion(key, projectPath, repo);
+      const requiredVersionCfg = shareObject.requiredVersion as
+        | string
+        | AutoRequiredOptions
+        | undefined;
+      const isAutoObject = typeof requiredVersionCfg === 'object';
 
-      if (typeof shareObject.requiredVersion === 'object' && (shareObject.requiredVersion as any).range) {
-        const opts = shareObject.requiredVersion as any;
-        const resolved = applyAutoRequiredOptions(raw, {
-          range: opts.range,
-        });
-        shareObject.requiredVersion = resolved;
-      } else {
-        shareObject.requiredVersion = raw;
-      }
+      const explicitVersion =
+        (isAutoObject ? requiredVersionCfg.version : undefined) ?? shareObject.version;
+      const resolvedVersion =
+        explicitVersion && explicitVersion !== 'auto' ? explicitVersion : undefined;
+
+      // raw already carries the explicit version, if any — no need to pass it again below.
+      const raw = resolvedVersion ?? lookupVersion(key, projectPath, repo);
+
+      shareObject.requiredVersion =
+        isAutoObject && requiredVersionCfg.range
+          ? applyAutoRequiredOptions(raw, { range: requiredVersionCfg.range })
+          : raw;
 
       // Keep the numeric version for cache/installed-version tracking (strip non-digits).
       shareObject.version = raw.replace(/^\D*/, '');

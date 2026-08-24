@@ -2,8 +2,7 @@ export type IncludeSecondariesOptions =
   { skip?: string | string[]; resolveGlob?: boolean; keepAll?: boolean } | boolean;
 
 export interface AutoRequiredOptions {
-  /** Optional mode: 'auto' when omitted. */
-  mode?: 'auto' | 'version';
+  version?: 'auto' | string;
   /** Controls how the resolved package.json version is emitted.
    * - 'exact' => "1.2.3"
    * - '^' | '~' => '^1.2.3' or '~1.2.3'
@@ -16,7 +15,6 @@ export interface AutoRequiredOptions {
 export interface ExternalConfig {
   singleton?: boolean;
   strictVersion?: boolean;
-  // Version string (e.g. '^1.2.3') or auto-resolve options.
   requiredVersion?: string | AutoRequiredOptions;
   version?: string;
   includeSecondaries?: IncludeSecondariesOptions;

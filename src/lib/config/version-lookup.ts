@@ -45,36 +45,34 @@ function lookupVersionInMap(key: string, versions: VersionMap): string | null {
   return versions[key]!;
 }
 
-/**
- * Apply auto-options to a base version string (the value read from package.json).
- * - If opts is undefined or opts.range is not provided, returns baseVersion unchanged.
- * - If opts.range is provided, attempts to format a single-token semver according to the
- *   requested range. Complex multi-comparator ranges are left unchanged.
- */
 export function applyAutoRequiredOptions(
   baseVersion: string,
-  opts?: { range?: 'exact' | '^' | '~' | 'minor' | 'patch' }
+  opts?: { range?: 'exact' | '^' | '~' | 'minor' | 'patch'; version?: string }
 ): string {
-  if (!opts || !opts.range) return baseVersion;
+  const explicit = opts?.version && opts.version !== 'auto' ? opts.version : undefined;
+  const raw = (explicit ?? baseVersion ?? '').trim();
+
+  if (!opts || !opts.range) return raw;
 
   const requested = opts.range;
 
-  const raw = (baseVersion ?? '').trim();
   // Recognize a single-version token possibly prefixed by common chars: ^ ~ = v >= <=
-  // Examples matched: '^1.2.3', '1.2.3', 'v1.2.3', '~1.2.3', '>=1.2.3'
-  // Use a stricter regex to avoid matching non-semver suffixes (allow prerelease/build with - or + only)
-  const singleTokenMatch = raw.match(/^\s*(?:[~^<>=]*\s*)?v?(\d+\.\d+\.\d+(?:[-+][\w.]+)?)\s*$/);
+  // Examples matched: '^1.2.3', '1.2.3', 'v1.2.3', '~1.2.3', '>=1.2.3', '1', '1.2'
+  // Minor/patch segments are optional and default to '0'. Still anchored end-to-end so
+  // complex multi-comparator ranges (e.g. '>=1.0.0 <2.0.0') fall through unchanged.
+  const singleTokenMatch = raw.match(
+    /^(?:[~^<>=]*\s*)?v?(\d+)(?:\.(\d+))?(?:\.(\d+))?((?:[-+][\w.]+)?)$/
+  );
   if (!singleTokenMatch) {
-    // Not a simple single token — do not attempt to rewrite complex ranges.
     return raw;
   }
 
-  const bareVersion = singleTokenMatch[1];
+  const [, major, minor = '0', patch = '0', extra] = singleTokenMatch;
+  const bareVersion = `${major}.${minor}.${patch}${extra}`;
 
-  // Map named options to emitted form. 'minor' => '^', 'patch' => '~'.
   switch (requested) {
     case 'exact':
-      return `${bareVersion}`;
+      return bareVersion;
     case '^':
     case 'minor':
       return `^${bareVersion}`;
