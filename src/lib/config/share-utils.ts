@@ -11,6 +11,7 @@ import { logger } from '../utils/logger.js';
 import { nodeIo } from '../utils/io/node-io-adapter.js';
 import type { FileReaderPort, GlobPort } from '../domain/utils/io-port.contract.js';
 import type {
+  AutoRequiredOptions,
   ExternalConfig,
   IncludeSecondariesOptions,
   ResolvedSharedExternalsConfig,
@@ -19,7 +20,7 @@ import type {
   ShareExternalsOptions,
 } from '../domain/config/external-config.contract.js';
 import { findPackageJson, inferProjectPath } from './project-paths.js';
-import { isInferVersion, lookupVersion } from './version-lookup.js';
+import { isInferVersion, lookupVersion, applyAutoRequiredOptions } from './version-lookup.js';
 import { addSecondaries, getSecondaries } from './secondaries.js';
 
 export const fromPackageJson = (baseCfg: ShareAllExternalsOptions, projectPath?: string) => {
@@ -95,8 +96,26 @@ export function shareAllCore(
         continue;
       }
 
-      const inferVersion = !config.requiredVersion || config.requiredVersion === 'auto';
-      const requiredVersion = inferVersion ? versions[key] : config.requiredVersion;
+      const requiredVersionCfg = (config.requiredVersion ?? undefined) as
+        | string
+        | AutoRequiredOptions
+        | undefined;
+      const isAutoObject = typeof requiredVersionCfg === 'object';
+      const inferVersion = !requiredVersionCfg || requiredVersionCfg === 'auto' || isAutoObject;
+
+      let requiredVersion: string;
+      if (inferVersion) {
+        // versions[key] is the raw value from package.json (e.g. '^1.2.3' or '1.2.3').
+        const base = versions[key]!;
+        requiredVersion = isAutoObject
+          ? applyAutoRequiredOptions(base, {
+              range: requiredVersionCfg.range,
+              version: requiredVersionCfg.version ?? config.version,
+            })
+          : base;
+      } else {
+        requiredVersion = requiredVersionCfg as string;
+      }
 
       if (!sharedExternals[key]) {
         sharedExternals[key] = { ...config, requiredVersion };
@@ -173,17 +192,38 @@ export function shareCore(
 
   for (const key in shareObjects) {
     let includeSecondaries: IncludeSecondariesOptions = false;
-    const shareObject = shareObjects[key]!;
+    const { requiredVersion: requiredVersionCfg, ...rest } = shareObjects[key]!;
+    const shareObject: ExternalConfig = {
+      ...rest,
+      ...(typeof requiredVersionCfg === 'string' && {
+        requiredVersion: requiredVersionCfg,
+      }),
+    };
 
     if (
-      shareObject.requiredVersion === 'auto' ||
-      (isInferVersion() && typeof shareObject.requiredVersion === 'undefined') ||
-      (shareObject.requiredVersion?.length ?? 1) < 1
+      requiredVersionCfg === 'auto' ||
+      (isInferVersion() && typeof requiredVersionCfg === 'undefined') ||
+      typeof requiredVersionCfg === 'object' ||
+      (requiredVersionCfg?.length ?? 1) < 1
     ) {
-      const version = lookupVersion(key, projectPath, repo);
+      const isAutoObject = typeof requiredVersionCfg === 'object';
 
-      shareObject.requiredVersion = version;
-      shareObject.version = version.replace(/^\D*/, '');
+      const explicitVersion = isAutoObject
+        ? requiredVersionCfg.version ?? shareObject.version
+        : undefined;
+      const resolvedVersion =
+        explicitVersion && explicitVersion !== 'auto' ? explicitVersion : undefined;
+
+      // raw already carries the explicit version, if any — no need to pass it again below.
+      const raw = resolvedVersion ?? lookupVersion(key, projectPath, repo);
+
+      shareObject.requiredVersion =
+        isAutoObject && requiredVersionCfg.range
+          ? applyAutoRequiredOptions(raw, { range: requiredVersionCfg.range })
+          : raw;
+
+      // Keep the numeric version for cache/installed-version tracking (strip non-digits).
+      shareObject.version = raw.replace(/^\D*/, '');
     }
 
     if (typeof shareObject.includeSecondaries === 'undefined') {

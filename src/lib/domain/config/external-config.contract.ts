@@ -1,6 +1,17 @@
 export type IncludeSecondariesOptions =
   { skip?: string | string[]; resolveGlob?: boolean; keepAll?: boolean } | boolean;
 
+export interface AutoRequiredOptions {
+  version?: 'auto' | string;
+  /** Controls how the resolved package.json version is emitted.
+   * - 'exact' => "1.2.3"
+   * - '^' | '~' => '^1.2.3' or '~1.2.3'
+   * - 'minor' => maps to '^' (allow minor bumps)
+   * - 'patch' => maps to '~' (allow patch bumps)
+   */
+  range?: 'exact' | '^' | '~' | 'minor' | 'patch';
+}
+
 export interface ExternalConfig {
   singleton?: boolean;
   strictVersion?: boolean;
@@ -41,9 +52,11 @@ export type SharedExternalsConfig = Record<string, ExternalConfig>;
 
 export type NormalizedSharedExternalsConfig = Record<string, NormalizedExternalConfig>;
 
-export type ShareAllExternalsOptions = ExternalConfig;
+export type ShareAllExternalsOptions = Omit<ExternalConfig, 'requiredVersion'> & {
+  requiredVersion?: string | AutoRequiredOptions;
+};
 
-export type ShareExternalsOptions = SharedExternalsConfig;
+export type ShareExternalsOptions = Record<string, ShareAllExternalsOptions>;
 
 export type ResolvedExternalConfig = Omit<ExternalConfig, 'includeSecondaries'> & {
   includeSecondaries?: boolean;
