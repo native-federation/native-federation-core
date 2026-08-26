@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   affectedSharedKeys,
   linkedContentSignals,
@@ -102,6 +102,54 @@ describe('linkedSharedDirs', () => {
 
     expect(linkedSharedDirs(cfg, fedOptions, io, repo)).toEqual(['/dev/lib']);
   });
+
+  // pnpm's default (isolated) nodeLinker symlinks *every* dependency into the virtual
+  // store, so a bare lstat test classifies the whole graph as npm-linked. angular-adapter#130.
+  it('does not treat a package-manager symlink into node_modules as linked', () => {
+    const cfg = {
+      shared: { rxjs: {}, '@scope/lib': {} },
+    } as unknown as NormalizedFederationConfig;
+    const fedOptions = { workspaceRoot: '/ws' } as NormalizedFederationOptions;
+
+    const io = createMemoryIo()
+      .setSymlink('/ws/node_modules/rxjs', '/ws/node_modules/.pnpm/rxjs@7.8.1/node_modules/rxjs')
+      .setSymlink('/ws/node_modules/@scope/lib', '/dev/lib/dist');
+    const repo = repoReturning({
+      rxjs: '/ws/node_modules/rxjs/package.json',
+      '@scope/lib': '/ws/node_modules/@scope/lib/package.json',
+    });
+
+    expect(linkedSharedDirs(cfg, fedOptions, io, repo)).toEqual(['/dev/lib/dist']);
+  });
+
+  // The virtual store can sit above the Angular workspace root in a monorepo, so the
+  // rule matches a node_modules segment anywhere rather than under workspaceRoot.
+  it('rejects a store that sits above the workspace root', () => {
+    const cfg = { shared: { rxjs: {} } } as unknown as NormalizedFederationConfig;
+    const fedOptions = { workspaceRoot: '/repo/apps/host' } as NormalizedFederationOptions;
+
+    const io = createMemoryIo().setSymlink(
+      '/repo/apps/host/node_modules/rxjs',
+      '/repo/node_modules/.pnpm/rxjs@7.8.1/node_modules/rxjs'
+    );
+    const repo = repoReturning({ rxjs: '/repo/apps/host/node_modules/rxjs/package.json' });
+
+    expect(linkedSharedDirs(cfg, fedOptions, io, repo)).toEqual([]);
+  });
+
+  // `npm link` installs two hops; realpath collapses both to the checkout, which carries
+  // no node_modules segment, so the feature survives the narrowed test.
+  it('follows a two-hop npm-link chain to the dev checkout', () => {
+    const cfg = { shared: { 'my-lib': {} } } as unknown as NormalizedFederationConfig;
+    const fedOptions = { workspaceRoot: '/ws' } as NormalizedFederationOptions;
+
+    const io = createMemoryIo()
+      .setSymlink('/ws/node_modules/my-lib', '/usr/lib/node_modules/my-lib')
+      .setSymlink('/usr/lib/node_modules/my-lib', '/dev/mylib-checkout/dist');
+    const repo = repoReturning({ 'my-lib': '/ws/node_modules/my-lib/package.json' });
+
+    expect(linkedSharedDirs(cfg, fedOptions, io, repo)).toEqual(['/dev/mylib-checkout/dist']);
+  });
 });
 
 describe('sharedMappingDirs', () => {
@@ -204,5 +252,45 @@ describe('linkedContentSignals', () => {
     const signals = linkedContentSignals(['@scope/lib'], '/ws', io, repo);
 
     expect(signals['@scope/lib']).toBe('500');
+  });
+
+  it('emits no signal for a package-manager symlink into node_modules', () => {
+    const io = createMemoryIo()
+      .setSymlink('/ws/node_modules/tslib', '/ws/node_modules/.pnpm/tslib@2.6.2/node_modules/tslib')
+      .setFile('/ws/node_modules/.pnpm/tslib@2.6.2/node_modules/tslib/index.js', 'T')
+      .setMtime('/ws/node_modules/.pnpm/tslib@2.6.2/node_modules/tslib/index.js', 900);
+
+    expect(linkedContentSignals(['tslib'], '/ws', io, repo)).toEqual({});
+  });
+
+  it('walks each unique package dir once, however many keys resolve to it', () => {
+    const io = createMemoryIo()
+      .setSymlink('/ws/node_modules/@scope/lib', '/dev/lib')
+      .setSymlink('/ws/node_modules/@scope/lib/sub', '/dev/lib')
+      .setFile('/dev/lib/a.js', 'A')
+      .setMtime('/dev/lib/a.js', 100);
+    const multiEntry = repoReturning({
+      '@scope/lib': '/ws/node_modules/@scope/lib/package.json',
+      '@scope/lib/sub': '/ws/node_modules/@scope/lib/package.json',
+    });
+    const readDir = vi.spyOn(io, 'readDir');
+
+    const signals = linkedContentSignals(['@scope/lib', '@scope/lib/sub'], '/ws', io, multiEntry);
+
+    expect(signals).toEqual({ '@scope/lib': '100', '@scope/lib/sub': '100' });
+    expect(readDir.mock.calls.filter(([dir]) => dir === '/dev/lib')).toHaveLength(1);
+  });
+
+  // io.isDirectory is stat-based and follows links, so an unguarded walk would descend
+  // a linked node_modules and pick up mtimes from an unrelated tree.
+  it('does not descend a nested node_modules', () => {
+    const io = createMemoryIo()
+      .setSymlink('/ws/node_modules/@scope/lib', '/dev/lib')
+      .setFile('/dev/lib/a.js', 'A')
+      .setMtime('/dev/lib/a.js', 100)
+      .setFile('/dev/lib/node_modules/dep/index.js', 'D')
+      .setMtime('/dev/lib/node_modules/dep/index.js', 900);
+
+    expect(linkedContentSignals(['@scope/lib'], '/ws', io, repo)['@scope/lib']).toBe('100');
   });
 });

@@ -5,7 +5,7 @@ import type { FileReaderPort } from '../../domain/utils/io-port.contract.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import { sharedPackageJsonRepository } from '../../utils/package/package-info.js';
-import { isUnderDir, toPosix } from '../../utils/path-patterns.js';
+import { isOutsideNodeModules, isUnderDir, toPosix } from '../../utils/path-patterns.js';
 
 interface SharedEntry {
   key: string;
@@ -28,10 +28,13 @@ function resolveEntries(
     const pkgJsonPath = repo.findDepPackageJson(key, folder);
     if (!pkgJsonPath) continue;
     const pkgDir = path.dirname(pkgJsonPath);
+    const realDir = toPosix(io.realpath(pkgDir));
     out.push({
       key,
-      realDir: toPosix(io.realpath(pkgDir)),
-      isSymlink: !!io.stat(pkgDir)?.isSymbolicLink,
+      realDir,
+      // A symlink resolving back into a node_modules tree is an install layout, not a
+      // dev checkout: under pnpm's default linker that is every dependency.
+      isSymlink: !!io.stat(pkgDir)?.isSymbolicLink && isOutsideNodeModules(realDir),
     });
   }
   return out;
@@ -79,7 +82,7 @@ export function linkedSharedDirs(
 export function sharedMappingDirs(config: NormalizedFederationConfig): string[] {
   const dirs = Object.keys(config.sharedMappings)
     .map(entryPoint => toPosix(path.dirname(entryPoint)))
-    .filter(dir => !dir.includes('node_modules'));
+    .filter(isOutsideNodeModules);
   return [...new Set(dirs)];
 }
 
@@ -87,6 +90,9 @@ function maxMtime(io: FileReaderPort, dir: string): number {
   let max = 0;
   const walk = (d: string) => {
     for (const name of io.readDir(d)) {
+      // io.isDirectory is stat-based and so follows links: without this a nested or
+      // symlinked node_modules drags an arbitrary amount of unrelated tree into the walk.
+      if (name === 'node_modules') continue;
       const full = path.join(d, name);
       if (io.isDirectory(full)) walk(full);
       else {
@@ -112,8 +118,17 @@ export function linkedContentSignals(
   repo: PackageJsonRepository = sharedPackageJsonRepository
 ): Record<string, string> {
   const signals: Record<string, string> = {};
+  // Per unique dir, not per key: secondary entry points of one package resolve to the
+  // same dir, and each walk is a full recursive stat of it.
+  const byDir = new Map<string, string>();
   for (const entry of resolveEntries(keys, folder, io, repo)) {
-    if (entry.isSymlink) signals[entry.key] = String(maxMtime(io, entry.realDir));
+    if (!entry.isSymlink) continue;
+    let signal = byDir.get(entry.realDir);
+    if (signal === undefined) {
+      signal = String(maxMtime(io, entry.realDir));
+      byDir.set(entry.realDir, signal);
+    }
+    signals[entry.key] = signal;
   }
   return signals;
 }

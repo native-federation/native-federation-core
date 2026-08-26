@@ -59,3 +59,15 @@ export function substituteWildcard(template: string, captured: string): string {
 export function toGlobPattern({ prefix, suffix }: WildcardPattern): string {
   return prefix.slice(0, prefix.lastIndexOf('/') + 1) + '**/*' + suffix;
 }
+
+/**
+ * True for a directory that sits outside every `node_modules` tree — i.e. a dev checkout
+ * rather than an installed package.
+ *
+ * A symlink alone cannot tell the two apart: package managers that symlink by default
+ * (pnpm's isolated `nodeLinker`, yarn's `nodeLinker: pnpm`) point every dependency at
+ * `<root>/node_modules/.pnpm/<pkg>@<ver>/node_modules/<pkg>`, whereas `npm link` resolves
+ * to the checkout itself. Matching the segment anywhere in the path rather than under the
+ * workspace root matters in a monorepo, where the virtual store can sit above it.
+ */
+export const isOutsideNodeModules = (dir: string): boolean => !toPosix(dir).includes('node_modules');

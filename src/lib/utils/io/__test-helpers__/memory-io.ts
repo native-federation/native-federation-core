@@ -56,6 +56,14 @@ export function createMemoryIo(): MemoryIo {
     return new RegExp('^' + body + '$');
   };
 
+  const resolveOneHop = (key: string): string => {
+    for (const [link, target] of symlinks) {
+      if (key === link) return target;
+      if (key.startsWith(link + '/')) return target + key.slice(link.length);
+    }
+    return key;
+  };
+
   const io: MemoryIo = {
     setFile(filePath, data) {
       const key = toKey(filePath);
@@ -112,10 +120,13 @@ export function createMemoryIo(): MemoryIo {
       return [...names];
     },
     realpath(p) {
-      const key = toKey(p);
-      for (const [link, target] of symlinks) {
-        if (key === link) return target;
-        if (key.startsWith(link + '/')) return target + key.slice(link.length);
+      // Chained like fs.realpathSync: `npm link` installs two hops
+      // (node_modules/x -> <global prefix>/lib/node_modules/x -> <checkout>).
+      let key = toKey(p);
+      for (let hop = 0; hop < 32; hop++) {
+        const next = resolveOneHop(key);
+        if (next === key) break;
+        key = next;
       }
       return key;
     },
