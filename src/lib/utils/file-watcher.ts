@@ -3,7 +3,7 @@ import type { WatchHandle, WatchPort, FileReaderPort } from '../domain/utils/io-
 import type { NfFileWatcher, NfFileWatcherOptions } from '../domain/utils/file-watcher.contract.js';
 import { nodeIo } from './io/node-io-adapter.js';
 import { logger } from './logger.js';
-import { isUnderDir, toPosix } from './path-patterns.js';
+import { isOutsideNodeModules, isUnderDir, toPosix } from './path-patterns.js';
 
 export function createNfWatcher(options: NfFileWatcherOptions = {}): NfFileWatcher {
   return createNfWatcherCore(nodeIo, options);
@@ -233,7 +233,7 @@ export function syncNfFileWatcher(
   // living under node_modules. See core's `linkedSharedDirs`.
   linkedDirs: readonly string[] = []
 ): void {
-  const files = [...toPaths(sources)].filter(k => !k.includes('node_modules'));
+  const files = [...toPaths(sources)].filter(isOutsideNodeModules);
   if (files.length) watcher.addPaths(files);
   if (linkedDirs.length) watcher.addPaths(linkedDirs, { poll: true });
 }
