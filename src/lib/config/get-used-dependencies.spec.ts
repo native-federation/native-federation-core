@@ -91,7 +91,7 @@ describe('getUsedDependenciesFactoryCore', () => {
   // on 'c:/ws' (from Nx). Every affected library is pruned and silently missing from
   // remoteEntry.json, so the walk reports what the pruned set alone cannot distinguish.
   describe('case-only mapping misses', () => {
-    const caseOnly = /land in a shared mapping only when case is ignored/;
+    const caseOnly = /match a shared mapping only when case is ignored/;
 
     afterEach(() => {
       vi.restoreAllMocks();

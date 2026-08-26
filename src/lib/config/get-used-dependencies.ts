@@ -177,9 +177,8 @@ function warnOnCaseOnlyMisses(misses: ReadonlySet<string>): void {
   if (misses.size === 0) return;
 
   logger.warn(
-    `${misses.size} import(s) land in a shared mapping only when case is ignored, so they were ` +
-      `pruned as unreachable -- e.g. '${[...misses][0]}'. The emitted remoteEntry.json will not ` +
-      'advertise those workspace libraries.'
+    `${misses.size} import(s) match a shared mapping only when case is ignored, so those ` +
+      `libraries were pruned from remoteEntry.json -- e.g. '${[...misses][0]}'.`
   );
 }
 
