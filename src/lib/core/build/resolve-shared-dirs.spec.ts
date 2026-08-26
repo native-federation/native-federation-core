@@ -137,6 +137,23 @@ describe('linkedSharedDirs', () => {
     expect(linkedSharedDirs(cfg, fedOptions, io, repo)).toEqual([]);
   });
 
+  // Substring matching would read this checkout as an installed package and silently
+  // switch the feature off for it.
+  it('treats a checkout whose path merely contains the text node_modules as linked', () => {
+    const cfg = { shared: { 'my-lib': {} } } as unknown as NormalizedFederationConfig;
+    const fedOptions = { workspaceRoot: '/ws' } as NormalizedFederationOptions;
+
+    const io = createMemoryIo().setSymlink(
+      '/ws/node_modules/my-lib',
+      '/dev/node_modules_backup/my-lib/dist'
+    );
+    const repo = repoReturning({ 'my-lib': '/ws/node_modules/my-lib/package.json' });
+
+    expect(linkedSharedDirs(cfg, fedOptions, io, repo)).toEqual([
+      '/dev/node_modules_backup/my-lib/dist',
+    ]);
+  });
+
   // `npm link` installs two hops; realpath collapses both to the checkout, which carries
   // no node_modules segment, so the feature survives the narrowed test.
   it('follows a two-hop npm-link chain to the dev checkout', () => {

@@ -68,6 +68,9 @@ export function toGlobPattern({ prefix, suffix }: WildcardPattern): string {
  * (pnpm's isolated `nodeLinker`, yarn's `nodeLinker: pnpm`) point every dependency at
  * `<root>/node_modules/.pnpm/<pkg>@<ver>/node_modules/<pkg>`, whereas `npm link` resolves
  * to the checkout itself. Matching the segment anywhere in the path rather than under the
- * workspace root matters in a monorepo, where the virtual store can sit above it.
+ * workspace root matters in a monorepo, where the virtual store can sit above it; matching a
+ * whole segment rather than a substring keeps a checkout in `/dev/node_modules_backup/lib`
+ * from reading as an installed package.
  */
-export const isOutsideNodeModules = (dir: string): boolean => !toPosix(dir).includes('node_modules');
+export const isOutsideNodeModules = (dir: string): boolean =>
+  !toPosix(dir).split('/').includes('node_modules');
