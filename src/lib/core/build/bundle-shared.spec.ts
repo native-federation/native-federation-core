@@ -559,6 +559,77 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     });
   });
 
+  // A linked lib rebuilds under a fixed version, so the installed version cannot invalidate
+  // it — the content signal is the only thing standing between an edit and a stale bundle.
+  // Independent of watchLinkedDeps: that option only decides whether the edit is noticed
+  // live, never whether the next build is correct.
+  describe('linked-content invalidation', () => {
+    const linkedAt = (dir: string): PackageJsonRepository => ({
+      getPackageJsonFiles: () => [{ content: {}, directory: '/ws' }],
+      findDepPackageJson: () => `${dir}/package.json`,
+      readJson: () => ({ version: '2.0.0', type: 'module', module: './index.mjs' }),
+      exists: () => false,
+    });
+
+    const build = async (mem: ReturnType<typeof createMemoryIo>, dir: string) => {
+      const adapter = createFakeBuildAdapter({ io: mem });
+      const result = await bundleSharedCore(
+        { io: mem, repo: linkedAt(dir), adapter },
+        fooWith(),
+        makeConfig(),
+        makeFedOptions({ cacheExternalArtifacts: true }),
+        [],
+        BUILD_OPTIONS
+      );
+      return { adapter, result };
+    };
+
+    // npm-linked: node_modules/foo -> /dev/foo, a checkout outside any node_modules tree.
+    const linked = () =>
+      createMemoryIo()
+        .setFile(ROOT_PKG, '{}')
+        .setSymlink('/ws/node_modules/foo', '/dev/foo')
+        .setFile('/dev/foo/index.mjs', 'v1')
+        .setMtime('/dev/foo/index.mjs', 100);
+
+    it('re-uses the cached externals when the linked source is untouched', async () => {
+      const mem = linked();
+
+      await build(mem, '/ws/node_modules/foo');
+      const { adapter } = await build(mem, '/ws/node_modules/foo');
+
+      expect(adapter.calls.setup).toHaveLength(0);
+    });
+
+    it('rebuilds when the linked source changed under an unchanged version', async () => {
+      const mem = linked();
+
+      await build(mem, '/ws/node_modules/foo');
+      mem.setFile('/dev/foo/index.mjs', 'v2').setMtime('/dev/foo/index.mjs', 200);
+      const { adapter } = await build(mem, '/ws/node_modules/foo');
+
+      expect(adapter.calls.setup).toHaveLength(1);
+    });
+
+    // The mirror of the above, in the shape that regressed: under pnpm's default linker
+    // node_modules/foo is a symlink too, but into the virtual store. Its bytes cannot move
+    // under a fixed version, so touching it must not cost a rebuild.
+    it('does not rebuild when a pnpm-installed dep is touched', async () => {
+      const store = '/ws/node_modules/.pnpm/foo@2.0.0/node_modules/foo';
+      const mem = createMemoryIo()
+        .setFile(ROOT_PKG, '{}')
+        .setSymlink('/ws/node_modules/foo', store)
+        .setFile(`${store}/index.mjs`, 'v1')
+        .setMtime(`${store}/index.mjs`, 100);
+
+      await build(mem, '/ws/node_modules/foo');
+      mem.setMtime(`${store}/index.mjs`, 200);
+      const { adapter } = await build(mem, '/ws/node_modules/foo');
+
+      expect(adapter.calls.setup).toHaveLength(0);
+    });
+  });
+
   // A configured packageInfo makes the build skip node_modules entirely, so the key must not
   // track it either — even when that packageInfo carries no version of its own. The missing
   // `version` is reachable in practice: ExternalConfig declares it optional and
