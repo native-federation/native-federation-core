@@ -93,6 +93,7 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
     entryPoints: options.entryPoints ?? Object.values(config.exposes ?? {}).map(e => e.file),
     projectName,
     cacheExternalArtifacts: options.cacheExternalArtifacts ?? true,
+    watchLinkedDeps: options.watchLinkedDeps ?? false,
     federationCache,
   };
 

@@ -53,13 +53,18 @@ export function resolveSharedPackageDirs(
 }
 
 /** Realpath'd dirs of symlinked shared packages — the bounded watch set.
- *  Deduped, since secondaries share a package dir. */
+ *  Deduped, since secondaries share a package dir.
+ *
+ *  Empty unless `fedOptions.watchLinkedDeps` is on. A registry dep is bundled once and
+ *  cached by checksum, so watching it can never change an outcome; only a linked dev
+ *  checkout changes content under a fixed version, and paying for that is opt-in. */
 export function linkedSharedDirs(
   config: NormalizedFederationConfig,
   fedOptions: NormalizedFederationOptions,
   io: FileReaderPort = nodeIo,
   repo: PackageJsonRepository = sharedPackageJsonRepository
 ): string[] {
+  if (!fedOptions.watchLinkedDeps) return [];
   const entries = resolveEntries(Object.keys(config.shared), folderOf(fedOptions), io, repo);
   return [...new Set(entries.filter(e => e.isSymlink).map(e => e.realDir))];
 }

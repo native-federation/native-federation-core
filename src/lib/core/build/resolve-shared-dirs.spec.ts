@@ -75,6 +75,11 @@ describe('resolveSharedPackageDirs', () => {
 });
 
 describe('linkedSharedDirs', () => {
+  // The watch set is opt-in; these cases are about classification, so they enable it.
+  const watching = (shared: Record<string, unknown>) =>
+    ({ shared }) as unknown as NormalizedFederationConfig;
+  const opts = { workspaceRoot: '/ws', watchLinkedDeps: true } as NormalizedFederationOptions;
+
   function repoReturning(map: Record<string, string | null>): PackageJsonRepository {
     return {
       findDepPackageJson: (name: string) => map[name] ?? null,
@@ -85,10 +90,7 @@ describe('linkedSharedDirs', () => {
   }
 
   it('returns realpath dirs of symlinked packages only, deduped', () => {
-    const cfg = {
-      shared: { '@scope/lib': {}, '@scope/lib/sub': {}, tslib: {} },
-    } as unknown as NormalizedFederationConfig;
-    const fedOptions = { workspaceRoot: '/ws' } as NormalizedFederationOptions;
+    const cfg = watching({ '@scope/lib': {}, '@scope/lib/sub': {}, tslib: {} });
 
     const io = createMemoryIo()
       .setSymlink('/ws/node_modules/@scope/lib', '/dev/lib')
@@ -100,16 +102,25 @@ describe('linkedSharedDirs', () => {
       tslib: '/ws/node_modules/tslib/package.json',
     });
 
-    expect(linkedSharedDirs(cfg, fedOptions, io, repo)).toEqual(['/dev/lib']);
+    expect(linkedSharedDirs(cfg, opts, io, repo)).toEqual(['/dev/lib']);
+  });
+
+  // A registry dep is bundled once and cached by checksum, so watching node_modules can
+  // never change an outcome; only a linked checkout can, and that is opt-in.
+  it('watches nothing unless watchLinkedDeps is enabled', () => {
+    const cfg = watching({ '@scope/lib': {} });
+    const io = createMemoryIo().setSymlink('/ws/node_modules/@scope/lib', '/dev/lib');
+    const repo = repoReturning({ '@scope/lib': '/ws/node_modules/@scope/lib/package.json' });
+    const off = { workspaceRoot: '/ws' } as NormalizedFederationOptions;
+
+    expect(linkedSharedDirs(cfg, off, io, repo)).toEqual([]);
+    expect(linkedSharedDirs(cfg, opts, io, repo)).toEqual(['/dev/lib']);
   });
 
   // pnpm's default (isolated) nodeLinker symlinks *every* dependency into the virtual
   // store, so a bare lstat test classifies the whole graph as npm-linked. angular-adapter#130.
   it('does not treat a package-manager symlink into node_modules as linked', () => {
-    const cfg = {
-      shared: { rxjs: {}, '@scope/lib': {} },
-    } as unknown as NormalizedFederationConfig;
-    const fedOptions = { workspaceRoot: '/ws' } as NormalizedFederationOptions;
+    const cfg = watching({ rxjs: {}, '@scope/lib': {} });
 
     const io = createMemoryIo()
       .setSymlink('/ws/node_modules/rxjs', '/ws/node_modules/.pnpm/rxjs@7.8.1/node_modules/rxjs')
@@ -119,14 +130,13 @@ describe('linkedSharedDirs', () => {
       '@scope/lib': '/ws/node_modules/@scope/lib/package.json',
     });
 
-    expect(linkedSharedDirs(cfg, fedOptions, io, repo)).toEqual(['/dev/lib/dist']);
+    expect(linkedSharedDirs(cfg, opts, io, repo)).toEqual(['/dev/lib/dist']);
   });
 
   // The virtual store can sit above the Angular workspace root in a monorepo, so the
   // rule matches a node_modules segment anywhere rather than under workspaceRoot.
   it('rejects a store that sits above the workspace root', () => {
-    const cfg = { shared: { rxjs: {} } } as unknown as NormalizedFederationConfig;
-    const fedOptions = { workspaceRoot: '/repo/apps/host' } as NormalizedFederationOptions;
+    const cfg = watching({ rxjs: {} });
 
     const io = createMemoryIo().setSymlink(
       '/repo/apps/host/node_modules/rxjs',
@@ -134,14 +144,13 @@ describe('linkedSharedDirs', () => {
     );
     const repo = repoReturning({ rxjs: '/repo/apps/host/node_modules/rxjs/package.json' });
 
-    expect(linkedSharedDirs(cfg, fedOptions, io, repo)).toEqual([]);
+    expect(linkedSharedDirs(cfg, opts, io, repo)).toEqual([]);
   });
 
   // Substring matching would read this checkout as an installed package and silently
   // switch the feature off for it.
   it('treats a checkout whose path merely contains the text node_modules as linked', () => {
-    const cfg = { shared: { 'my-lib': {} } } as unknown as NormalizedFederationConfig;
-    const fedOptions = { workspaceRoot: '/ws' } as NormalizedFederationOptions;
+    const cfg = watching({ 'my-lib': {} });
 
     const io = createMemoryIo().setSymlink(
       '/ws/node_modules/my-lib',
@@ -149,7 +158,7 @@ describe('linkedSharedDirs', () => {
     );
     const repo = repoReturning({ 'my-lib': '/ws/node_modules/my-lib/package.json' });
 
-    expect(linkedSharedDirs(cfg, fedOptions, io, repo)).toEqual([
+    expect(linkedSharedDirs(cfg, opts, io, repo)).toEqual([
       '/dev/node_modules_backup/my-lib/dist',
     ]);
   });
@@ -157,15 +166,14 @@ describe('linkedSharedDirs', () => {
   // `npm link` installs two hops; realpath collapses both to the checkout, which carries
   // no node_modules segment, so the feature survives the narrowed test.
   it('follows a two-hop npm-link chain to the dev checkout', () => {
-    const cfg = { shared: { 'my-lib': {} } } as unknown as NormalizedFederationConfig;
-    const fedOptions = { workspaceRoot: '/ws' } as NormalizedFederationOptions;
+    const cfg = watching({ 'my-lib': {} });
 
     const io = createMemoryIo()
       .setSymlink('/ws/node_modules/my-lib', '/usr/lib/node_modules/my-lib')
       .setSymlink('/usr/lib/node_modules/my-lib', '/dev/mylib-checkout/dist');
     const repo = repoReturning({ 'my-lib': '/ws/node_modules/my-lib/package.json' });
 
-    expect(linkedSharedDirs(cfg, fedOptions, io, repo)).toEqual(['/dev/mylib-checkout/dist']);
+    expect(linkedSharedDirs(cfg, opts, io, repo)).toEqual(['/dev/mylib-checkout/dist']);
   });
 });
 
