@@ -328,35 +328,32 @@ describe('removeUnusedDeps', () => {
     });
   });
 
-  // A project that reaches none of the workspace's mappings prunes them all, which in a
-  // workspace declaring one tsconfig path per library is the common case, not a defect. The
-  // spelling mismatch that is a defect is reported from resolveUsedMappings instead — see
-  // get-used-dependencies.spec.ts.
-  describe('all-mappings-pruned trace', () => {
+  // angular-adapter#117 asked for exactly this signal: nine mappings, all pruned, nothing
+  // failing. The spelling mismatch that is often the cause is reported from
+  // resolveUsedMappings, which can name it — see get-used-dependencies.spec.ts.
+  describe('all-mappings-pruned warning', () => {
     const allPruned = /All shared mappings were pruned/;
 
-    it('does not warn when a non-empty mapping set is pruned to nothing', () => {
+    it('warns when a non-empty mapping set is pruned to nothing', () => {
       const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-      const debug = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
       const used: UsedDependencies = { external: new Set(), internal: {} };
       const config = makeConfig({}, { sharedMappings: { '/ws/libs/ui/index.ts': '@org/ui' } });
 
       expect(run(used, config).sharedMappings).toEqual({});
-      expect(warn).not.toHaveBeenCalledWith(expect.stringMatching(allPruned));
-      expect(debug).toHaveBeenCalledWith(expect.stringMatching(allPruned));
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(allPruned));
     });
 
     it('stays quiet when the config declared no mappings to begin with', () => {
-      const debug = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
       const used: UsedDependencies = { external: new Set(), internal: {} };
 
       run(used, makeConfig({}));
 
-      expect(debug).not.toHaveBeenCalledWith(expect.stringMatching(allPruned));
+      expect(warn).not.toHaveBeenCalledWith(expect.stringMatching(allPruned));
     });
 
     it('stays quiet when at least one mapping survives', () => {
-      const debug = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
       const used: UsedDependencies = {
         external: new Set(),
         internal: { '/ws/libs/reached/index.ts': '@org/reached' },
@@ -365,7 +362,7 @@ describe('removeUnusedDeps', () => {
 
       run(used, config);
 
-      expect(debug).not.toHaveBeenCalledWith(expect.stringMatching(allPruned));
+      expect(warn).not.toHaveBeenCalledWith(expect.stringMatching(allPruned));
     });
   });
 

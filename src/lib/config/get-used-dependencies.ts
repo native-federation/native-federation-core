@@ -151,17 +151,17 @@ function resolveUsedMappings(
 
 /**
  * Reaching a mapping only once case is ignored means this build's workspace root and the mapping
- * keys spell the same directory differently, so the libraries behind them are pruned as
- * unreachable and go missing from remoteEntry.json with nothing failing. Distinguishing that
- * from a project that legitimately reaches none of the workspace's mappings is the whole point
- * of testing the misses rather than the emptied set.
+ * keys spell the same directory differently -- see utils/disk-case.ts for the roots that get
+ * corrected. `removeUnusedDeps` reports the consequence (every mapping pruned); this names the
+ * cause, which the emptied set alone cannot distinguish from a project that legitimately reaches
+ * no workspace library.
  */
 function warnOnCaseOnlyMisses(misses: ReadonlySet<string>): void {
   if (misses.size === 0) return;
 
   logger.warn(
     `${misses.size} import(s) land in a shared mapping only when case is ignored, so they were ` +
-      `pruned as unreachable — e.g. '${[...misses][0]}'. The emitted remoteEntry.json will not ` +
+      `pruned as unreachable -- e.g. '${[...misses][0]}'. The emitted remoteEntry.json will not ` +
       'advertise those workspace libraries.'
   );
 }

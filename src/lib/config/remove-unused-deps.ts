@@ -24,14 +24,15 @@ export function removeUnusedDeps(
     config.skip
   );
 
-  // Only a trace: a project that reaches none of the workspace's mappings prunes them all,
-  // and in a workspace whose tsconfig declares one path per library that is the common case.
-  // The mismatch this used to warn about is reported from resolveUsedMappings, which can tell
-  // the two apart.
+  // Not observable otherwise: the build succeeds and remoteEntry.json is well-formed, just
+  // without the workspace libraries, surfacing as a runtime NG0201 far from the cause. Pruning
+  // the last mapping can be legitimate, so this warns rather than throws; resolveUsedMappings
+  // reports separately when a path-spelling mismatch is what made them unreachable.
   if (Object.keys(config.sharedMappings).length > 0 && Object.keys(sharedMappings).length === 0) {
-    logger.debug(
-      'All shared mappings were pruned as unreachable from the entry points. Disable the ' +
-        "'ignoreUnusedDeps' feature to publish them anyway."
+    logger.warn(
+      'All shared mappings were pruned as unreachable from the entry points, so the emitted ' +
+        'remoteEntry.json advertises none of this workspace\'s libraries. The likeliest cause ' +
+        "is path resolution; disable the 'ignoreUnusedDeps' feature to publish them anyway."
     );
   }
 
