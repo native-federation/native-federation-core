@@ -306,9 +306,10 @@ describe('linkedContentSignals', () => {
     expect(readDir.mock.calls.filter(([dir]) => dir === '/dev/lib')).toHaveLength(1);
   });
 
-  // io.isDirectory is stat-based and follows links, so an unguarded walk would descend
-  // a linked node_modules and pick up mtimes from an unrelated tree.
-  it('does not descend a nested node_modules', () => {
+  // bundle-shared marks only shared keys external, so a dep installed inside the linked
+  // checkout is compiled into the external and has to move the signal — an `npm install`
+  // in the checkout changes the emitted bundle while the shared version stays put.
+  it('includes a real nested node_modules in the signal', () => {
     const io = createMemoryIo()
       .setSymlink('/ws/node_modules/@scope/lib', '/dev/lib')
       .setFile('/dev/lib/a.js', 'A')
@@ -316,6 +317,38 @@ describe('linkedContentSignals', () => {
       .setFile('/dev/lib/node_modules/dep/index.js', 'D')
       .setMtime('/dev/lib/node_modules/dep/index.js', 900);
 
+    expect(linkedContentSignals(['@scope/lib'], '/ws', io, repo)['@scope/lib']).toBe('900');
+  });
+
+  // The escape the walk actually has to guard: io.isDirectory follows links, so descending
+  // one leaves the package. Deliberately not named node_modules — the old name-based skip
+  // happened to cover that one path and nothing else.
+  it('does not descend a symlinked directory', () => {
+    const io = createMemoryIo()
+      .setSymlink('/ws/node_modules/@scope/lib', '/dev/lib')
+      .setFile('/dev/lib/a.js', 'A')
+      .setMtime('/dev/lib/a.js', 100)
+      // A symlinked dir: lstat reports the link, isDirectory follows it to a real dir.
+      .setDir('/other/pkg')
+      .setSymlink('/dev/lib/vendor', '/other/pkg')
+      .setFile('/other/pkg/index.js', 'D')
+      .setMtime('/other/pkg/index.js', 900);
+
     expect(linkedContentSignals(['@scope/lib'], '/ws', io, repo)['@scope/lib']).toBe('100');
+  });
+
+  // Same guard, and the case that would otherwise not terminate: descending `self` reads
+  // /dev/lib again, whose own `self` reads it again. Counting reads is what pins this down —
+  // the signal alone stays 100 either way.
+  it('does not follow a symlink pointing back at an ancestor', () => {
+    const io = createMemoryIo()
+      .setSymlink('/ws/node_modules/@scope/lib', '/dev/lib')
+      .setFile('/dev/lib/a.js', 'A')
+      .setMtime('/dev/lib/a.js', 100)
+      .setSymlink('/dev/lib/self', '/dev/lib');
+    const readDir = vi.spyOn(io, 'readDir');
+
+    expect(linkedContentSignals(['@scope/lib'], '/ws', io, repo)['@scope/lib']).toBe('100');
+    expect(readDir).toHaveBeenCalledTimes(1);
   });
 });

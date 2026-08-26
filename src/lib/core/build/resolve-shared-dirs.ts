@@ -1,7 +1,7 @@
 import * as path from 'path';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
-import type { FileReaderPort } from '../../domain/utils/io-port.contract.js';
+import type { FileReaderPort, StatInfo } from '../../domain/utils/io-port.contract.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import { sharedPackageJsonRepository } from '../../utils/package/package-info.js';
@@ -88,19 +88,23 @@ export function sharedMappingDirs(config: NormalizedFederationConfig): string[] 
 
 function maxMtime(io: FileReaderPort, dir: string): number {
   let max = 0;
+  const bump = (s: StatInfo | null) => {
+    if (s && s.mtimeMs > max) max = s.mtimeMs;
+  };
   const walk = (d: string) => {
     for (const name of io.readDir(d)) {
-      // io.isDirectory follows links, so an unguarded walk can wander out of the package.
-      if (name === 'node_modules') continue;
       const full = path.join(d, name);
-      if (io.isDirectory(full)) walk(full);
-      else {
-        let s = io.stat(full);
-        // stat is lstat-based: a symlinked file reports the link's own mtime, not the
-        // target's. Follow it so an edit to the real file still moves the signal.
-        if (s?.isSymbolicLink) s = io.stat(io.realpath(full));
-        if (s && s.mtimeMs > max) max = s.mtimeMs;
+      // stat is lstat-based, so this reports the link itself, not its target.
+      const entry = io.stat(full);
+      if (entry?.isSymbolicLink) {
+        // Never descend a linked dir: io.isDirectory follows links, so the walk would
+        // wander out of the package (pnpm's store, a workspace sibling) or back at an
+        // ancestor. A linked file still follows, so editing the real file moves the signal.
+        if (!io.isDirectory(full)) bump(io.stat(io.realpath(full)));
+        continue;
       }
+      if (io.isDirectory(full)) walk(full);
+      else bump(entry);
     }
   };
   walk(dir);
