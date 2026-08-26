@@ -403,6 +403,24 @@ describe('normalizeFederationOptionsCore', () => {
     expect(result.options.workspaceRoot).toBe(path.normalize('C:/ws'));
   });
 
+  // packageJson seeds folderOf() in resolve-shared-dirs and bundle-shared, so leaving it
+  // mis-cased would keep the linked-dep watch set and the shared-bundle content signals on
+  // the spelling the corrected workspaceRoot just moved away from.
+  it('resolves the supplied packageJson to its on-disk spelling', async () => {
+    const io = createMemoryIo()
+      .setDiskCase('c:/ws', 'C:/ws')
+      .setDiskCase('c:/ws/package.json', 'C:/ws/package.json')
+      .setFile(path.join('C:/ws', 'federation.config.js'), '');
+
+    const result = await normalizeFederationOptionsCore(
+      { io, loadConfig: loaderFor(makeConfig()) },
+      { ...baseOptions, workspaceRoot: 'c:/ws', packageJson: 'c:/ws/package.json' },
+      cache
+    );
+
+    expect(result.options.packageJson).toBe(path.normalize('C:/ws/package.json'));
+  });
+
   // resolveGlob is a guess, so it drops non-barrel matches before they can be published.
   it('does not throw for non-barrel files a resolveGlob wildcard matched', async () => {
     const io = createMemoryIo()
