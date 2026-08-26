@@ -146,8 +146,10 @@ The library supports **watch mode** for development:
 
 ### The watcher (`createNfWatcher`)
 
-An `fs.watch`-based watcher adapters can use to drive their rebuild loop. It has **two
-channels, both always live**:
+An `fs.watch`-based watcher adapters can use to drive their rebuild loop. A host that
+already owns a watcher can inject it via the `watch` option instead; an injected
+implementation is expected to survive inode replacement itself, since `opts.poll` is only a
+hint (see `file-watcher.contract.ts`). It has **two channels, both always live**:
 
 - **push** — the `onChange` callback, for waking a rebuild loop
 - **pull** — `get()` / `clear()` / `mutate()`, for reading _which_ files changed
@@ -162,7 +164,14 @@ lifetime.
 a cache that records its inputs elsewhere yields an empty watch set and, silently, a dev
 server serving stale bundles until restart (angular-adapter#94). `linkedDirs` (from
 `linkedSharedDirs`) are polled rather than natively watched, because ng-packagr's atomic
-dist rewrites change the inode and defeat `fs.watch`.
+dist rewrites change the inode and defeat `fs.watch`. `linkedSharedDirs` returns `[]`
+unless the `watchLinkedDeps` option is on, so npm-linked shared deps are **not** watched by
+default.
+
+The content signal is a separate mechanism and is **not** gated: `linkedContentSignals`
+walks a linked checkout on every build so an edit under a fixed version still invalidates
+the cached external, whether or not anything is watching. That walk costs ~250 ms on a
+checkout with ~17k vendored files; a pure source checkout is free.
 
 `sharedMappingDirs(config)` is the config-only alternative: the source dir of every
 `sharedMappings` entry point. It is coarser than a build's compiled inputs and covers what

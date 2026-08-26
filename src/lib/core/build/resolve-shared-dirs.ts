@@ -11,7 +11,7 @@ interface SharedEntry {
   key: string;
   /** realpath'd package directory (symlink resolved to its dev checkout). */
   realDir: string;
-  isSymlink: boolean;
+  isLinkedCheckout: boolean;
 }
 
 const folderOf = (fedOptions: NormalizedFederationOptions): string =>
@@ -33,7 +33,7 @@ function resolveEntries(
       key,
       realDir,
       // pnpm's default linker symlinks every dep, so the link alone proves nothing.
-      isSymlink: !!io.stat(pkgDir)?.isSymbolicLink && isOutsideNodeModules(realDir),
+      isLinkedCheckout: !!io.stat(pkgDir)?.isSymbolicLink && isOutsideNodeModules(realDir),
     });
   }
   return out;
@@ -61,7 +61,7 @@ export function linkedSharedDirs(
 ): string[] {
   if (!fedOptions.watchLinkedDeps) return [];
   const entries = resolveEntries(Object.keys(config.shared), folderOf(fedOptions), io, repo);
-  return [...new Set(entries.filter(e => e.isSymlink).map(e => e.realDir))];
+  return [...new Set(entries.filter(e => e.isLinkedCheckout).map(e => e.realDir))];
 }
 
 /**
@@ -111,9 +111,12 @@ function maxMtime(io: FileReaderPort, dir: string): number {
   return max;
 }
 
-/** Per-key content signal (max mtime of the resolved dir) for symlinked deps only.
+/** Per-key content signal (max mtime of the resolved dir) for linked checkouts only.
  *  Registry deps get no signal, keeping their checksum version-only. (Every key is
- *  still resolved: detecting the symlink requires the realpath + lstat.) */
+ *  still resolved: detecting the symlink requires the realpath + lstat.)
+ *
+ *  Deliberately not gated on `watchLinkedDeps`: that option decides whether an edit is
+ *  noticed live, never whether the next build is correct. */
 export function linkedContentSignals(
   keys: string[],
   folder: string,
@@ -124,7 +127,7 @@ export function linkedContentSignals(
   // Secondaries resolve to one dir and each walk is a full recursive stat, so do it once.
   const byDir = new Map<string, string>();
   for (const entry of resolveEntries(keys, folder, io, repo)) {
-    if (!entry.isSymlink) continue;
+    if (!entry.isLinkedCheckout) continue;
     let signal = byDir.get(entry.realDir);
     if (signal === undefined) {
       signal = String(maxMtime(io, entry.realDir));

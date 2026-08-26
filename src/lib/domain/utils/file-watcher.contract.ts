@@ -3,7 +3,9 @@ import type { WatchPort } from './io-port.contract.js';
 export interface NfFileWatcherOptions {
   /** Watch implementation, defaulting to Node's fs. The built-in poll is dependency-free
    *  but sweeps the tree every `pollIntervalMs`; a host that already ships a real watcher
-   *  should pass it here. `opts.poll` is a hint an event-driven implementation can ignore. */
+   *  should pass it here. An event-driven implementation may ignore `opts.poll`, but must
+   *  then survive inode replacement on its own: a polled dir supersedes the native watches
+   *  beneath it, so a missed rename-replace is never re-covered. */
   watch?: WatchPort['watch'];
   onChange?: (path: string) => void;
   pollIntervalMs?: number;

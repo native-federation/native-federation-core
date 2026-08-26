@@ -63,6 +63,7 @@ function makeFedOptions(
     projectName: 'app',
     entryPoints: [],
     cacheExternalArtifacts: false,
+    watchLinkedDeps: false,
     federationCache: {
       externals,
       bundlerCache: {},

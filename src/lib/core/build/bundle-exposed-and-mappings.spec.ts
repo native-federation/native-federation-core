@@ -172,6 +172,7 @@ function makeFedOptions(
     entryPoints: [],
     projectName: 'app',
     cacheExternalArtifacts: false,
+    watchLinkedDeps: false,
     ...overrides,
   };
 }
