@@ -15,6 +15,7 @@ export function createNfWatcherCore(
   now: () => number = Date.now
 ): NfFileWatcher {
   const { onChange } = options;
+  const watch: WatchPort['watch'] = options.watch ?? ((p, o, cb) => io.watch(p, o, cb));
   const pollIntervalMs = options.pollIntervalMs ?? 300;
   const debounceMs = options.debounceMs ?? 0;
   const dedupeReplays = options.dedupeReplays ?? true;
@@ -132,7 +133,7 @@ export function createNfWatcherCore(
           if (watchers.has(dir) || covers(dir, shouldPoll)) continue;
           try {
             watchers.set(dir, {
-              handle: io.watch(p, { recursive: true, poll }, filename => {
+              handle: watch(p, { recursive: true, poll }, filename => {
                 if (filename) notify(toPosix(join(p, filename)));
               }),
               poll: shouldPoll,
@@ -160,7 +161,7 @@ export function createNfWatcherCore(
         if (fileDirWatchers.has(dir)) continue;
         try {
           fileDirWatchers.set(dir, {
-            handle: io.watch(dir, { recursive: false, poll }, filename => {
+            handle: watch(dir, { recursive: false, poll }, filename => {
               if (!filename) return;
               const changed = toPosix(join(dir, filename));
               if (trackedFiles.has(changed)) notify(changed);
