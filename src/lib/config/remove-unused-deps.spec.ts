@@ -332,7 +332,7 @@ describe('removeUnusedDeps', () => {
   // failing. The spelling mismatch that is often the cause is reported from
   // resolveUsedMappings, which can name it — see get-used-dependencies.spec.ts.
   describe('all-mappings-pruned warning', () => {
-    const allPruned = /All shared mappings were pruned/;
+    const allPruned = /No shared mapping is reachable/;
 
     it('warns when a non-empty mapping set is pruned to nothing', () => {
       const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);

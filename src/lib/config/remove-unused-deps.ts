@@ -24,15 +24,13 @@ export function removeUnusedDeps(
     config.skip
   );
 
-  // Not observable otherwise: the build succeeds and remoteEntry.json is well-formed, just
-  // without the workspace libraries, surfacing as a runtime NG0201 far from the cause. Pruning
-  // the last mapping can be legitimate, so this warns rather than throws; resolveUsedMappings
-  // reports separately when a path-spelling mismatch is what made them unreachable.
+  // Invisible at build time: the build succeeds and remoteEntry.json is well-formed, just
+  // without the workspace libraries, surfacing as a runtime NG0201 far from the cause. Legitimate
+  // often enough to warn rather than throw.
   if (Object.keys(config.sharedMappings).length > 0 && Object.keys(sharedMappings).length === 0) {
     logger.warn(
-      'All shared mappings were pruned as unreachable from the entry points, so the emitted ' +
-        'remoteEntry.json advertises none of this workspace\'s libraries. The likeliest cause ' +
-        "is path resolution; disable the 'ignoreUnusedDeps' feature to publish them anyway."
+      'No shared mapping is reachable from the entry points, so remoteEntry.json will ship ' +
+        "without this workspace's libraries. Disable 'ignoreUnusedDeps' to publish them anyway."
     );
   }
 

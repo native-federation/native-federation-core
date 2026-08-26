@@ -48,9 +48,8 @@ export const nodeIo: IoPort = {
       return path;
     }
   },
-  // The JS realpathSync walks the components of the *input string* and only rewrites the
-  // ones that are symlinks, so it preserves the caller's casing. Only the native variant
-  // goes to the filesystem for the stored spelling.
+  // Only the native variant reports the spelling stored on disk: the JS realpathSync walks the
+  // components of the input string and rewrites only the ones that are symlinks.
   realpathNative(path) {
     try {
       return fs.realpathSync.native(path);

@@ -65,8 +65,6 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
    * Step 1: normalizing config
    */
 
-  // Before loadConfig: withNativeFederation() runs during that import and derives the
-  // sharedMappings keys, which are string-compared against paths built from this root.
   const workspaceRoot = toDiskCase(deps.io, options.workspaceRoot);
 
   const fullConfigPath = path.join(workspaceRoot, options.federationConfig);

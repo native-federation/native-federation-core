@@ -150,9 +150,8 @@ function resolveUsedMappings(
 }
 
 /**
- * `matchMapping`'s rule with both sides lower-cased. Diagnosis only -- it never decides whether a
- * mapping is used. Lower-casing the mapping set once keeps it cheap enough to run on every
- * unmatched import, which is what makes a *partial* mismatch visible.
+ * Diagnosis only: never decides whether a mapping is used. Lower-casing the set once keeps it
+ * cheap enough for every unmatched import, which is what makes a partial mismatch visible.
  */
 function createCaseInsensitiveMatcher(
   sharedMappings: PathToImport
@@ -168,11 +167,9 @@ function createCaseInsensitiveMatcher(
 }
 
 /**
- * A path and a mapping key that agree only once case is ignored spell the same directory
- * differently: either the workspace root (see utils/disk-case.ts) or a mis-cased tsconfig `paths`
- * value, which TypeScript resolves fine on a case-insensitive filesystem while silently dropping
- * that one library. `removeUnusedDeps` warns when *every* mapping is pruned; only a per-import
- * test sees the partial case.
+ * A case-only hit means one directory spelled two ways: the workspace root (see
+ * utils/disk-case.ts), or a mis-cased tsconfig `paths` value that TypeScript resolves anyway on a
+ * case-insensitive filesystem. `removeUnusedDeps` covers all-pruned; only this sees a partial one.
  */
 function warnOnCaseOnlyMisses(misses: ReadonlySet<string>): void {
   if (misses.size === 0) return;
