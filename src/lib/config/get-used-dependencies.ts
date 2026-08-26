@@ -56,6 +56,8 @@ export function getUsedDependenciesFactoryCore(
       throw new Error(
         '[removeUnusedDeps] native-federation is missing an entryPoint! You can set it using the Federation options or by setting an exposed module in the Federation config file.'
       );
+    // Not disk-cased like the cwd() in project-paths: sheriff relativizes every path it returns
+    // against this root, so its spelling cancels before those paths are re-joined below.
     const fileInfos = Object.values(entryPoints ?? []).reduce(
       (acc, entryPoint) => ({
         ...acc,
