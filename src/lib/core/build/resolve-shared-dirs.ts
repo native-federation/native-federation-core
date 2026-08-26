@@ -32,8 +32,7 @@ function resolveEntries(
     out.push({
       key,
       realDir,
-      // A symlink resolving back into a node_modules tree is an install layout, not a
-      // dev checkout: under pnpm's default linker that is every dependency.
+      // pnpm's default linker symlinks every dep, so the link alone proves nothing.
       isSymlink: !!io.stat(pkgDir)?.isSymbolicLink && isOutsideNodeModules(realDir),
     });
   }
@@ -53,11 +52,7 @@ export function resolveSharedPackageDirs(
 }
 
 /** Realpath'd dirs of symlinked shared packages — the bounded watch set.
- *  Deduped, since secondaries share a package dir.
- *
- *  Empty unless `fedOptions.watchLinkedDeps` is on. A registry dep is bundled once and
- *  cached by checksum, so watching it can never change an outcome; only a linked dev
- *  checkout changes content under a fixed version, and paying for that is opt-in. */
+ *  Deduped, since secondaries share a package dir. Empty unless `watchLinkedDeps` is on. */
 export function linkedSharedDirs(
   config: NormalizedFederationConfig,
   fedOptions: NormalizedFederationOptions,
@@ -95,8 +90,7 @@ function maxMtime(io: FileReaderPort, dir: string): number {
   let max = 0;
   const walk = (d: string) => {
     for (const name of io.readDir(d)) {
-      // io.isDirectory is stat-based and so follows links: without this a nested or
-      // symlinked node_modules drags an arbitrary amount of unrelated tree into the walk.
+      // io.isDirectory follows links, so an unguarded walk can wander out of the package.
       if (name === 'node_modules') continue;
       const full = path.join(d, name);
       if (io.isDirectory(full)) walk(full);
@@ -123,8 +117,7 @@ export function linkedContentSignals(
   repo: PackageJsonRepository = sharedPackageJsonRepository
 ): Record<string, string> {
   const signals: Record<string, string> = {};
-  // Per unique dir, not per key: secondary entry points of one package resolve to the
-  // same dir, and each walk is a full recursive stat of it.
+  // Secondaries resolve to one dir and each walk is a full recursive stat, so do it once.
   const byDir = new Map<string, string>();
   for (const entry of resolveEntries(keys, folder, io, repo)) {
     if (!entry.isSymlink) continue;

@@ -120,8 +120,7 @@ export function createMemoryIo(): MemoryIo {
       return [...names];
     },
     realpath(p) {
-      // Chained like fs.realpathSync: `npm link` installs two hops
-      // (node_modules/x -> <global prefix>/lib/node_modules/x -> <checkout>).
+      // Chained like fs.realpathSync: `npm link` installs two hops.
       let key = toKey(p);
       for (let hop = 0; hop < 32; hop++) {
         const next = resolveOneHop(key);

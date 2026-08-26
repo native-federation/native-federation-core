@@ -110,9 +110,8 @@ function pollWatch(
         return;
       }
       for (const entry of entries) {
-        // Only linked dirs are polled, and `npm link` points at the package root — so
-        // without this the 300ms snapshot walks the linked lib's own installed deps,
-        // which alone can outrun the interval and starve the loop. angular-adapter#130.
+        // `npm link` points at the package root, so without this the snapshot walks the
+        // linked lib's own deps — enough to outrun the interval and starve the loop.
         if (entry.name === 'node_modules') continue;
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) {
