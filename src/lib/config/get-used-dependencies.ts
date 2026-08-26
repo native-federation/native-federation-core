@@ -8,7 +8,7 @@ import { type FileReaderPort } from '../domain/utils/io-port.contract.js';
 import { type PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { type UsedDependencies } from '../domain/utils/used-dependencies.contract.js';
 import { type ExposeEntry } from '../domain/config/federation-config.contract.js';
-import { createCaseInsensitiveMatcher, isSharedMapping, matchMapping } from './match-mapping.js';
+import { isSharedMapping, matchMapping } from './match-mapping.js';
 import { logger } from '../utils/logger.js';
 import * as path from 'path';
 
@@ -150,11 +150,29 @@ function resolveUsedMappings(
 }
 
 /**
- * Reaching a mapping only once case is ignored means this build's workspace root and the mapping
- * keys spell the same directory differently -- see utils/disk-case.ts for the roots that get
- * corrected. `removeUnusedDeps` reports the consequence (every mapping pruned); this names the
- * cause, which the emptied set alone cannot distinguish from a project that legitimately reaches
- * no workspace library.
+ * `matchMapping`'s rule with both sides lower-cased. Diagnosis only -- it never decides whether a
+ * mapping is used. Lower-casing the mapping set once keeps it cheap enough to run on every
+ * unmatched import, which is what makes a *partial* mismatch visible.
+ */
+function createCaseInsensitiveMatcher(
+  sharedMappings: PathToImport
+): (filePath: string) => boolean {
+  const lowerCased = Object.fromEntries(
+    Object.entries(sharedMappings).map(([sharedPath, sharedImport]) => [
+      sharedPath.toLowerCase(),
+      sharedImport,
+    ])
+  );
+
+  return filePath => matchMapping(filePath.toLowerCase(), lowerCased) !== null;
+}
+
+/**
+ * A path and a mapping key that agree only once case is ignored spell the same directory
+ * differently: either the workspace root (see utils/disk-case.ts) or a mis-cased tsconfig `paths`
+ * value, which TypeScript resolves fine on a case-insensitive filesystem while silently dropping
+ * that one library. `removeUnusedDeps` warns when *every* mapping is pruned; only a per-import
+ * test sees the partial case.
  */
 function warnOnCaseOnlyMisses(misses: ReadonlySet<string>): void {
   if (misses.size === 0) return;

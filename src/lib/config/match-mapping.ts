@@ -47,25 +47,6 @@ export function matchMapping(filePath: string, sharedMappings: PathToImport): st
 }
 
 /**
- * `matchMapping`'s rule again, with both sides lower-cased. A hit here after a miss above means
- * the mapping keys and the path being tested spell the same directory differently — see
- * utils/disk-case.ts. The mapping set is lower-cased once, so the probe stays cheap enough to
- * run on every unmatched import.
- */
-export function createCaseInsensitiveMatcher(
-  sharedMappings: PathToImport
-): (filePath: string) => boolean {
-  const lowerCased = Object.fromEntries(
-    Object.entries(sharedMappings).map(([sharedPath, sharedImport]) => [
-      sharedPath.toLowerCase(),
-      sharedImport,
-    ])
-  );
-
-  return filePath => matchMapping(filePath.toLowerCase(), lowerCased) !== null;
-}
-
-/**
  * Detect if it's a barrel file which is inferred by typescript
  */
 const INDEX_PATTERN = /\/index\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
