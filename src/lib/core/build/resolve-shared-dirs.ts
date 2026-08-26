@@ -1,17 +1,17 @@
 import * as path from 'path';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
-import type { FileReaderPort } from '../../domain/utils/io-port.contract.js';
+import type { FileReaderPort, StatInfo } from '../../domain/utils/io-port.contract.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import { sharedPackageJsonRepository } from '../../utils/package/package-info.js';
-import { isUnderDir, toPosix } from '../../utils/path-patterns.js';
+import { isOutsideNodeModules, isUnderDir, toPosix } from '../../utils/path-patterns.js';
 
 interface SharedEntry {
   key: string;
   /** realpath'd package directory (symlink resolved to its dev checkout). */
   realDir: string;
-  isSymlink: boolean;
+  isLinkedCheckout: boolean;
 }
 
 const folderOf = (fedOptions: NormalizedFederationOptions): string =>
@@ -28,10 +28,12 @@ function resolveEntries(
     const pkgJsonPath = repo.findDepPackageJson(key, folder);
     if (!pkgJsonPath) continue;
     const pkgDir = path.dirname(pkgJsonPath);
+    const realDir = toPosix(io.realpath(pkgDir));
     out.push({
       key,
-      realDir: toPosix(io.realpath(pkgDir)),
-      isSymlink: !!io.stat(pkgDir)?.isSymbolicLink,
+      realDir,
+      // pnpm's default linker symlinks every dep, so the link alone proves nothing.
+      isLinkedCheckout: !!io.stat(pkgDir)?.isSymbolicLink && isOutsideNodeModules(realDir),
     });
   }
   return out;
@@ -50,15 +52,16 @@ export function resolveSharedPackageDirs(
 }
 
 /** Realpath'd dirs of symlinked shared packages — the bounded watch set.
- *  Deduped, since secondaries share a package dir. */
+ *  Deduped, since secondaries share a package dir. Empty unless `watchLinkedDeps` is on. */
 export function linkedSharedDirs(
   config: NormalizedFederationConfig,
   fedOptions: NormalizedFederationOptions,
   io: FileReaderPort = nodeIo,
   repo: PackageJsonRepository = sharedPackageJsonRepository
 ): string[] {
+  if (!fedOptions.watchLinkedDeps) return [];
   const entries = resolveEntries(Object.keys(config.shared), folderOf(fedOptions), io, repo);
-  return [...new Set(entries.filter(e => e.isSymlink).map(e => e.realDir))];
+  return [...new Set(entries.filter(e => e.isLinkedCheckout).map(e => e.realDir))];
 }
 
 /**
@@ -79,32 +82,41 @@ export function linkedSharedDirs(
 export function sharedMappingDirs(config: NormalizedFederationConfig): string[] {
   const dirs = Object.keys(config.sharedMappings)
     .map(entryPoint => toPosix(path.dirname(entryPoint)))
-    .filter(dir => !dir.includes('node_modules'));
+    .filter(isOutsideNodeModules);
   return [...new Set(dirs)];
 }
 
 function maxMtime(io: FileReaderPort, dir: string): number {
   let max = 0;
+  const bump = (s: StatInfo | null) => {
+    if (s && s.mtimeMs > max) max = s.mtimeMs;
+  };
   const walk = (d: string) => {
     for (const name of io.readDir(d)) {
       const full = path.join(d, name);
-      if (io.isDirectory(full)) walk(full);
-      else {
-        let s = io.stat(full);
-        // stat is lstat-based: a symlinked file reports the link's own mtime, not the
-        // target's. Follow it so an edit to the real file still moves the signal.
-        if (s?.isSymbolicLink) s = io.stat(io.realpath(full));
-        if (s && s.mtimeMs > max) max = s.mtimeMs;
+      // stat is lstat-based, so this reports the link itself, not its target.
+      const entry = io.stat(full);
+      if (entry?.isSymbolicLink) {
+        // Never descend a linked dir: io.isDirectory follows links, so the walk would
+        // wander out of the package (pnpm's store, a workspace sibling) or back at an
+        // ancestor. A linked file still follows, so editing the real file moves the signal.
+        if (!io.isDirectory(full)) bump(io.stat(io.realpath(full)));
+        continue;
       }
+      if (io.isDirectory(full)) walk(full);
+      else bump(entry);
     }
   };
   walk(dir);
   return max;
 }
 
-/** Per-key content signal (max mtime of the resolved dir) for symlinked deps only.
+/** Per-key content signal (max mtime of the resolved dir) for linked checkouts only.
  *  Registry deps get no signal, keeping their checksum version-only. (Every key is
- *  still resolved: detecting the symlink requires the realpath + lstat.) */
+ *  still resolved: detecting the symlink requires the realpath + lstat.)
+ *
+ *  Deliberately not gated on `watchLinkedDeps`: that option decides whether an edit is
+ *  noticed live, never whether the next build is correct. */
 export function linkedContentSignals(
   keys: string[],
   folder: string,
@@ -112,8 +124,16 @@ export function linkedContentSignals(
   repo: PackageJsonRepository = sharedPackageJsonRepository
 ): Record<string, string> {
   const signals: Record<string, string> = {};
+  // Secondaries resolve to one dir and each walk is a full recursive stat, so do it once.
+  const byDir = new Map<string, string>();
   for (const entry of resolveEntries(keys, folder, io, repo)) {
-    if (entry.isSymlink) signals[entry.key] = String(maxMtime(io, entry.realDir));
+    if (!entry.isLinkedCheckout) continue;
+    let signal = byDir.get(entry.realDir);
+    if (signal === undefined) {
+      signal = String(maxMtime(io, entry.realDir));
+      byDir.set(entry.realDir, signal);
+    }
+    signals[entry.key] = signal;
   }
   return signals;
 }

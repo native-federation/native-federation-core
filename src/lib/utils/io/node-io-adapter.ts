@@ -110,6 +110,9 @@ function pollWatch(
         return;
       }
       for (const entry of entries) {
+        // `npm link` points at the package root, so without this the snapshot walks the
+        // linked lib's own deps — enough to outrun the interval and starve the loop.
+        if (entry.name === 'node_modules') continue;
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           if (recursive) walk(full);

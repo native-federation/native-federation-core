@@ -56,6 +56,25 @@ export function createMemoryIo(): MemoryIo {
     return new RegExp('^' + body + '$');
   };
 
+  const resolveOneHop = (key: string): string => {
+    for (const [link, target] of symlinks) {
+      if (key === link) return target;
+      if (key.startsWith(link + '/')) return target + key.slice(link.length);
+    }
+    return key;
+  };
+
+  // Everything in fs except lstat resolves links, so only `stat` sees the link itself.
+  const deref = (p: string): string => {
+    let key = toKey(p);
+    for (let hop = 0; hop < 32; hop++) {
+      const next = resolveOneHop(key);
+      if (next === key) break;
+      key = next;
+    }
+    return key;
+  };
+
   const io: MemoryIo = {
     setFile(filePath, data) {
       const key = toKey(filePath);
@@ -94,33 +113,30 @@ export function createMemoryIo(): MemoryIo {
       return bytes;
     },
     exists(p) {
-      const key = toKey(p);
+      const key = deref(p);
       return files.has(key) || dirs.has(key);
     },
     isFile(p) {
-      return files.has(toKey(p));
+      return files.has(deref(p));
     },
     isDirectory(p) {
-      return dirs.has(toKey(p));
+      return dirs.has(deref(p));
     },
     readDir(p) {
-      const key = toKey(p);
+      const key = deref(p);
       const names = new Set<string>();
-      for (const entry of [...files.keys(), ...dirs]) {
+      // Symlinks are entries too: readdir lists the link, not what it points at.
+      for (const entry of [...files.keys(), ...dirs, ...symlinks.keys()]) {
         if (path.posix.dirname(entry) === key) names.add(path.posix.basename(entry));
       }
       return [...names];
     },
-    realpath(p) {
-      const key = toKey(p);
-      for (const [link, target] of symlinks) {
-        if (key === link) return target;
-        if (key.startsWith(link + '/')) return target + key.slice(link.length);
-      }
-      return key;
-    },
+    // Chained like fs.realpathSync: `npm link` installs two hops.
+    realpath: deref,
     stat(p): StatInfo | null {
-      const key = toKey(p);
+      const raw = toKey(p);
+      // lstat resolves every component except the last, which stays the link itself.
+      const key = path.posix.join(deref(path.posix.dirname(raw)), path.posix.basename(raw));
       const isSymbolicLink = symlinks.has(key);
       if (!isSymbolicLink && !files.has(key) && !dirs.has(key)) return null;
       return {
