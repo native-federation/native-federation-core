@@ -373,6 +373,54 @@ describe('normalizeFederationOptionsCore', () => {
     vi.restoreAllMocks();
   });
 
+  // angular-adapter#117: Nx reports workspaceRoot with the invoking shell's drive-letter
+  // case, while the sharedMappings keys descend from cwd(). Every mapping then compares
+  // unequal, gets classified unused, and the build silently ships without its workspace
+  // libraries. This is the funnel the Angular adapter goes through -- it never calls
+  // federationBuilder.init, so useWorkspace alone would not cover it.
+  it('resolves mappings when the supplied workspace root is mis-cased', async () => {
+    const io = createMemoryIo()
+      .setDiskCase('c:/ws', 'C:/ws')
+      .setFile(path.join('C:/ws', 'federation.config.js'), '')
+      .setFile(path.join('C:/ws', 'libs/ui/button/index.ts'), '');
+
+    const config = makeConfig({
+      sharedMappings: { [path.join('C:/ws', 'libs/ui/*/index.ts')]: '@org/ui/*' },
+      sharedMappingsConfig: {
+        '@org/ui/*': { singleton: true, strictVersion: true, resolveGlob: true },
+      },
+    });
+
+    const result = await normalizeFederationOptionsCore(
+      { io, loadConfig: loaderFor(config) },
+      { ...baseOptions, workspaceRoot: 'c:/ws' },
+      cache
+    );
+
+    expect(result.config.sharedMappings).toEqual({
+      [path.join('C:/ws', 'libs/ui/button/index.ts')]: '@org/ui/button',
+    });
+    expect(result.options.workspaceRoot).toBe(path.normalize('C:/ws'));
+  });
+
+  // packageJson seeds folderOf() in resolve-shared-dirs and bundle-shared, so leaving it
+  // mis-cased would keep the linked-dep watch set and the shared-bundle content signals on
+  // the spelling the corrected workspaceRoot just moved away from.
+  it('resolves the supplied packageJson to its on-disk spelling', async () => {
+    const io = createMemoryIo()
+      .setDiskCase('c:/ws', 'C:/ws')
+      .setDiskCase('c:/ws/package.json', 'C:/ws/package.json')
+      .setFile(path.join('C:/ws', 'federation.config.js'), '');
+
+    const result = await normalizeFederationOptionsCore(
+      { io, loadConfig: loaderFor(makeConfig()) },
+      { ...baseOptions, workspaceRoot: 'c:/ws', packageJson: 'c:/ws/package.json' },
+      cache
+    );
+
+    expect(result.options.packageJson).toBe(path.normalize('C:/ws/package.json'));
+  });
+
   // resolveGlob is a guess, so it drops non-barrel matches before they can be published.
   it('does not throw for non-barrel files a resolveGlob wildcard matched', async () => {
     const io = createMemoryIo()

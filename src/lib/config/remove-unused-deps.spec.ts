@@ -328,6 +328,44 @@ describe('removeUnusedDeps', () => {
     });
   });
 
+  // angular-adapter#117 asked for exactly this signal: nine mappings, all pruned, nothing
+  // failing. The spelling mismatch that is often the cause is reported from
+  // resolveUsedMappings, which can name it — see get-used-dependencies.spec.ts.
+  describe('all-mappings-pruned warning', () => {
+    const allPruned = /No shared mapping is reachable/;
+
+    it('warns when a non-empty mapping set is pruned to nothing', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const used: UsedDependencies = { external: new Set(), internal: {} };
+      const config = makeConfig({}, { sharedMappings: { '/ws/libs/ui/index.ts': '@org/ui' } });
+
+      expect(run(used, config).sharedMappings).toEqual({});
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(allPruned));
+    });
+
+    it('stays quiet when the config declared no mappings to begin with', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const used: UsedDependencies = { external: new Set(), internal: {} };
+
+      run(used, makeConfig({}));
+
+      expect(warn).not.toHaveBeenCalledWith(expect.stringMatching(allPruned));
+    });
+
+    it('stays quiet when at least one mapping survives', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const used: UsedDependencies = {
+        external: new Set(),
+        internal: { '/ws/libs/reached/index.ts': '@org/reached' },
+      };
+      const config = makeConfig({}, { sharedMappings: { '/ws/libs/ui/index.ts': '@org/ui' } });
+
+      run(used, config);
+
+      expect(warn).not.toHaveBeenCalledWith(expect.stringMatching(allPruned));
+    });
+  });
+
   it('does not mutate the original config', () => {
     const used: UsedDependencies = { external: new Set(['keep']), internal: {} };
     const config = makeConfig({ keep: external(), drop: external() });

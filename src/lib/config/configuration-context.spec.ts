@@ -1,9 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import {
-  getConfigContext,
-  usePackageJson,
-  useWorkspace,
-} from './configuration-context.js';
+import * as path from 'path';
+import { getConfigContext, usePackageJson, useWorkspace } from './configuration-context.js';
+import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
 
 describe('configuration-context', () => {
   // The context is module-level singleton state; reset it around each test.
@@ -35,6 +33,14 @@ describe('configuration-context', () => {
       workspaceRoot: '/ws/root',
       packageJson: '/ws/root/package.json',
     });
+  });
+
+  // Nx reports workspaceRoot with whatever drive-letter case the invoking shell used; the
+  // sharedMappings keys derive from cwd(). Storing the disk spelling keeps the two comparable.
+  it('stores the on-disk spelling of the workspace root', () => {
+    const io = createMemoryIo().setDiskCase('c:/ws', 'C:/ws');
+    useWorkspace('c:/ws', io);
+    expect(getConfigContext().workspaceRoot).toBe(path.normalize('C:/ws'));
   });
 
   it('overwrites a previously set value on a subsequent call', () => {

@@ -9,6 +9,7 @@ import { type PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { type UsedDependencies } from '../domain/utils/used-dependencies.contract.js';
 import { type ExposeEntry } from '../domain/config/federation-config.contract.js';
 import { isSharedMapping, matchMapping } from './match-mapping.js';
+import { logger } from '../utils/logger.js';
 import * as path from 'path';
 
 type GetProjectData = (
@@ -55,6 +56,8 @@ export function getUsedDependenciesFactoryCore(
       throw new Error(
         '[removeUnusedDeps] native-federation is missing an entryPoint! You can set it using the Federation options or by setting an exposed module in the Federation config file.'
       );
+    // Not disk-cased like the cwd() in project-paths: sheriff relativizes every path it returns
+    // against this root, so its spelling cancels before those paths are re-joined below.
     const fileInfos = Object.values(entryPoints ?? []).reduce(
       (acc, entryPoint) => ({
         ...acc,
@@ -123,6 +126,8 @@ function resolveUsedMappings(
   sharedMappings: PathToImport
 ): PathToImport {
   const usedMappings: PathToImport = {};
+  const matchesIgnoringCase = createCaseInsensitiveMatcher(sharedMappings);
+  const caseOnlyMisses = new Set<string>();
 
   for (const fileName of Object.keys(fileInfos)) {
     const fullFileName = path.join(workspaceRoot, fileName);
@@ -137,9 +142,43 @@ function resolveUsedMappings(
       const fullImport = path.join(workspaceRoot, imp);
       const match = matchMapping(fullImport, sharedMappings);
       if (match) usedMappings[fullImport] = match;
+      else if (matchesIgnoringCase(fullImport)) caseOnlyMisses.add(fullImport);
     }
   }
 
+  warnOnCaseOnlyMisses(caseOnlyMisses);
+
   return usedMappings;
+}
+
+/**
+ * Diagnosis only: never decides whether a mapping is used. Lower-casing the set once keeps it
+ * cheap enough for every unmatched import, which is what makes a partial mismatch visible.
+ */
+function createCaseInsensitiveMatcher(
+  sharedMappings: PathToImport
+): (filePath: string) => boolean {
+  const lowerCased = Object.fromEntries(
+    Object.entries(sharedMappings).map(([sharedPath, sharedImport]) => [
+      sharedPath.toLowerCase(),
+      sharedImport,
+    ])
+  );
+
+  return filePath => matchMapping(filePath.toLowerCase(), lowerCased) !== null;
+}
+
+/**
+ * A case-only hit means one directory spelled two ways: the workspace root (see
+ * utils/disk-case.ts), or a mis-cased tsconfig `paths` value that TypeScript resolves anyway on a
+ * case-insensitive filesystem. `removeUnusedDeps` covers all-pruned; only this sees a partial one.
+ */
+function warnOnCaseOnlyMisses(misses: ReadonlySet<string>): void {
+  if (misses.size === 0) return;
+
+  logger.warn(
+    `${misses.size} import(s) match a shared mapping only when case is ignored, so those ` +
+      `libraries were pruned from remoteEntry.json -- e.g. '${[...misses][0]}'.`
+  );
 }
 

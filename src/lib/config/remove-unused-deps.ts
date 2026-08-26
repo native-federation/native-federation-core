@@ -18,14 +18,26 @@ export function removeUnusedDeps(
     .filter(([shared, meta]) => !!meta.includeSecondaries || usedDependencies.external.has(shared))
     .reduce((acc, [shared, meta]) => ({ ...acc, [shared]: meta }), {});
 
+  // Both halves can contain wildcard-expanded imports, which the skip list has not seen yet.
+  const sharedMappings = withoutSkippedMappings(
+    { ...keptMappings(config, ctx), ...usedDependencies.internal },
+    config.skip
+  );
+
+  // Invisible at build time: the build succeeds and remoteEntry.json is well-formed, just
+  // without the workspace libraries, surfacing as a runtime NG0201 far from the cause. Legitimate
+  // often enough to warn rather than throw.
+  if (Object.keys(config.sharedMappings).length > 0 && Object.keys(sharedMappings).length === 0) {
+    logger.warn(
+      'No shared mapping is reachable from the entry points, so remoteEntry.json will ship ' +
+        "without this workspace's libraries. Disable 'ignoreUnusedDeps' to publish them anyway."
+    );
+  }
+
   return {
     ...config,
     shared: filteredDependencies,
-    // Both halves can contain wildcard-expanded imports, which the skip list has not seen yet.
-    sharedMappings: withoutSkippedMappings(
-      { ...keptMappings(config, ctx), ...usedDependencies.internal },
-      config.skip
-    ),
+    sharedMappings,
   };
 }
 

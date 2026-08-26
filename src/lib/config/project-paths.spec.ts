@@ -24,4 +24,16 @@ describe('findRootTsConfigJsonCore', () => {
   it('throws when neither config is present', () => {
     expect(() => findRootTsConfigJsonCore(withPackageJson())).toThrow(/Neither a tsconfig/);
   });
+
+  // The mirror image of the Nx case bug: cwd() is the mis-cased side. The returned path
+  // seeds every sharedMappings key, so it has to agree with the workspace root.
+  it('returns the on-disk spelling when cwd() is mis-cased', () => {
+    const disk = path.join(path.dirname(ROOT), path.basename(ROOT).toUpperCase());
+    const io = createMemoryIo()
+      .setDiskCase(ROOT, disk)
+      .setFile(path.join(disk, 'package.json'), '{}')
+      .setFile(path.join(disk, 'tsconfig.base.json'), '{}');
+
+    expect(findRootTsConfigJsonCore(io)).toBe(path.join(disk, 'tsconfig.base.json'));
+  });
 });

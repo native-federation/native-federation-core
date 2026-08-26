@@ -23,6 +23,8 @@ export interface FileReaderPort {
   /** Immediate child entry names (not full paths). Empty array on ENOENT, never throws. */
   readDir(path: string): string[];
   realpath(path: string): string;
+  /** The path as disk spells it, including case on case-insensitive filesystems. */
+  realpathNative(path: string): string;
   stat(path: string): StatInfo | null;
 }
 
