@@ -36,14 +36,6 @@ export function createMemoryIo(): MemoryIo {
   const encode = (data: string | Uint8Array): Uint8Array =>
     typeof data === 'string' ? new TextEncoder().encode(data) : data;
 
-  const resolveLinks = (key: string): string => {
-    for (const [link, target] of symlinks) {
-      if (key === link) return target;
-      if (key.startsWith(link + '/')) return target + key.slice(link.length);
-    }
-    return key;
-  };
-
   const registerDirs = (key: string) => {
     let dir = path.posix.dirname(key);
     while (dir && dir !== '.' && dir !== path.posix.dirname(dir)) {
@@ -65,6 +57,25 @@ export function createMemoryIo(): MemoryIo {
       })
       .join('');
     return new RegExp('^' + body + '$');
+  };
+
+  const resolveOneHop = (key: string): string => {
+    for (const [link, target] of symlinks) {
+      if (key === link) return target;
+      if (key.startsWith(link + '/')) return target + key.slice(link.length);
+    }
+    return key;
+  };
+
+  // Everything in fs except lstat resolves links, so only `stat` sees the link itself.
+  const deref = (p: string): string => {
+    let key = toKey(p);
+    for (let hop = 0; hop < 32; hop++) {
+      const next = resolveOneHop(key);
+      if (next === key) break;
+      key = next;
+    }
+    return key;
   };
 
   const io: MemoryIo = {
@@ -109,35 +120,37 @@ export function createMemoryIo(): MemoryIo {
       return bytes;
     },
     exists(p) {
-      const key = toKey(p);
+      const key = deref(p);
       return files.has(key) || dirs.has(key);
     },
     isFile(p) {
-      return files.has(toKey(p));
+      return files.has(deref(p));
     },
     isDirectory(p) {
-      return dirs.has(toKey(p));
+      return dirs.has(deref(p));
     },
     readDir(p) {
-      const key = toKey(p);
+      const key = deref(p);
       const names = new Set<string>();
-      for (const entry of [...files.keys(), ...dirs]) {
+      // Symlinks are entries too: readdir lists the link, not what it points at.
+      for (const entry of [...files.keys(), ...dirs, ...symlinks.keys()]) {
         if (path.posix.dirname(entry) === key) names.add(path.posix.basename(entry));
       }
       return [...names];
     },
-    realpath(p) {
-      return resolveLinks(toKey(p));
-    },
+    // Chained like fs.realpathSync: `npm link` installs two hops.
+    realpath: deref,
     // A registered spelling is returned verbatim: toKey() would re-resolve it against the
     // real cwd, which on a case-sensitive host would defeat the case-only comparison the
     // caller is about to make.
     realpathNative(p) {
       const key = toKey(p);
-      return diskCase.get(key) ?? resolveLinks(key);
+      return diskCase.get(key) ?? deref(key);
     },
     stat(p): StatInfo | null {
-      const key = toKey(p);
+      const raw = toKey(p);
+      // lstat resolves every component except the last, which stays the link itself.
+      const key = path.posix.join(deref(path.posix.dirname(raw)), path.posix.basename(raw));
       const isSymbolicLink = symlinks.has(key);
       if (!isSymbolicLink && !files.has(key) && !dirs.has(key)) return null;
       return {

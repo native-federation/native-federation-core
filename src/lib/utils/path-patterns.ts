@@ -59,3 +59,13 @@ export function substituteWildcard(template: string, captured: string): string {
 export function toGlobPattern({ prefix, suffix }: WildcardPattern): string {
   return prefix.slice(0, prefix.lastIndexOf('/') + 1) + '**/*' + suffix;
 }
+
+/**
+ * A dev checkout rather than an installed package. A symlink alone cannot tell them apart:
+ * pnpm's default linker points every dep at `…/node_modules/.pnpm/<pkg>@<ver>/node_modules/
+ * <pkg>`, while `npm link` resolves to the checkout. Matched anywhere in the path, since a
+ * monorepo's store can sit above the workspace root, and by segment so a checkout under
+ * `node_modules_backup` still counts.
+ */
+export const isOutsideNodeModules = (dir: string): boolean =>
+  !toPosix(dir).split('/').includes('node_modules');

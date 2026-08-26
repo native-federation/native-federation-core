@@ -86,5 +86,31 @@ describe('nodeIo', () => {
 
       expect(seen).toContain('a.js');
     });
+
+    // `npm link` points at the package root, so the linked lib's own installed deps sit
+    // inside the polled dir; walking them every 300ms is what starves the loop.
+    it('does not descend into the linked package own node_modules', () => {
+      fs.writeFileSync(path.join(root, 'index.js'), 'v1');
+      fs.mkdirSync(path.join(root, 'node_modules', 'dep'), { recursive: true });
+      const vendored = path.join(root, 'node_modules', 'dep', 'index.js');
+      fs.writeFileSync(vendored, 'v1');
+
+      const seen: (string | null)[] = [];
+      const handle = nodeIo.watch(root, { recursive: true, poll: { intervalMs: 100 } }, f =>
+        seen.push(f)
+      );
+
+      fs.writeFileSync(vendored, 'v2-changed');
+      vi.advanceTimersByTime(100);
+
+      expect(seen).toEqual([]);
+
+      // the package's own files are still watched
+      fs.writeFileSync(path.join(root, 'index.js'), 'v2-changed');
+      vi.advanceTimersByTime(100);
+      handle.close();
+
+      expect(seen).toContain('index.js');
+    });
   });
 });

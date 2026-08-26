@@ -44,3 +44,42 @@ function lookupVersionInMap(key: string, versions: VersionMap): string | null {
   }
   return versions[key]!;
 }
+
+export function applyAutoRequiredOptions(
+  baseVersion: string,
+  opts?: { range?: 'exact' | '^' | '~' | 'minor' | 'patch'; version?: string }
+): string {
+  const explicit = opts?.version && opts.version !== 'auto' ? opts.version : undefined;
+  const raw = (explicit ?? baseVersion ?? '').trim();
+
+  if (!opts || !opts.range) return raw;
+
+  const requested = opts.range;
+
+  // Recognize a single-version token possibly prefixed by common chars: ^ ~ = v >= <=
+  // Examples matched: '^1.2.3', '1.2.3', 'v1.2.3', '~1.2.3', '>=1.2.3', '1', '1.2'
+  // Minor/patch segments are optional and default to '0'. Still anchored end-to-end so
+  // complex multi-comparator ranges (e.g. '>=1.0.0 <2.0.0') fall through unchanged.
+  const singleTokenMatch = raw.match(
+    /^(?:[~^<>=]*\s*)?v?(\d+)(?:\.(\d+))?(?:\.(\d+))?((?:[-+][\w.]+)?)$/
+  );
+  if (!singleTokenMatch) {
+    return raw;
+  }
+
+  const [, major, minor = '0', patch = '0', extra] = singleTokenMatch;
+  const bareVersion = `${major}.${minor}.${patch}${extra}`;
+
+  switch (requested) {
+    case 'exact':
+      return bareVersion;
+    case '^':
+    case 'minor':
+      return `^${bareVersion}`;
+    case '~':
+    case 'patch':
+      return `~${bareVersion}`;
+    default:
+      return raw;
+  }
+}

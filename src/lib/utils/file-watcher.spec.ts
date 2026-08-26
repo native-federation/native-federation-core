@@ -3,6 +3,8 @@ import * as path from 'path';
 import { createNfWatcherCore, syncNfFileWatcher } from './file-watcher.js';
 import { createMemoryIo } from './io/__test-helpers__/memory-io.js';
 import { logger } from './logger.js';
+import { toPosix } from './path-patterns.js';
+import type { NfFileWatcherOptions } from '../domain/utils/file-watcher.contract.js';
 
 // A fixed clock keeps the replay grace window (2000ms after a path's mtime)
 // deterministic; memory-io reports mtime 0 unless setMtime says otherwise, which
@@ -124,6 +126,32 @@ describe('createNfWatcherCore', () => {
       expect.objectContaining({ recursive: true, poll: { intervalMs: 250 } }),
       expect.any(Function)
     );
+  });
+
+  // The bundled poll is dependency-free but sweeps the tree; a host that already ships a
+  // real watcher (watchpack, @parcel/watcher) supplies it here instead.
+  it('uses an injected watch implementation in place of the io port', () => {
+    const dir = path.resolve('/proj/src');
+    const io = createMemoryIo().setDir(dir);
+    const ioWatch = vi.spyOn(io, 'watch');
+    const onChange = vi.fn();
+
+    const calls: string[] = [];
+    let emit: (f: string) => void = () => {};
+    const watch = vi.fn((p: string, _o: unknown, cb: (f: string | null) => void) => {
+      calls.push(p);
+      emit = cb;
+      return { close: () => {} };
+    }) as unknown as NonNullable<NfFileWatcherOptions['watch']>;
+
+    const watcher = createNfWatcherCore(io, { watch, onChange });
+    watcher.addPaths(dir, { poll: true });
+
+    expect(calls).toEqual([dir]);
+    expect(ioWatch).not.toHaveBeenCalled();
+
+    emit('a.js');
+    expect(onChange).toHaveBeenCalledWith(toPosix(path.join(dir, 'a.js')));
   });
 
   it('coalesces a burst of events into one delivery per path when debounced', () => {
