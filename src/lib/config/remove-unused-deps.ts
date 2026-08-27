@@ -15,9 +15,8 @@ export function removeUnusedDeps(
   config: NormalizedFederationConfig,
   ctx: MappingExpansionContext
 ): NormalizedFederationConfig {
-  // 'keepAll' is copied from a package onto every secondary entry point found for it, so it is
-  // read per package family rather than per key: an unreachable secondary of a reachable package
-  // survives -- that is the whole point -- but a package nothing reaches at all does not.
+  // share-utils copies 'keepAll' onto every secondary it finds, so it is read per family: an
+  // unreached secondary of a reached package survives, a family nothing reaches does not.
   const usedPackages = new Set([...usedDependencies.external].map(inferPackageFromSecondary));
 
   const filteredDependencies = Object.entries(config.shared)
@@ -34,9 +33,8 @@ export function removeUnusedDeps(
     config.skip
   );
 
-  // Invisible at build time: the build succeeds and remoteEntry.json is well-formed, just
-  // without the workspace libraries, surfacing as a runtime NG0201 far from the cause. Legitimate
-  // often enough to warn rather than throw.
+  // Legitimate often enough to warn rather than throw, but invisible otherwise: the build
+  // succeeds and only surfaces as a runtime NG0201, far from the cause.
   if (Object.keys(config.sharedMappings).length > 0 && Object.keys(sharedMappings).length === 0) {
     logger.warn(
       'No shared mapping is reachable from the entry points, so remoteEntry.json will ship ' +
@@ -51,7 +49,7 @@ export function removeUnusedDeps(
   };
 }
 
-/** Mappings that opted out of reachability pruning, wildcards expanded on disk. */
+// Mappings that opted out of reachability pruning, wildcards expanded on disk.
 function keptMappings(
   config: NormalizedFederationConfig,
   ctx: MappingExpansionContext
@@ -71,8 +69,7 @@ function keptMappings(
       continue;
     }
 
-    // A wildcard entry is a pattern, not an entry point: without expansion the bundler
-    // would be handed a path containing '*'. Only reachability can resolve it otherwise.
+    // A wildcard is a pattern, not an entry point: unexpanded, the bundler gets a path with '*'.
     if (!mappingConfig.resolveGlob) {
       logger.warn(
         `Mapping '${mappedImport}' opts out of pruning, but wildcard mappings need 'includeSecondaries: { resolveGlob: true }' to be expanded, and will be pruned.`
