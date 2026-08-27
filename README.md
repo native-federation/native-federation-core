@@ -377,7 +377,7 @@ shared: share({
 })
 ```
 
-`keepAll` is read per **package family**, not per entry point: every entry point of @angular/core is published as long as *something* still reaches @angular/core, but a package nothing imports at all is pruned anyway. That is what keeps the feature meaningful when `keepAll` is applied to every package at once — it exempts the secondaries from reachability, not the package itself. Use `ignoreUnusedDeps: false` to publish everything unconditionally.
+`keepAll` is read per **package family**, not per entry point: every entry point of @angular/core is published as long as *something* still reaches @angular/core, but a package nothing imports at all is pruned anyway. That is what keeps the feature meaningful when `keepAll` is applied to every package at once — it exempts the secondaries from reachability, not the package itself. For a package with no secondary entry points the family is the package itself, so the flag changes nothing there. Use `ignoreUnusedDeps: false` to publish everything unconditionally.
 
 Note that mapped paths read the same flag differently: there, `keepAll` opts the mapping out of reachability entirely (see [Keeping mappings that nothing imports](#keeping-mappings-that-nothing-imports)).
 
@@ -491,7 +491,7 @@ module.exports = withNativeFederation({
 });
 ```
 
-- `keepAll` keeps the mapping even when nothing imports it. The flag is spelled the same way as for a shared package — a bare `includeSecondaries: true` opts out too — but it is stronger here: a shared package still has to be reached by something for its secondaries to survive, whereas a mapping opts out of reachability altogether.
+- `keepAll` keeps the mapping even when nothing imports it, and on a mapping a bare `includeSecondaries: true` means the same thing — a mapping has no secondary entry points, so the flag can only mean "exempt from reachability". A shared package reads it differently: `true` is the default there and only means "share the secondaries", so `{ keepAll: true }` is the only spelling that affects pruning — and even then the package itself still has to be reached.
 - `resolveGlob` is additionally required for **wildcard** mappings. A wildcard is a pattern rather than an entry point, and normally only the reachability scan turns it into concrete files; `resolveGlob` expands it against the filesystem instead. Without it, a wildcard mapping is dropped with a warning.
 
 An expanded wildcard is named by the same rule the reachability scan uses, so `libs/ui/*` matching `libs/ui/button/index.ts` is shared as `@my-org/ui/button`.

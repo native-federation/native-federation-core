@@ -124,7 +124,7 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
     });
     logger.info('Removed unused dependencies.');
     logger.debug(
-      'This can be disabled per dependency/external using the "includeSecondaries: {keepAll: true}" property. Or in general by disabling the "ignoreUnusedDeps" feature. '
+      'A shared package always has to be reached by something: "includeSecondaries: {keepAll: true}" only exempts the secondaries of a package family that is still reached. On a sharedMappings entry the same flag opts the mapping out of reachability entirely. To publish everything unconditionally, disable the "ignoreUnusedDeps" feature. '
     );
   } else {
     config.sharedMappings = expandOrDropWildcards(config, {
