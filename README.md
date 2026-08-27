@@ -363,7 +363,7 @@ shared: share({
 })
 ```
 
-Finally, it's also possible to break out of the `ignoreUnusedDeps` feature for specific externals if desired, for example when sharing a whole suite of interconnected external dependencies like @angular/core. This can be handy when you want to avoid the chance of cross-version secondary entrypoints being used by the different micro frontends. E.g. mfe1 uses @angular/core v20.1.0 and mfe2 uses @angular/core/rxjs-interop v20.0.8, then you might want consistent use of v20.1.0 so rxjs-interop should be exported by mfe1. The `keepAll` prop allows you to enforce this:
+Finally, it's also possible to exempt the secondary entry points of a specific external from the `ignoreUnusedDeps` feature, for example when sharing a whole suite of interconnected external dependencies like @angular/core. This can be handy when you want to avoid the chance of cross-version secondary entrypoints being used by the different micro frontends. E.g. mfe1 uses @angular/core v20.1.0 and mfe2 uses @angular/core/rxjs-interop v20.0.8, then you might want consistent use of v20.1.0 so rxjs-interop should be exported by mfe1. The `keepAll` prop allows you to enforce this:
 
 ```typescript
 shared: share({
@@ -376,6 +376,10 @@ shared: share({
     [...]
 })
 ```
+
+`keepAll` is read per **package family**, not per entry point: every entry point of @angular/core is published as long as *something* still reaches @angular/core, but a package nothing imports at all is pruned anyway. That is what keeps the feature meaningful when `keepAll` is applied to every package at once — it exempts the secondaries from reachability, not the package itself. Use `ignoreUnusedDeps: false` to publish everything unconditionally.
+
+Note that mapped paths read the same flag differently: there, `keepAll` opts the mapping out of reachability entirely (see [Keeping mappings that nothing imports](#keeping-mappings-that-nothing-imports)).
 
 The API for configuring and using Native Federation is very similar to the one provided by our Module Federation plugin [@angular-architects/module-federation](https://www.npmjs.com/package/@angular-architects/module-federation). Hence, most of the articles on it are also valid for Native Federation.
 
@@ -487,7 +491,7 @@ module.exports = withNativeFederation({
 });
 ```
 
-- `keepAll` keeps the mapping even when nothing imports it. This is read exactly as it is for a shared package, so a bare `includeSecondaries: true` opts out too.
+- `keepAll` keeps the mapping even when nothing imports it. The flag is spelled the same way as for a shared package — a bare `includeSecondaries: true` opts out too — but it is stronger here: a shared package still has to be reached by something for its secondaries to survive, whereas a mapping opts out of reachability altogether.
 - `resolveGlob` is additionally required for **wildcard** mappings. A wildcard is a pattern rather than an entry point, and normally only the reachability scan turns it into concrete files; `resolveGlob` expands it against the filesystem instead. Without it, a wildcard mapping is dropped with a warning.
 
 An expanded wildcard is named by the same rule the reachability scan uses, so `libs/ui/*` matching `libs/ui/button/index.ts` is shared as `@my-org/ui/button`.

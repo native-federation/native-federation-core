@@ -7,6 +7,7 @@ import {
   isWildcardMapping,
   type MappingExpansionContext,
 } from './expand-mappings.js';
+import { inferPackageFromSecondary } from '../utils/normalize.js';
 import { logger } from '../utils/logger.js';
 
 export function removeUnusedDeps(
@@ -14,8 +15,17 @@ export function removeUnusedDeps(
   config: NormalizedFederationConfig,
   ctx: MappingExpansionContext
 ): NormalizedFederationConfig {
+  // 'keepAll' is copied from a package onto every secondary entry point found for it, so it is
+  // read per package family rather than per key: an unreachable secondary of a reachable package
+  // survives -- that is the whole point -- but a package nothing reaches at all does not.
+  const usedPackages = new Set([...usedDependencies.external].map(inferPackageFromSecondary));
+
   const filteredDependencies = Object.entries(config.shared)
-    .filter(([shared, meta]) => !!meta.includeSecondaries || usedDependencies.external.has(shared))
+    .filter(([shared, meta]) =>
+      meta.includeSecondaries
+        ? usedPackages.has(inferPackageFromSecondary(shared))
+        : usedDependencies.external.has(shared)
+    )
     .reduce((acc, [shared, meta]) => ({ ...acc, [shared]: meta }), {});
 
   // Both halves can contain wildcard-expanded imports, which the skip list has not seen yet.

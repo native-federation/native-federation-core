@@ -61,13 +61,62 @@ describe('removeUnusedDeps', () => {
     expect(Object.keys(result.shared)).toEqual(['keep']);
   });
 
-  it('always keeps deps flagged with includeSecondaries, even when unused', () => {
-    const used: UsedDependencies = { external: new Set(), internal: {} };
-    const config = makeConfig({ lib: external({ includeSecondaries: true }) });
+  // 'keepAll' is what puts includeSecondaries on the package AND on every secondary share-utils
+  // discovered for it, so the flag is read per package family.
+  describe('includeSecondaries (keepAll)', () => {
+    it('keeps an unreached secondary of a package that is reached', () => {
+      const used: UsedDependencies = { external: new Set(['@ng/core']), internal: {} };
+      const config = makeConfig({
+        '@ng/core': external({ includeSecondaries: true }),
+        '@ng/core/rxjs-interop': external({ includeSecondaries: true }),
+      });
 
-    const result = run(used, config);
+      const result = run(used, config);
 
-    expect(Object.keys(result.shared)).toEqual(['lib']);
+      expect(Object.keys(result.shared)).toEqual(['@ng/core', '@ng/core/rxjs-interop']);
+    });
+
+    it('keeps the package root when only a secondary is reached', () => {
+      const used: UsedDependencies = {
+        external: new Set(['@ng/core/rxjs-interop']),
+        internal: {},
+      };
+      const config = makeConfig({
+        '@ng/core': external({ includeSecondaries: true }),
+        '@ng/core/rxjs-interop': external({ includeSecondaries: true }),
+      });
+
+      const result = run(used, config);
+
+      expect(Object.keys(result.shared)).toEqual(['@ng/core', '@ng/core/rxjs-interop']);
+    });
+
+    // Without this, keepAll on every package turns ignoreUnusedDeps into a no-op.
+    it('drops a whole family that nothing reaches', () => {
+      const used: UsedDependencies = { external: new Set(['rxjs']), internal: {} };
+      const config = makeConfig({
+        rxjs: external({ includeSecondaries: true }),
+        '@ng/core': external({ includeSecondaries: true }),
+        '@ng/core/rxjs-interop': external({ includeSecondaries: true }),
+      });
+
+      const result = run(used, config);
+
+      expect(Object.keys(result.shared)).toEqual(['rxjs']);
+    });
+
+    it('reads unscoped package families the same way', () => {
+      const used: UsedDependencies = { external: new Set(['lodash/fp']), internal: {} };
+      const config = makeConfig({
+        lodash: external({ includeSecondaries: true }),
+        'lodash/fp': external({ includeSecondaries: true }),
+        moment: external({ includeSecondaries: true }),
+      });
+
+      const result = run(used, config);
+
+      expect(Object.keys(result.shared)).toEqual(['lodash', 'lodash/fp']);
+    });
   });
 
   it('preserves the meta object of retained dependencies', () => {
@@ -265,8 +314,10 @@ describe('removeUnusedDeps', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('@org/ui/*'));
   });
 
-  // Both halves read one normalized flag, so a mapping opts out exactly like a shared external.
-  it('reads the same includeSecondaries flag for mappings and shared externals', () => {
+  // The two halves read one normalized flag but act on it differently: a mapping opts out of
+  // reachability entirely (issue #100 -- a host advertises a catalog it does not import itself),
+  // while a shared external only opts its secondaries out of it.
+  it('keeps an unreached mapping but not an unreached shared external', () => {
     const used: UsedDependencies = { external: new Set(), internal: {} };
     const config = makeConfig(
       { lib: external({ includeSecondaries: true }) },
@@ -280,7 +331,7 @@ describe('removeUnusedDeps', () => {
 
     const result = run(used, config);
 
-    expect(Object.keys(result.shared)).toEqual(['lib']);
+    expect(Object.keys(result.shared)).toEqual([]);
     expect(result.sharedMappings).toEqual({ '/ws/libs/ui/index.ts': '@org/ui' });
   });
 
