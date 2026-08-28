@@ -7,6 +7,7 @@ import {
   isWildcardMapping,
   type MappingExpansionContext,
 } from './expand-mappings.js';
+import { inferPackageFromSecondary } from '../utils/normalize.js';
 import { logger } from '../utils/logger.js';
 
 export function removeUnusedDeps(
@@ -14,8 +15,16 @@ export function removeUnusedDeps(
   config: NormalizedFederationConfig,
   ctx: MappingExpansionContext
 ): NormalizedFederationConfig {
+  // share-utils copies 'keepAll' onto every secondary it finds, so it is read per family: an
+  // unreached secondary of a reached package survives, a family nothing reaches does not.
+  const usedPackages = new Set([...usedDependencies.external].map(inferPackageFromSecondary));
+
   const filteredDependencies = Object.entries(config.shared)
-    .filter(([shared, meta]) => !!meta.includeSecondaries || usedDependencies.external.has(shared))
+    .filter(([shared, meta]) =>
+      meta.includeSecondaries
+        ? usedPackages.has(inferPackageFromSecondary(shared))
+        : usedDependencies.external.has(shared)
+    )
     .reduce((acc, [shared, meta]) => ({ ...acc, [shared]: meta }), {});
 
   // Both halves can contain wildcard-expanded imports, which the skip list has not seen yet.
@@ -24,9 +33,8 @@ export function removeUnusedDeps(
     config.skip
   );
 
-  // Invisible at build time: the build succeeds and remoteEntry.json is well-formed, just
-  // without the workspace libraries, surfacing as a runtime NG0201 far from the cause. Legitimate
-  // often enough to warn rather than throw.
+  // Legitimate often enough to warn rather than throw, but invisible otherwise: the build
+  // succeeds and only surfaces as a runtime NG0201, far from the cause.
   if (Object.keys(config.sharedMappings).length > 0 && Object.keys(sharedMappings).length === 0) {
     logger.warn(
       'No shared mapping is reachable from the entry points, so remoteEntry.json will ship ' +
@@ -41,7 +49,7 @@ export function removeUnusedDeps(
   };
 }
 
-/** Mappings that opted out of reachability pruning, wildcards expanded on disk. */
+// Mappings that opted out of reachability pruning, wildcards expanded on disk.
 function keptMappings(
   config: NormalizedFederationConfig,
   ctx: MappingExpansionContext
@@ -61,8 +69,7 @@ function keptMappings(
       continue;
     }
 
-    // A wildcard entry is a pattern, not an entry point: without expansion the bundler
-    // would be handed a path containing '*'. Only reachability can resolve it otherwise.
+    // A wildcard is a pattern, not an entry point: unexpanded, the bundler gets a path with '*'.
     if (!mappingConfig.resolveGlob) {
       logger.warn(
         `Mapping '${mappedImport}' opts out of pruning, but wildcard mappings need 'includeSecondaries: { resolveGlob: true }' to be expanded, and will be pruned.`

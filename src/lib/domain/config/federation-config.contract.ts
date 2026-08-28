@@ -19,9 +19,9 @@ export type SharedMappingConfigs = Record<string, ExternalConfig>;
  * have nothing to select. `requiredVersion` and `version` stay optional because their
  * defaults are read from the mapped lib's package.json at build time.
  *
- * `includeSecondaries` collapses to a boolean exactly as it does for a shared external:
- * it means "exempt from `ignoreUnusedDeps` pruning". `resolveGlob` is lifted out of it
- * because a mapping has no secondary entry points for it to apply to.
+ * `includeSecondaries` collapses to a boolean meaning "exempt from `ignoreUnusedDeps`
+ * pruning" — stronger than on a shared external, where it only exempts the secondaries.
+ * `resolveGlob` is lifted out of it because a mapping has no secondaries to apply it to.
  */
 export interface NormalizedMappingConfig {
   singleton: boolean;

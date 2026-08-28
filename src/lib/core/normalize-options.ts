@@ -124,7 +124,7 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
     });
     logger.info('Removed unused dependencies.');
     logger.debug(
-      'This can be disabled per dependency/external using the "includeSecondaries: {keepAll: true}" property. Or in general by disabling the "ignoreUnusedDeps" feature. '
+      'Keep everything with "ignoreUnusedDeps: false", or one mapping with "includeSecondaries: {keepAll: true}". On a shared package that flag only keeps the secondaries of a package something still imports.'
     );
   } else {
     config.sharedMappings = expandOrDropWildcards(config, {
