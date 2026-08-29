@@ -3,6 +3,7 @@ import type { SharedInfo, DenseSharedInfo } from '../../domain/core/federation-i
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
 import { prepareSkipList } from '../../config/default-skip-list.js';
+import type * as sharedDirs from './resolve-shared-dirs.js';
 
 // Isolate the assembly logic in buildForFederation: no real FS writes, no build adapter.
 vi.mock('../output/write-federation-info.js', () => ({ writeFederationInfo: vi.fn() }));
@@ -11,7 +12,13 @@ vi.mock('./bundle-exposed-and-mappings.js', () => ({
   bundleExposedAndMappings: vi.fn(async () => ({ mappings: [], exposes: [] })),
 }));
 
+vi.mock('./resolve-shared-dirs.js', async importActual => ({
+  ...(await importActual<typeof sharedDirs>()),
+  hintUnwatchedLinkedDeps: vi.fn(),
+}));
+
 const { buildForFederation } = await import('./build-for-federation.js');
+const { hintUnwatchedLinkedDeps } = await import('./resolve-shared-dirs.js');
 const { writeImportMap } = await import('../output/write-import-map.js');
 
 function flat(
@@ -162,5 +169,22 @@ describe('buildForFederation — build notification endpoint', () => {
 
   it('withholds the endpoint when notifications are unconfigured', async () => {
     expect(await buildWith({ dev: true })).toBeUndefined();
+  });
+});
+
+// Adapters call buildForFederation and nothing else to start a session, so the hint has to
+// be triggered here: an adapter that predates the option still gets the message, and none
+// has to opt in. rebuildForFederation is a separate entry point and does not repeat it.
+describe('buildForFederation — unwatched linked deps hint', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('hints once per build, with the config and options it was given', async () => {
+    const config = makeConfig(false);
+    const fedOptions = makeFedOptions(seededExternals(), { watch: true });
+
+    await buildForFederation(config, fedOptions, []);
+
+    expect(hintUnwatchedLinkedDeps).toHaveBeenCalledTimes(1);
+    expect(hintUnwatchedLinkedDeps).toHaveBeenCalledWith(config, fedOptions);
   });
 });
