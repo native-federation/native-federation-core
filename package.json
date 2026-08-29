@@ -1,6 +1,6 @@
 {
   "name": "@softarc/native-federation",
-  "version": "4.5.0-next.1",
+  "version": "4.5.0",
   "type": "module",
   "license": "MIT",
   "packageManager": "pnpm@11.18.0",
@@ -26,7 +26,7 @@
     "eslint": "^10.4.1",
     "globals": "^17.3.0",
     "jiti": "^2.6.1",
-    "jsdom": "^29.0.0",
+    "jsdom": "^30.0.0",
     "knip": "^6.26.0",
     "prettier": "^3.9.4",
     "tslib": "^2.3.0",

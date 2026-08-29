@@ -377,7 +377,7 @@ shared: share({
 })
 ```
 
-`keepAll` is read per **package family**, not per entry point: every entry point of @angular/core is published as long as *something* still reaches @angular/core, but a package nothing imports at all is pruned anyway. That is what keeps the feature meaningful when `keepAll` is applied to every package at once — it exempts the secondaries from reachability, not the package itself. For a package with no secondary entry points the family is the package itself, so the flag changes nothing there. Use `ignoreUnusedDeps: false` to publish everything unconditionally.
+`keepAll` is read per **package family**, not per entry point: every entry point of @angular/core is published as long as _something_ still reaches @angular/core, but a package nothing imports at all is pruned anyway. That is what keeps the feature meaningful when `keepAll` is applied to every package at once — it exempts the secondaries from reachability, not the package itself. For a package with no secondary entry points the family is the package itself, so the flag changes nothing there. Use `ignoreUnusedDeps: false` to publish everything unconditionally.
 
 Note that mapped paths read the same flag differently: there, `keepAll` opts the mapping out of reachability entirely (see [Keeping mappings that nothing imports](#keeping-mappings-that-nothing-imports)).
 
@@ -500,7 +500,7 @@ Expansion only accepts **entry points**. A glob cannot tell a library's public s
 
 That restriction is not cosmetic: **only barrel imports can be shared as a mapped path.** A mapped path is advertised under its import specifier and marked external, so the specifier has to be one a browser import map can resolve, and a dot in the last segment does not resolve (see [vitejs/vite#21036](https://github.com/vitejs/vite/issues/21036)).
 
-So the rule is simply *would this end up in `remoteEntry.json`?* If it would, a non-barrel specifier fails the build:
+So the rule is simply _would this end up in `remoteEntry.json`?_ If it would, a non-barrel specifier fails the build:
 
 ```
 Invalid 'shared mappings' config. Only barrel imports can be shared as a sharedMapping:
@@ -697,7 +697,7 @@ For a zero-build integration, declare your remotes in a manifest and include the
 </script>
 
 <!-- Include the orchestrator -->
-<script src="https://unpkg.com/@softarc/native-federation-orchestrator@4.5.1/quickstart.mjs"></script>
+<script src="https://unpkg.com/@softarc/native-federation-orchestrator@4.6.0/quickstart.mjs"></script>
 ```
 
 The `mfe-loader-available` event signals that the orchestrator has fetched the
