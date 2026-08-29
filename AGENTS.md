@@ -166,7 +166,10 @@ server serving stale bundles until restart (angular-adapter#94). `linkedDirs` (f
 `linkedSharedDirs`) are polled rather than natively watched, because ng-packagr's atomic
 dist rewrites change the inode and defeat `fs.watch`. `linkedSharedDirs` returns `[]`
 unless the `watchLinkedDeps` option is on, so npm-linked shared deps are **not** watched by
-default.
+default. Because a linked lib that never reloads is indistinguishable from a broken one,
+`buildForFederation` names what the default is skipping (`hintUnwatchedLinkedDeps`, gated on
+`watch` and `watchLinkedDeps`). That lives in core rather than in each adapter so the message
+arrives without an adapter change; `rebuildForFederation` does not repeat it.
 
 The content signal is a separate mechanism and is **not** gated: `linkedContentSignals`
 walks a linked checkout on every build so an edit under a fixed version still invalidates

@@ -4,7 +4,11 @@ import type { NormalizedFederationOptions } from '../../domain/core/federation-o
 import type { FileReaderPort, StatInfo } from '../../domain/utils/io-port.contract.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
-import { sharedPackageJsonRepository } from '../../utils/package/package-info.js';
+import { logger } from '../../utils/logger.js';
+import {
+  getPkgFolder,
+  sharedPackageJsonRepository,
+} from '../../utils/io/package-json-repository.js';
 import { isOutsideNodeModules, isUnderDir, toPosix } from '../../utils/path-patterns.js';
 
 interface SharedEntry {
@@ -62,6 +66,40 @@ export function linkedSharedDirs(
   if (!fedOptions.watchLinkedDeps) return [];
   const entries = resolveEntries(Object.keys(config.shared), folderOf(fedOptions), io, repo);
   return [...new Set(entries.filter(e => e.isLinkedCheckout).map(e => e.realDir))];
+}
+
+/** Names the npm-linked shared packages a watching build leaves unwatched -- see
+ *  AGENTS.md "What to watch". Advisory only, so a resolution failure must not fail the build. */
+export function hintUnwatchedLinkedDeps(
+  config: NormalizedFederationConfig,
+  fedOptions: NormalizedFederationOptions,
+  io: FileReaderPort = nodeIo,
+  repo: PackageJsonRepository = sharedPackageJsonRepository
+): void {
+  if (!fedOptions.watch || fedOptions.watchLinkedDeps) return;
+
+  try {
+    const names = new Map<string, string>();
+    for (const entry of resolveEntries(
+      Object.keys(config.shared),
+      folderOf(fedOptions),
+      io,
+      repo
+    )) {
+      // Secondaries resolve to the package dir their main entry does, so name it once.
+      if (entry.isLinkedCheckout && !names.has(entry.realDir)) {
+        names.set(entry.realDir, getPkgFolder(entry.key));
+      }
+    }
+    if (names.size === 0) return;
+
+    logger.notice(
+      `Detected npm-linked shared packages: ${[...names.values()].join(', ')}. ` +
+        `Set 'watchLinkedDeps' to true to rebuild when they change.`
+    );
+  } catch {
+    /* advisory only */
+  }
 }
 
 /**

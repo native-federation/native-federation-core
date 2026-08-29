@@ -9,6 +9,7 @@ import { AbortedError } from '../../utils/errors.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import { addExternalsToCache } from '../cache/federation-cache.js';
 import { planSharedBundles, type SharedBundlePlan } from './shared-bundle-plan.js';
+import { hintUnwatchedLinkedDeps } from './resolve-shared-dirs.js';
 
 export async function buildForFederation(
   config: NormalizedFederationConfig,
@@ -19,6 +20,7 @@ export async function buildForFederation(
   // 1. Setup
   logger.info('Building federation artifacts');
   logger.notice("Skip packages you don't want to share in your federation config");
+  hintUnwatchedLinkedDeps(config, fedOptions);
 
   // 2. Externals
   await executeSharedBundlePlans(planSharedBundles(config, externals), config, fedOptions, signal);

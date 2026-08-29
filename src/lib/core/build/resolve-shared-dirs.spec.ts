@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   affectedSharedKeys,
+  hintUnwatchedLinkedDeps,
   linkedContentSignals,
   linkedSharedDirs,
   resolveSharedPackageDirs,
@@ -10,6 +11,7 @@ import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
+import { logger } from '../../utils/logger.js';
 
 describe('affectedSharedKeys', () => {
   const dirs = new Map([
@@ -158,9 +160,7 @@ describe('linkedSharedDirs', () => {
     );
     const repo = repoReturning({ 'my-lib': '/ws/node_modules/my-lib/package.json' });
 
-    expect(linkedSharedDirs(cfg, opts, io, repo)).toEqual([
-      '/dev/node_modules_backup/my-lib/dist',
-    ]);
+    expect(linkedSharedDirs(cfg, opts, io, repo)).toEqual(['/dev/node_modules_backup/my-lib/dist']);
   });
 
   // `npm link` installs two hops; realpath collapses both to the checkout, which carries
@@ -174,6 +174,124 @@ describe('linkedSharedDirs', () => {
     const repo = repoReturning({ 'my-lib': '/ws/node_modules/my-lib/package.json' });
 
     expect(linkedSharedDirs(cfg, opts, io, repo)).toEqual(['/dev/mylib-checkout/dist']);
+  });
+});
+
+describe('hintUnwatchedLinkedDeps', () => {
+  const notice = vi.spyOn(logger, 'notice').mockImplementation(() => undefined);
+  afterEach(() => notice.mockClear());
+
+  const cfg = (shared: Record<string, unknown>) =>
+    ({ shared }) as unknown as NormalizedFederationConfig;
+  const watching = { workspaceRoot: '/ws', watch: true } as NormalizedFederationOptions;
+
+  function repoReturning(map: Record<string, string | null>): PackageJsonRepository {
+    return {
+      findDepPackageJson: (name: string) => map[name] ?? null,
+      getPackageJsonFiles: () => [],
+      readJson: () => ({}),
+      exists: () => true,
+    };
+  }
+
+  const linkedIo = () => createMemoryIo().setSymlink('/ws/node_modules/@scope/lib', '/dev/lib');
+  const linkedRepo = () =>
+    repoReturning({ '@scope/lib': '/ws/node_modules/@scope/lib/package.json' });
+
+  it('names the linked package the watch is skipping', () => {
+    hintUnwatchedLinkedDeps(cfg({ '@scope/lib': {} }), watching, linkedIo(), linkedRepo());
+
+    expect(notice).toHaveBeenCalledTimes(1);
+    const message = String(notice.mock.calls[0]![0]);
+    expect(message).toContain('@scope/lib');
+    expect(message).toContain('watchLinkedDeps');
+  });
+
+  // Only the package is linked, so naming the raw key would point at a path that is not
+  // the thing the user linked.
+  it('names the package, not the secondary entry point that is shared', () => {
+    hintUnwatchedLinkedDeps(
+      cfg({ '@scope/lib/sub': {} }),
+      watching,
+      linkedIo(),
+      repoReturning({ '@scope/lib/sub': '/ws/node_modules/@scope/lib/package.json' })
+    );
+
+    expect(String(notice.mock.calls[0]![0])).toContain('packages: @scope/lib.');
+  });
+
+  // Secondaries resolve to their main package's dir, so they must not each add a name.
+  it('names a package once however many entry points share it', () => {
+    hintUnwatchedLinkedDeps(
+      cfg({ '@scope/lib': {}, '@scope/lib/sub': {} }),
+      watching,
+      linkedIo(),
+      repoReturning({
+        '@scope/lib': '/ws/node_modules/@scope/lib/package.json',
+        '@scope/lib/sub': '/ws/node_modules/@scope/lib/package.json',
+      })
+    );
+
+    expect(String(notice.mock.calls[0]![0])).toContain('packages: @scope/lib.');
+  });
+
+  it('stays quiet when the option is already on', () => {
+    hintUnwatchedLinkedDeps(
+      cfg({ '@scope/lib': {} }),
+      { ...watching, watchLinkedDeps: true },
+      linkedIo(),
+      linkedRepo()
+    );
+
+    expect(notice).not.toHaveBeenCalled();
+  });
+
+  // A one-off build reloads nothing either way, so the option would change nothing.
+  it('stays quiet when the build is not watching', () => {
+    hintUnwatchedLinkedDeps(
+      cfg({ '@scope/lib': {} }),
+      { workspaceRoot: '/ws' } as NormalizedFederationOptions,
+      linkedIo(),
+      linkedRepo()
+    );
+
+    expect(notice).not.toHaveBeenCalled();
+  });
+
+  // The #130 shape: pnpm symlinks the whole graph, and none of it is a dev checkout.
+  it('stays quiet for a symlink that resolves inside node_modules', () => {
+    hintUnwatchedLinkedDeps(
+      cfg({ rxjs: {} }),
+      watching,
+      createMemoryIo().setSymlink(
+        '/ws/node_modules/rxjs',
+        '/ws/node_modules/.pnpm/rxjs@7.8.1/node_modules/rxjs'
+      ),
+      repoReturning({ rxjs: '/ws/node_modules/rxjs/package.json' })
+    );
+
+    expect(notice).not.toHaveBeenCalled();
+  });
+
+  it('stays quiet when nothing is linked', () => {
+    hintUnwatchedLinkedDeps(cfg({ rxjs: {} }), watching, createMemoryIo(), repoReturning({}));
+
+    expect(notice).not.toHaveBeenCalled();
+  });
+
+  // The hint is advisory: a repo that cannot resolve must not take the build down with it.
+  it('swallows a resolution failure instead of failing the build', () => {
+    const throwing = {
+      ...repoReturning({}),
+      findDepPackageJson: () => {
+        throw new Error('unresolvable');
+      },
+    } as PackageJsonRepository;
+
+    expect(() =>
+      hintUnwatchedLinkedDeps(cfg({ '@scope/lib': {} }), watching, linkedIo(), throwing)
+    ).not.toThrow();
+    expect(notice).not.toHaveBeenCalled();
   });
 });
 
