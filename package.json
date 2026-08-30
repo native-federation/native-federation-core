@@ -18,6 +18,9 @@
     "fast-glob": "^3.3.3",
     "json5": "^2.2.3"
   },
+  "peerDependencies": {
+    "typescript": ">=5.0.0"
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "~24.13.0",
