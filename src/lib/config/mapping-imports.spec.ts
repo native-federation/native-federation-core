@@ -60,6 +60,38 @@ describe('mappingExportNames', () => {
     expect(names(io, f('a.ts'))).toEqual(['default']);
   });
 
+  it('reports `export default` applied to an expression rather than a declaration', () => {
+    const io = createMemoryIo().setFile(f('a.ts'), `const a = 1; export default a;`);
+    expect(names(io, f('a.ts'))).toEqual(['default']);
+  });
+
+  // ES `export *` re-exports every name except `default`, so counting one here would claim a
+  // binding the entry point does not have.
+  it('does not carry a default export through `export *`', () => {
+    const io = createMemoryIo()
+      .setFile(f('index.ts'), `export * from './badge';`)
+      .setFile(f('badge.ts'), `export default class Badge {}`);
+    expect(names(io, f('index.ts'))).toEqual([]);
+  });
+
+  it('names every binding of a destructured export', () => {
+    const io = createMemoryIo().setFile(
+      f('a.ts'),
+      `export const { a, b: renamed } = obj;
+       export const [c] = arr;`
+    );
+    expect(names(io, f('a.ts'))).toEqual(['a', 'c', 'renamed']);
+  });
+
+  it('names an `export import` alias', () => {
+    const io = createMemoryIo().setFile(
+      f('a.ts'),
+      `import * as ns from './ns';
+       export import Alias = ns.Thing;`
+    );
+    expect(names(io, f('a.ts'))).toEqual(['Alias']);
+  });
+
   it('resolves a re-export to a directory index file', () => {
     const io = createMemoryIo()
       .setFile(f('index.ts'), `export * from './feature';`)
@@ -127,6 +159,51 @@ describe('createMappingImportResolver', () => {
       .setFile(f('libs/ui/src/pair.ts'), `export class A {} export class B {}`);
     const resolve = createMappingImportResolver(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/pair'), APP)).toBeNull();
+  });
+
+  // The subset test is `target names ⊆ entry point names`, so a target name this walk fails to
+  // see makes the test pass where it should have failed -- the one direction that produces a
+  // rewrite onto a specifier the chunk does not export. Each of these declines for that reason.
+  it('declines when the target re-exports a bare specifier it cannot enumerate', () => {
+    const io = createMemoryIo()
+      .setFile(f('libs/ui/src/index.ts'), `export { Own } from './re';`)
+      .setFile(f('libs/ui/src/re.ts'), `export * from '@angular/core'; export class Own {}`);
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/re'), APP)).toBeNull();
+  });
+
+  it('declines when the barrel omits a destructured export of the target', () => {
+    const io = createMemoryIo()
+      .setFile(f('libs/ui/src/index.ts'), `export { A } from './pair';`)
+      .setFile(f('libs/ui/src/pair.ts'), `export const { a, b } = obj; export class A {}`);
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/pair'), APP)).toBeNull();
+  });
+
+  it('declines a target using `export =`, which has no name a namespace access could use', () => {
+    const io = lib(`export * from './ui.module';`).setFile(
+      f('libs/ui/src/legacy.ts'),
+      `class Legacy {} export = Legacy;`
+    );
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/legacy'), APP)).toBeNull();
+  });
+
+  it('declines a target on a re-export cycle, whose full surface is unknown', () => {
+    const io = createMemoryIo()
+      .setFile(f('libs/ui/src/index.ts'), `export * from './a'; export * from './b';`)
+      .setFile(f('libs/ui/src/a.ts'), `export * from './b'; export class A {}`)
+      .setFile(f('libs/ui/src/b.ts'), `export * from './a'; export class B {}`);
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/a'), APP)).toBeNull();
+  });
+
+  it('declines a default-only target, which the barrel’s `export *` does not republish', () => {
+    const io = createMemoryIo()
+      .setFile(f('libs/ui/src/index.ts'), `export * from './badge.component';`)
+      .setFile(f('libs/ui/src/badge.component.ts'), `export default class Badge {}`);
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/badge.component'), APP)).toBeNull();
   });
 
   it('rewrites the barrel itself when reached by a relative path', () => {
