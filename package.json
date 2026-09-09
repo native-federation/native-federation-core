@@ -3,7 +3,7 @@
   "version": "4.5.0",
   "type": "module",
   "license": "MIT",
-  "packageManager": "pnpm@11.18.0",
+  "packageManager": "pnpm@11.25.0",
   "scripts": {
     "build": "node esbuild.config.mjs && tsc -p tsconfig.build.json",
     "lint": "eslint src",
