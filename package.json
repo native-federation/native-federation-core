@@ -30,7 +30,7 @@
     "knip": "^6.34.0",
     "prettier": "^3.9.4",
     "tslib": "^2.3.0",
-    "typescript": "~6.0.0",
+    "typescript": "~7.0.0",
     "typescript-eslint": "^8.68.0",
     "vite": "^8.2.0",
     "vitest": "^4.0.0"
