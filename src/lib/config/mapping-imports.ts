@@ -7,15 +7,24 @@ import { isUnderDir } from '../utils/path-patterns.js';
 
 const RESOLVE_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs'];
 
-/** Wider than `get-external-imports.ts`'s copy, which predates the tsx/mts cases. */
+/**
+ * Wider than `get-external-imports.ts`'s copy, which predates the tsx/mts cases, but the same
+ * order: every file extension before a directory index, as node and tsc resolve. Interleaving
+ * the two would pick `thing/index.ts` over `thing.js` and read the surface off a file the
+ * bundler is not going to resolve.
+ */
 function resolveModuleFile(io: FileReaderPort, candidate: string): string | null {
   if (io.isFile(candidate)) return candidate;
 
   for (const ext of RESOLVE_EXTENSIONS) {
     if (io.isFile(candidate + ext)) return candidate + ext;
+  }
 
-    const index = path.join(candidate, 'index' + ext);
-    if (io.isFile(index)) return index;
+  if (io.isDirectory(candidate)) {
+    for (const ext of RESOLVE_EXTENSIONS) {
+      const index = path.join(candidate, 'index' + ext);
+      if (io.isFile(index)) return index;
+    }
   }
 
   return null;
@@ -198,19 +207,25 @@ export function createMappingImportResolver(
   sharedMappings: PathToImport,
   io: FileReaderPort = nodeIo
 ): MappingImportResolver {
-  // Longest first, so a `resolveGlob`-expanded secondary wins over the barrel above it.
-  const mappings = Object.entries(sharedMappings)
-    .map(([entryPoint, importName]) => ({ dir: path.dirname(entryPoint), entryPoint, importName }))
-    .sort((a, b) => b.dir.length - a.dir.length);
-
   const exportsOf = createExportWalker(io);
 
-  return (importedFile, importerFile) => {
-    const mapping = mappings.find(m => isUnderDir(importedFile, m.dir));
-    if (!mapping) return null;
+  // A key may name a directory rather than a barrel file (tsconfig `"@myorg/ui": ["libs/ui/src"]`,
+  // which `matchMapping` supports through `isIndexOf`), so it is resolved the same way an import
+  // is -- `path.dirname` of the raw key would sit a level too high and read the surface off a
+  // directory. Longest dir first, so a `resolveGlob`-expanded secondary wins over the barrel
+  // above it.
+  const mappings = Object.entries(sharedMappings)
+    .flatMap(([key, importName]) => {
+      const entryPoint = resolveModuleFile(io, key);
+      return entryPoint ? [{ dir: path.dirname(entryPoint), entryPoint, importName }] : [];
+    })
+    .sort((a, b) => b.dir.length - a.dir.length);
 
-    // A mapped lib reaching into itself stays internal, or its bundle would import itself.
-    if (isUnderDir(importerFile, mapping.dir)) return null;
+  return (importedFile, importerFile) => {
+    // String work before any I/O: this hook sees every relative import in the build, and most
+    // land nowhere near a mapping.
+    const containing = mappings.filter(m => isUnderDir(importedFile, m.dir));
+    if (containing.length === 0) return null;
 
     const target = resolveModuleFile(io, importedFile);
     if (!target) return null;
@@ -222,13 +237,25 @@ export function createMappingImportResolver(
     const reachable = exportsOf(target);
     if (!reachable.complete || reachable.names.size === 0) return null;
 
-    // Only the target's completeness is checked: a gap in the entry point's surface can just
-    // fail the test below, which is already the outcome this declines to.
-    const surface = exportsOf(mapping.entryPoint);
-    for (const name of reachable.names) {
-      if (!surface.names.has(name)) return null;
+    // An entry point hit exactly is the most precise answer and agrees with `matchMapping`.
+    // Failing that, the innermost mapping that really republishes the target wins: a barrel and
+    // a deep entry point can share one directory, and declaration order says nothing about
+    // which of them publishes the file.
+    const ordered = [
+      ...containing.filter(m => m.entryPoint === target),
+      ...containing.filter(m => m.entryPoint !== target),
+    ];
+
+    for (const mapping of ordered) {
+      // A mapped lib reaching into itself stays internal, or its bundle would import itself.
+      if (isUnderDir(importerFile, mapping.dir)) continue;
+
+      // Only the target's completeness is checked: a gap in an entry point's surface can just
+      // fail this test, which is already the outcome it would decline to.
+      const surface = exportsOf(mapping.entryPoint);
+      if ([...reachable.names].every(name => surface.names.has(name))) return mapping.importName;
     }
 
-    return mapping.importName;
+    return null;
   };
 }

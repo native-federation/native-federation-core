@@ -92,6 +92,15 @@ describe('mappingExportNames', () => {
     expect(names(io, f('a.ts'))).toEqual(['Alias']);
   });
 
+  // Both node and tsc exhaust the file extensions before falling back to a directory index.
+  it('resolves a re-export to a sibling file before a directory index of the same name', () => {
+    const io = createMemoryIo()
+      .setFile(f('index.ts'), `export * from './thing';`)
+      .setFile(f('thing.js'), `export class FromFile {}`)
+      .setFile(f('thing/index.ts'), `export class FromDir {}`);
+    expect(names(io, f('index.ts'))).toEqual(['FromFile']);
+  });
+
   it('resolves a re-export to a directory index file', () => {
     const io = createMemoryIo()
       .setFile(f('index.ts'), `export * from './feature';`)
@@ -264,5 +273,77 @@ describe('createMappingImportResolver', () => {
     const io = lib(`export * from './badge.component';`);
     const resolve = createMappingImportResolver(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/nope'), APP)).toBeNull();
+  });
+
+  it('validates the file the bundler will resolve, not a directory index beside it', () => {
+    const io = createMemoryIo()
+      .setFile(f('libs/ui/src/index.ts'), `export { FromFile } from './thing.js';`)
+      .setFile(f('libs/ui/src/thing.js'), `export class FromFile {}`)
+      .setFile(f('libs/ui/src/thing/index.ts'), `export class FromDir {}`);
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/thing'), APP)).toBe('@myorg/ui');
+  });
+
+  // tsconfig `"@myorg/ui": ["libs/ui/src"]`, which `matchMapping` accepts via `isIndexOf`.
+  describe('a mapping key naming a directory rather than a barrel file', () => {
+    const DIR_MAPPINGS = { [f('libs/ui/src')]: '@myorg/ui' };
+
+    it('behaves like the equivalent file-form key', () => {
+      const io = lib(`export * from './ui.module'; export * from './badge.component';`);
+      const resolve = createMappingImportResolver(DIR_MAPPINGS, io);
+      expect(resolve(f('libs/ui/src/badge.component'), APP)).toBe('@myorg/ui');
+    });
+
+    it('does not reach up into the parent directory', () => {
+      const io = lib(`export * from './badge.component';`).setFile(
+        f('libs/ui/test-setup.ts'),
+        `export class Setup {}`
+      );
+      const resolve = createMappingImportResolver(DIR_MAPPINGS, io);
+      expect(resolve(f('libs/ui/test-setup'), APP)).toBeNull();
+    });
+  });
+
+  it('ignores a mapping whose entry point does not resolve', () => {
+    const io = lib(`export * from './badge.component';`);
+    const resolve = createMappingImportResolver({ [f('libs/ui/src/missing.ts')]: '@myorg/ui' }, io);
+    expect(resolve(f('libs/ui/src/badge.component'), APP)).toBeNull();
+  });
+
+  // A barrel and a hand-written deep entry point share a directory, so the longest-dir sort
+  // cannot separate them and declaration order carries no meaning.
+  describe('two mappings sharing one directory', () => {
+    const io = () =>
+      createMemoryIo()
+        .setFile(
+          f('libs/ui/src/index.ts'),
+          `export * from './badge.component'; export * from './models';`
+        )
+        .setFile(f('libs/ui/src/models.ts'), `export class Model {}`)
+        .setFile(f('libs/ui/src/badge.component.ts'), `export class BadgeComponent {}`);
+
+    it('validates a deep import against the entry point that publishes it', () => {
+      // Deep entry first, so declaration order alone would pick the one that declines.
+      const resolve = createMappingImportResolver(
+        {
+          [f('libs/ui/src/models.ts')]: '@myorg/ui/models',
+          [f('libs/ui/src/index.ts')]: '@myorg/ui',
+        },
+        io()
+      );
+      expect(resolve(f('libs/ui/src/badge.component'), APP)).toBe('@myorg/ui');
+    });
+
+    it('attributes an entry point to its own specifier, not the barrel republishing it', () => {
+      // Barrel first, and it does republish `Model`, so only an exact hit gets this right.
+      const resolve = createMappingImportResolver(
+        {
+          [f('libs/ui/src/index.ts')]: '@myorg/ui',
+          [f('libs/ui/src/models.ts')]: '@myorg/ui/models',
+        },
+        io()
+      );
+      expect(resolve(f('libs/ui/src/models'), APP)).toBe('@myorg/ui/models');
+    });
   });
 });
