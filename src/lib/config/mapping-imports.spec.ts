@@ -1,0 +1,349 @@
+import { describe, expect, it } from 'vitest';
+import * as path from 'path';
+import { createMappingImportResolver, mappingExportNames } from './mapping-imports.js';
+import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
+
+const ROOT = path.resolve('/proj');
+const f = (rel: string) => path.join(ROOT, rel);
+
+const names = (io: ReturnType<typeof createMemoryIo>, file: string) =>
+  [...mappingExportNames(file, io)].sort();
+
+describe('mappingExportNames', () => {
+  it('collects value declarations carrying an export modifier', () => {
+    const io = createMemoryIo().setFile(
+      f('a.ts'),
+      `export class A {}
+       export function b() {}
+       export const c = 1;
+       export enum D {}
+       class Hidden {}`
+    );
+    expect(names(io, f('a.ts'))).toEqual(['A', 'D', 'b', 'c']);
+  });
+
+  it('skips types, which are erased and would resolve to undefined after a rewrite', () => {
+    const io = createMemoryIo().setFile(
+      f('a.ts'),
+      `export interface Props {}
+       export type Alias = string;
+       export type { Gone } from './other';
+       export { type AlsoGone, Kept } from './other';`
+    );
+    expect(names(io, f('a.ts'))).toEqual(['Kept']);
+  });
+
+  it('follows `export * from` transitively', () => {
+    const io = createMemoryIo()
+      .setFile(f('index.ts'), `export * from './mod';`)
+      .setFile(f('mod.ts'), `export * from './leaf'; export class Mod {}`)
+      .setFile(f('leaf.ts'), `export class Leaf {}`);
+    expect(names(io, f('index.ts'))).toEqual(['Leaf', 'Mod']);
+  });
+
+  it('records the local name of a renaming re-export, not the original', () => {
+    const io = createMemoryIo()
+      .setFile(f('index.ts'), `export { Badge as PublicBadge } from './badge';`)
+      .setFile(f('badge.ts'), `export class Badge {}`);
+    expect(names(io, f('index.ts'))).toEqual(['PublicBadge']);
+  });
+
+  it('names a namespace re-export once and does not inline its contents', () => {
+    const io = createMemoryIo()
+      .setFile(f('index.ts'), `export * as utils from './utils';`)
+      .setFile(f('utils.ts'), `export const helper = 1;`);
+    expect(names(io, f('index.ts'))).toEqual(['utils']);
+  });
+
+  it('reports a default export under the name a namespace access would use', () => {
+    const io = createMemoryIo().setFile(f('a.ts'), `export default class A {}`);
+    expect(names(io, f('a.ts'))).toEqual(['default']);
+  });
+
+  it('reports `export default` applied to an expression rather than a declaration', () => {
+    const io = createMemoryIo().setFile(f('a.ts'), `const a = 1; export default a;`);
+    expect(names(io, f('a.ts'))).toEqual(['default']);
+  });
+
+  // ES `export *` re-exports every name except `default`, so counting one here would claim a
+  // binding the entry point does not have.
+  it('does not carry a default export through `export *`', () => {
+    const io = createMemoryIo()
+      .setFile(f('index.ts'), `export * from './badge';`)
+      .setFile(f('badge.ts'), `export default class Badge {}`);
+    expect(names(io, f('index.ts'))).toEqual([]);
+  });
+
+  it('names every binding of a destructured export', () => {
+    const io = createMemoryIo().setFile(
+      f('a.ts'),
+      `export const { a, b: renamed } = obj;
+       export const [c] = arr;`
+    );
+    expect(names(io, f('a.ts'))).toEqual(['a', 'c', 'renamed']);
+  });
+
+  it('names an `export import` alias', () => {
+    const io = createMemoryIo().setFile(
+      f('a.ts'),
+      `import * as ns from './ns';
+       export import Alias = ns.Thing;`
+    );
+    expect(names(io, f('a.ts'))).toEqual(['Alias']);
+  });
+
+  // Both node and tsc exhaust the file extensions before falling back to a directory index.
+  it('resolves a re-export to a sibling file before a directory index of the same name', () => {
+    const io = createMemoryIo()
+      .setFile(f('index.ts'), `export * from './thing';`)
+      .setFile(f('thing.js'), `export class FromFile {}`)
+      .setFile(f('thing/index.ts'), `export class FromDir {}`);
+    expect(names(io, f('index.ts'))).toEqual(['FromFile']);
+  });
+
+  it('resolves a re-export to a directory index file', () => {
+    const io = createMemoryIo()
+      .setFile(f('index.ts'), `export * from './feature';`)
+      .setFile(f('feature/index.ts'), `export class Feature {}`);
+    expect(names(io, f('index.ts'))).toEqual(['Feature']);
+  });
+
+  it('under-reports rather than guessing at a bare re-export', () => {
+    const io = createMemoryIo().setFile(
+      f('index.ts'),
+      `export * from '@angular/core';
+       export class Own {}`
+    );
+    expect(names(io, f('index.ts'))).toEqual(['Own']);
+  });
+
+  it('terminates on a re-export cycle', () => {
+    const io = createMemoryIo()
+      .setFile(f('a.ts'), `export * from './b'; export class A {}`)
+      .setFile(f('b.ts'), `export * from './a'; export class B {}`);
+    expect(names(io, f('a.ts'))).toEqual(['A', 'B']);
+  });
+
+  it('returns nothing for a file that cannot be read', () => {
+    expect(names(createMemoryIo(), f('missing.ts'))).toEqual([]);
+  });
+});
+
+describe('createMappingImportResolver', () => {
+  // The shape ngtsc produces: the app imports the barrel, the compiler synthesizes a deep
+  // relative import to the file that defines a transitively referenced component.
+  const lib = (barrel: string) =>
+    createMemoryIo()
+      .setFile(f('libs/ui/src/index.ts'), barrel)
+      .setFile(f('libs/ui/src/ui.module.ts'), `export class UiModule {}`)
+      .setFile(f('libs/ui/src/badge.component.ts'), `export class BadgeComponent {}`);
+
+  const MAPPINGS = { [f('libs/ui/src/index.ts')]: '@myorg/ui' };
+  const APP = f('apps/host/src/app.component.ts');
+
+  it('rewrites a deep import the barrel republishes', () => {
+    const io = lib(`export * from './ui.module'; export * from './badge.component';`);
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/badge.component'), APP)).toBe('@myorg/ui');
+  });
+
+  it('declines a deep import the barrel keeps internal', () => {
+    const io = lib(`export * from './ui.module';`);
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/badge.component'), APP)).toBeNull();
+  });
+
+  it('declines when the barrel renames the symbol, which a rewrite would not follow', () => {
+    const io = lib(
+      `export * from './ui.module';
+       export { BadgeComponent as Badge } from './badge.component';`
+    );
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/badge.component'), APP)).toBeNull();
+  });
+
+  it('declines when the barrel publishes only some of the target names', () => {
+    const io = createMemoryIo()
+      .setFile(f('libs/ui/src/index.ts'), `export { A } from './pair';`)
+      .setFile(f('libs/ui/src/pair.ts'), `export class A {} export class B {}`);
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/pair'), APP)).toBeNull();
+  });
+
+  // The subset test is `target names ⊆ entry point names`, so a target name this walk fails to
+  // see makes the test pass where it should have failed -- the one direction that produces a
+  // rewrite onto a specifier the chunk does not export. Each of these declines for that reason.
+  it('declines when the target re-exports a bare specifier it cannot enumerate', () => {
+    const io = createMemoryIo()
+      .setFile(f('libs/ui/src/index.ts'), `export { Own } from './re';`)
+      .setFile(f('libs/ui/src/re.ts'), `export * from '@angular/core'; export class Own {}`);
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/re'), APP)).toBeNull();
+  });
+
+  it('declines when the barrel omits a destructured export of the target', () => {
+    const io = createMemoryIo()
+      .setFile(f('libs/ui/src/index.ts'), `export { A } from './pair';`)
+      .setFile(f('libs/ui/src/pair.ts'), `export const { a, b } = obj; export class A {}`);
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/pair'), APP)).toBeNull();
+  });
+
+  it('declines a target using `export =`, which has no name a namespace access could use', () => {
+    const io = lib(`export * from './ui.module';`).setFile(
+      f('libs/ui/src/legacy.ts'),
+      `class Legacy {} export = Legacy;`
+    );
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/legacy'), APP)).toBeNull();
+  });
+
+  it('declines a target on a re-export cycle, whose full surface is unknown', () => {
+    const io = createMemoryIo()
+      .setFile(f('libs/ui/src/index.ts'), `export * from './a'; export * from './b';`)
+      .setFile(f('libs/ui/src/a.ts'), `export * from './b'; export class A {}`)
+      .setFile(f('libs/ui/src/b.ts'), `export * from './a'; export class B {}`);
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/a'), APP)).toBeNull();
+  });
+
+  it('declines a default-only target, which the barrel’s `export *` does not republish', () => {
+    const io = createMemoryIo()
+      .setFile(f('libs/ui/src/index.ts'), `export * from './badge.component';`)
+      .setFile(f('libs/ui/src/badge.component.ts'), `export default class Badge {}`);
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/badge.component'), APP)).toBeNull();
+  });
+
+  it('rewrites the barrel itself when reached by a relative path', () => {
+    const io = lib(`export * from './ui.module';`);
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/index.ts'), APP)).toBe('@myorg/ui');
+  });
+
+  it('leaves a mapped lib reaching into itself alone', () => {
+    const io = lib(`export * from './ui.module'; export * from './badge.component';`);
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const importer = f('libs/ui/src/ui.module.ts');
+    expect(resolve(f('libs/ui/src/badge.component'), importer)).toBeNull();
+  });
+
+  it('ignores an import that lands outside every mapping', () => {
+    const io = lib(`export * from './badge.component';`).setFile(
+      f('apps/host/src/local.ts'),
+      `export class Local {}`
+    );
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('apps/host/src/local'), APP)).toBeNull();
+  });
+
+  it('does not let one mapping swallow a sibling sharing its prefix', () => {
+    const io = createMemoryIo()
+      .setFile(f('libs/foo/src/index.ts'), `export class Foo {}`)
+      .setFile(f('libs/foobar/src/thing.ts'), `export class Thing {}`);
+    const resolve = createMappingImportResolver({ [f('libs/foo/src/index.ts')]: '@x/foo' }, io);
+    expect(resolve(f('libs/foobar/src/thing'), APP)).toBeNull();
+  });
+
+  it('prefers the longest matching mapping, so an expanded secondary beats its barrel', () => {
+    const io = createMemoryIo()
+      .setFile(f('libs/ui/src/index.ts'), `export * from './sub/deep';`)
+      .setFile(f('libs/ui/src/sub/index.ts'), `export * from './deep';`)
+      .setFile(f('libs/ui/src/sub/deep.ts'), `export class Deep {}`);
+    const resolve = createMappingImportResolver(
+      {
+        [f('libs/ui/src/index.ts')]: '@myorg/ui',
+        [f('libs/ui/src/sub/index.ts')]: '@myorg/ui/sub',
+      },
+      io
+    );
+    expect(resolve(f('libs/ui/src/sub/deep'), APP)).toBe('@myorg/ui/sub');
+  });
+
+  it('declines a side-effect-only target, whose entry point would run more than that file', () => {
+    const io = createMemoryIo()
+      .setFile(f('libs/ui/src/index.ts'), `export * from './ui.module';`)
+      .setFile(f('libs/ui/src/ui.module.ts'), `export class UiModule {}`)
+      .setFile(f('libs/ui/src/polyfill.ts'), `globalThis.x = 1;`);
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/polyfill'), APP)).toBeNull();
+  });
+
+  it('declines an import that resolves to no file', () => {
+    const io = lib(`export * from './badge.component';`);
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/nope'), APP)).toBeNull();
+  });
+
+  it('validates the file the bundler will resolve, not a directory index beside it', () => {
+    const io = createMemoryIo()
+      .setFile(f('libs/ui/src/index.ts'), `export { FromFile } from './thing.js';`)
+      .setFile(f('libs/ui/src/thing.js'), `export class FromFile {}`)
+      .setFile(f('libs/ui/src/thing/index.ts'), `export class FromDir {}`);
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/thing'), APP)).toBe('@myorg/ui');
+  });
+
+  // tsconfig `"@myorg/ui": ["libs/ui/src"]`, which `matchMapping` accepts via `isIndexOf`.
+  describe('a mapping key naming a directory rather than a barrel file', () => {
+    const DIR_MAPPINGS = { [f('libs/ui/src')]: '@myorg/ui' };
+
+    it('behaves like the equivalent file-form key', () => {
+      const io = lib(`export * from './ui.module'; export * from './badge.component';`);
+      const resolve = createMappingImportResolver(DIR_MAPPINGS, io);
+      expect(resolve(f('libs/ui/src/badge.component'), APP)).toBe('@myorg/ui');
+    });
+
+    it('does not reach up into the parent directory', () => {
+      const io = lib(`export * from './badge.component';`).setFile(
+        f('libs/ui/test-setup.ts'),
+        `export class Setup {}`
+      );
+      const resolve = createMappingImportResolver(DIR_MAPPINGS, io);
+      expect(resolve(f('libs/ui/test-setup'), APP)).toBeNull();
+    });
+  });
+
+  it('ignores a mapping whose entry point does not resolve', () => {
+    const io = lib(`export * from './badge.component';`);
+    const resolve = createMappingImportResolver({ [f('libs/ui/src/missing.ts')]: '@myorg/ui' }, io);
+    expect(resolve(f('libs/ui/src/badge.component'), APP)).toBeNull();
+  });
+
+  // A barrel and a hand-written deep entry point share a directory, so the longest-dir sort
+  // cannot separate them and declaration order carries no meaning.
+  describe('two mappings sharing one directory', () => {
+    const io = () =>
+      createMemoryIo()
+        .setFile(
+          f('libs/ui/src/index.ts'),
+          `export * from './badge.component'; export * from './models';`
+        )
+        .setFile(f('libs/ui/src/models.ts'), `export class Model {}`)
+        .setFile(f('libs/ui/src/badge.component.ts'), `export class BadgeComponent {}`);
+
+    it('validates a deep import against the entry point that publishes it', () => {
+      // Deep entry first, so declaration order alone would pick the one that declines.
+      const resolve = createMappingImportResolver(
+        {
+          [f('libs/ui/src/models.ts')]: '@myorg/ui/models',
+          [f('libs/ui/src/index.ts')]: '@myorg/ui',
+        },
+        io()
+      );
+      expect(resolve(f('libs/ui/src/badge.component'), APP)).toBe('@myorg/ui');
+    });
+
+    it('attributes an entry point to its own specifier, not the barrel republishing it', () => {
+      // Barrel first, and it does republish `Model`, so only an exact hit gets this right.
+      const resolve = createMappingImportResolver(
+        {
+          [f('libs/ui/src/index.ts')]: '@myorg/ui',
+          [f('libs/ui/src/models.ts')]: '@myorg/ui/models',
+        },
+        io()
+      );
+      expect(resolve(f('libs/ui/src/models'), APP)).toBe('@myorg/ui/models');
+    });
+  });
+});
