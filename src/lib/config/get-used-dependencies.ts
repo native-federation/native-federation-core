@@ -10,6 +10,7 @@ import { type UsedDependencies } from '../domain/utils/used-dependencies.contrac
 import { type ExposeEntry } from '../domain/config/federation-config.contract.js';
 import { isSharedMapping, matchMapping, matchMappingEntry } from './match-mapping.js';
 import { createPackageMappingPredicate } from './package-mapping.js';
+import { explainMissingMappedPath } from './validate-mappings.js';
 import { logger } from '../utils/logger.js';
 import * as path from 'path';
 
@@ -59,15 +60,23 @@ export function getUsedDependenciesFactoryCore(
       );
     // Not disk-cased like the cwd() in project-paths: sheriff relativizes every path it returns
     // against this root, so its spelling cancels before those paths are re-joined below.
-    const fileInfos = Object.values(entryPoints ?? []).reduce(
-      (acc, entryPoint) => ({
-        ...acc,
-        ...deps.getProjectData(entryPoint, cwd(), {
-          includeExternalLibraries: true,
+    let fileInfos: ProjectData;
+    try {
+      fileInfos = Object.values(entryPoints ?? []).reduce(
+        (acc, entryPoint) => ({
+          ...acc,
+          ...deps.getProjectData(entryPoint, cwd(), {
+            includeExternalLibraries: true,
+          }),
         }),
-      }),
-      {} as ProjectData
-    );
+        {} as ProjectData
+      );
+    } catch (error) {
+      // sheriff validates every tsconfig path up front and reports a missing one as SH-001,
+      // naming the alias but not the library. Re-state it if a mapping explains the failure.
+      explainMissingMappedPath(deps.io, config.sharedMappings);
+      throw error;
+    }
 
     const usedPackageNames = new Set<string>();
     for (const fileInfo of Object.values(fileInfos)) {

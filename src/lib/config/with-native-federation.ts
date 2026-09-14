@@ -42,6 +42,7 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
       denseExternals: config.features?.denseExternals ?? false,
       integrityHashes: config.features?.integrityHashes ?? false,
       synthesizeCjsExports: config.features?.synthesizeCjsExports ?? true,
+      prebuiltMappings: config.features?.prebuiltMappings ?? false,
     },
     ...(config.shareScope && { shareScope: config.shareScope }),
   };

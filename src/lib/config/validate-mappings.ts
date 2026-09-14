@@ -1,4 +1,5 @@
 import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
+import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -51,5 +52,66 @@ export function assertBarrelMappings(paths: PathToImport): void {
   throw new Error(
     `Invalid 'shared mappings' config. Only barrel imports can be shared as a sharedMapping: ` +
       `${shown}${rest > 0 ? ` and ${rest} more` : ''}.`
+  );
+}
+
+/**
+ * Turns sheriff's `SH-001: invalid path mapping detected` into a message that names the library
+ * and says what to do. Called only from the reachability scan's failure path, so it never changes
+ * *when* a build fails — a mapping nobody reaches is still pruned rather than rejected.
+ *
+ * A mapping onto build output goes missing far more often than one onto source: a fresh clone, a
+ * cleaned `dist`, or an app built before the library it depends on all produce it.
+ *
+ * Returns normally when nothing here explains the failure, leaving the original error to surface.
+ */
+export function explainMissingMappedPath(io: FileReaderPort, paths: PathToImport): void {
+  const missing = Object.entries(paths).filter(
+    // A wildcard path is a pattern, not a location; it only becomes real once expanded.
+    ([mappedPath]) => !mappedPath.includes('*') && !io.exists(mappedPath)
+  );
+  if (missing.length === 0) return;
+
+  for (const [mappedPath, importName] of missing) {
+    logger.warn(`Shared mapping '${importName}' points at '${mappedPath}', which does not exist.`);
+  }
+
+  const [firstPath, firstImport] = missing[0]!;
+  const rest = missing.length - 1;
+
+  throw new Error(
+    `Shared mapping '${firstImport}' points at '${firstPath}', which does not exist` +
+      `${rest > 0 ? ` (and ${rest} other mapping${rest > 1 ? 's' : ''})` : ''}. ` +
+      `If this mapping points at a library's build output, build that library before the app.`
+  );
+}
+
+/**
+ * The `prebuiltMappings` guarantee: every mapping resolves to a built package, never to source.
+ * Opt-in, because a mapping is not always a library — an alias onto a single app file
+ * (`'@app/env': ['src/environments/environment.ts']`) has nothing to build, and with
+ * `sharedMappings` unset every tsconfig path becomes a mapping.
+ *
+ * What it catches is drift: a mapping quietly reverted to source keeps building, and the
+ * duplicate-evaluation it reintroduces only shows up at runtime.
+ */
+export function assertPrebuiltMappings(
+  paths: PathToImport,
+  isPackage: (mappedPath: string) => boolean
+): void {
+  const fromSource = Object.entries(paths).filter(([mappedPath]) => !isPackage(mappedPath));
+  if (fromSource.length === 0) return;
+
+  for (const [mappedPath, importName] of fromSource) {
+    logger.warn(`Shared mapping '${importName}' resolves to source at '${mappedPath}'.`);
+  }
+
+  const shown = fromSource.slice(0, MAX_LISTED).map(([, i]) => `'${i}'`).join(', ');
+  const rest = fromSource.length - MAX_LISTED;
+
+  throw new Error(
+    `The 'prebuiltMappings' feature requires every shared mapping to point at a built package ` +
+      `(a directory containing a package.json). These point at source: ${shown}` +
+      `${rest > 0 ? ` and ${rest} more` : ''}.`
   );
 }
