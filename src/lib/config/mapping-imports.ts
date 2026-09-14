@@ -133,20 +133,41 @@ function resolveReexport(
   return resolveModuleFile(io, path.resolve(path.dirname(fromFile), specifier.text));
 }
 
+interface ExportWalker {
+  (file: string): ExportSurface;
+  invalidate(changedPaths: Iterable<string>): void;
+  reset(): void;
+}
+
 /** Memoized per file: a barrel graph re-reads the same leaves through several branches. */
-function createExportWalker(io: FileReaderPort): (file: string) => ExportSurface {
+function createExportWalker(io: FileReaderPort): ExportWalker {
   const cache = new Map<string, ExportSurface>();
   const inProgress = new Set<string>();
+  // Every file read to produce a cached surface, itself included. A barrel is stale when
+  // anything it re-exports through changes, not only when the barrel itself is edited, so
+  // dropping just the changed file's own entry would leave the barrel above it wrong.
+  const sources = new Map<string, Set<string>>();
+  const stack: Set<string>[] = [];
 
   const walk = (file: string): ExportSurface => {
+    const parent = stack[stack.length - 1];
+    parent?.add(path.resolve(file));
+
     const cached = cache.get(file);
-    if (cached) return cached;
+    if (cached) {
+      // A cache hit still contributes its whole closure upward, or a barrel that reached its
+      // leaves through an already-cached branch would not record them as its own sources.
+      if (parent) for (const source of sources.get(file) ?? []) parent.add(source);
+      return cached;
+    }
 
     // A re-export cycle. The names on it are real, but enumerating them from here means
     // re-entering this walk, so report the surface as unknown rather than as short.
     if (inProgress.has(file)) return { names: new Map(), complete: false };
 
     const surface: ExportSurface = { names: new Map(), complete: true };
+    const own = new Set<string>([path.resolve(file)]);
+    stack.push(own);
     inProgress.add(file);
 
     const source = parse(io, file);
@@ -227,8 +248,34 @@ function createExportWalker(io: FileReaderPort): (file: string) => ExportSurface
     for (const [name, origin] of explicit) surface.names.set(name, origin);
 
     inProgress.delete(file);
+    stack.pop();
+    if (parent) for (const source of own) parent.add(source);
+    sources.set(file, own);
     cache.set(file, surface);
     return surface;
+  };
+
+  // Paths are compared after `path.resolve`, which is what the walk stores, so a caller may hand
+  // over watcher paths in whatever spelling it has as long as they are not relative to some
+  // other directory.
+  walk.invalidate = (changedPaths: Iterable<string>): void => {
+    const changed = new Set<string>();
+    for (const changedPath of changedPaths) changed.add(path.resolve(changedPath));
+    if (changed.size === 0) return;
+
+    for (const [file, fileSources] of sources) {
+      for (const source of fileSources) {
+        if (!changed.has(source)) continue;
+        cache.delete(file);
+        sources.delete(file);
+        break;
+      }
+    }
+  };
+
+  walk.reset = (): void => {
+    cache.clear();
+    sources.clear();
   };
 
   return walk;
@@ -252,7 +299,32 @@ export function mappingExportNames(filePath: string, io: FileReaderPort = nodeIo
  * Given a relative import and the file that wrote it, the specifier to rewrite it onto, or
  * `null` to leave it alone.
  */
-export type MappingImportResolver = (importedFile: string, importerFile: string) => string | null;
+export interface MappingImportResolver {
+  (importedFile: string, importerFile: string): string | null;
+
+  /**
+   * Drops what the given files invalidate: every cached export surface they contributed to, and
+   * the resolved entry points, since creating or deleting a barrel changes which file a mapping
+   * resolves to. Pass the same changed-path set a watch rebuild already computes.
+   *
+   * Paths are matched as files, by equality after `path.resolve` -- a directory matches nothing.
+   * A caller that cannot attribute a rebuild to specific files wants {@link reset}; enumerating
+   * a library tree to widen this set would be the same walk the resolver exists to own.
+   */
+  invalidate(changedPaths: Iterable<string>): void;
+
+  /**
+   * Drops everything, for a rebuild whose changed files are unknown. Costs a re-walk of the
+   * mappings' barrel graphs, which is bounded by the number of mappings.
+   *
+   * Preferred over skipping invalidation when attribution is unavailable: a stale surface is not
+   * symmetric. Declining when it should rewrite leaves an import inlined, which is the
+   * duplication this resolver exists to reduce; rewriting when it should decline emits a
+   * specifier nobody validates -- external, so no bundler checks it -- and the property access
+   * the compiler emitted resolves to `undefined` at runtime.
+   */
+  reset(): void;
+}
 
 /**
  * A compiler that has the mapped lib's source in its program emits relative paths into it
@@ -263,8 +335,9 @@ export type MappingImportResolver = (importedFile: string, importerFile: string)
  *
  * Expects `sharedMappings` after wildcard expansion, which is what `normalizeOptions` leaves on
  * the config -- keys are compared literally, so an unexpanded wildcard key matches nothing here.
- * Export surfaces are cached for the resolver's lifetime, so construct one per build rather than
- * holding it across watch rebuilds.
+ * Export surfaces are cached, so a resolver held across watch rebuilds -- which is the only
+ * shape a bundler plugin can take, its context outliving any one rebuild -- has to be told what
+ * changed through `invalidate`.
  */
 export function createMappingImportResolver(
   sharedMappings: PathToImport,
@@ -277,14 +350,17 @@ export function createMappingImportResolver(
   // is -- `path.dirname` of the raw key would sit a level too high and read the surface off a
   // directory. Longest dir first, so a `resolveGlob`-expanded secondary wins over the barrel
   // above it.
-  const mappings = Object.entries(sharedMappings)
-    .flatMap(([key, importName]) => {
-      const entryPoint = resolveModuleFile(io, key);
-      return entryPoint ? [{ dir: path.dirname(entryPoint), entryPoint, importName }] : [];
-    })
-    .sort((a, b) => b.dir.length - a.dir.length);
+  const resolveMappings = () =>
+    Object.entries(sharedMappings)
+      .flatMap(([key, importName]) => {
+        const entryPoint = resolveModuleFile(io, key);
+        return entryPoint ? [{ dir: path.dirname(entryPoint), entryPoint, importName }] : [];
+      })
+      .sort((a, b) => b.dir.length - a.dir.length);
 
-  return (importedFile, importerFile) => {
+  let mappings = resolveMappings();
+
+  const resolve: MappingImportResolver = (importedFile, importerFile) => {
     // String work before any I/O: this hook sees every relative import in the build, and most
     // land nowhere near a mapping.
     const containing = mappings.filter(m => isUnderDir(importedFile, m.dir));
@@ -326,4 +402,16 @@ export function createMappingImportResolver(
 
     return null;
   };
+
+  resolve.invalidate = changedPaths => {
+    exportsOf.invalidate(changedPaths);
+    mappings = resolveMappings();
+  };
+
+  resolve.reset = () => {
+    exportsOf.reset();
+    mappings = resolveMappings();
+  };
+
+  return resolve;
 }

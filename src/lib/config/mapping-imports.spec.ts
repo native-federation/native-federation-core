@@ -424,3 +424,118 @@ describe('createMappingImportResolver', () => {
     });
   });
 });
+
+describe('createMappingImportResolver — invalidate', () => {
+  const MAPPINGS = { [f('libs/ui/src/index.ts')]: '@myorg/ui' };
+  const APP = f('apps/host/src/app.component.ts');
+  const BARREL = f('libs/ui/src/index.ts');
+  const BADGE = f('libs/ui/src/badge.ts');
+
+  // A barrel that republishes the whole leaf, so the resolver rewrites before anything changes.
+  const published = () =>
+    createMemoryIo()
+      .setFile(BARREL, `export * from './badge';`)
+      .setFile(BADGE, `export class BadgeComponent {}`);
+
+  it('keeps serving a cached surface until told what changed', () => {
+    const io = published();
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(BADGE, APP)).toBe('@myorg/ui');
+
+    // The barrel stops publishing the leaf, which would decline on a cold resolver.
+    io.setFile(BARREL, `export {};`);
+    expect(resolve(BADGE, APP)).toBe('@myorg/ui');
+
+    resolve.invalidate([BARREL]);
+    expect(resolve(BADGE, APP)).toBeNull();
+  });
+
+  it('drops a barrel whose surface changed through a file below it', () => {
+    // index -> reexporter -> badge, so editing the middle file changes what the *barrel*
+    // publishes while leaving the barrel's own bytes untouched.
+    const MIDDLE = f('libs/ui/src/reexporter.ts');
+    const io = createMemoryIo()
+      .setFile(BARREL, `export * from './reexporter';`)
+      .setFile(MIDDLE, `export * from './badge';`)
+      .setFile(BADGE, `export class BadgeComponent {}`);
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(BADGE, APP)).toBe('@myorg/ui');
+
+    io.setFile(MIDDLE, `export class Other {}`);
+    resolve.invalidate([MIDDLE]);
+
+    expect(resolve(BADGE, APP)).toBeNull();
+  });
+
+  it('re-resolves entry points, so a barrel added mid-watch starts matching', () => {
+    // The mapping names a directory; until an index exists there is nothing to resolve against.
+    const io = createMemoryIo().setFile(BADGE, `export class BadgeComponent {}`);
+    const resolve = createMappingImportResolver({ [f('libs/ui/src')]: '@myorg/ui' }, io);
+    expect(resolve(BADGE, APP)).toBeNull();
+
+    io.setFile(BARREL, `export * from './badge';`);
+    resolve.invalidate([BARREL]);
+
+    expect(resolve(BADGE, APP)).toBe('@myorg/ui');
+  });
+
+  it('leaves surfaces alone when the changed path contributed to none of them', () => {
+    const io = published();
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(BADGE, APP)).toBe('@myorg/ui');
+
+    io.setFile(BARREL, `export {};`);
+    resolve.invalidate([f('apps/host/src/unrelated.ts')]);
+
+    // Still the cached answer: nothing this resolver read was in the changed set.
+    expect(resolve(BADGE, APP)).toBe('@myorg/ui');
+  });
+
+  it('drops everything on reset, for a rebuild that cannot be attributed to files', () => {
+    const io = published();
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(BADGE, APP)).toBe('@myorg/ui');
+
+    io.setFile(BARREL, `export {};`);
+    resolve.reset();
+
+    expect(resolve(BADGE, APP)).toBeNull();
+  });
+
+  it('re-resolves entry points on reset too', () => {
+    const io = createMemoryIo().setFile(BADGE, `export class BadgeComponent {}`);
+    const resolve = createMappingImportResolver({ [f('libs/ui/src')]: '@myorg/ui' }, io);
+    expect(resolve(BADGE, APP)).toBeNull();
+
+    io.setFile(BARREL, `export * from './badge';`);
+    resolve.reset();
+
+    expect(resolve(BADGE, APP)).toBe('@myorg/ui');
+  });
+
+  it('does not invalidate on a directory, which is what reset is for', () => {
+    // Matching is by file equality, so a mapping's directory drops nothing. Pinned because the
+    // alternative reading -- containment -- would make a wide `invalidate` look like it worked.
+    const io = published();
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(BADGE, APP)).toBe('@myorg/ui');
+
+    io.setFile(BARREL, `export {};`);
+    resolve.invalidate([f('libs/ui/src')]);
+    expect(resolve(BADGE, APP)).toBe('@myorg/ui');
+
+    resolve.reset();
+    expect(resolve(BADGE, APP)).toBeNull();
+  });
+
+  it('treats an empty change set as a no-op', () => {
+    const io = published();
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(BADGE, APP)).toBe('@myorg/ui');
+
+    io.setFile(BARREL, `export {};`);
+    resolve.invalidate([]);
+
+    expect(resolve(BADGE, APP)).toBe('@myorg/ui');
+  });
+});
