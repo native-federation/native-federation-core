@@ -20,6 +20,10 @@ import type { EntryPoint, NFBuildAdapter } from '../../domain/core/build-adapter
 import { rewriteChunkImports } from './rewrite-chunk-imports.js';
 import { getBuildAdapter } from './build-adapter.js';
 import { resolveMappingConfig } from '../../config/mapping-utils.js';
+import {
+  isPackageMapping,
+  resolvePackageMappingEntry,
+} from '../../config/package-mapping.js';
 
 export async function bundleExposedAndMappings(
   config: NormalizedFederationConfig,
@@ -53,7 +57,9 @@ export async function bundleExposedAndMappingsCore(
   const shared: EntryPoint[] = Object.entries(config.sharedMappings).map(
     ([entryPoint, mappedImport]) => {
       return {
-        fileName: entryPoint,
+        // A mapping onto a built package names a directory; the bundler needs the file its
+        // manifest points at, and only here is a bundler entry point actually required.
+        fileName: toBundlerEntry(entryPoint, mappedImport),
         outName: mappedImport.replace(/[^A-Za-z0-9]/g, '_') + '.js',
         key: mappedImport,
       };
@@ -168,6 +174,18 @@ export async function bundleExposedAndMappingsCore(
     : undefined;
 
   return { mappings: sharedResult, exposes: exposedResult, chunks: exportedChunks, integrity };
+}
+
+function toBundlerEntry(mappedPath: string, mappedImport: string): string {
+  if (!isPackageMapping(nodeIo, mappedPath)) return mappedPath;
+
+  const entry = resolvePackageMappingEntry(nodeIo, mappedPath);
+  if (entry) return entry;
+
+  throw new Error(
+    `Shared mapping '${mappedImport}' points at '${mappedPath}', whose package.json names no ` +
+      `resolvable entry point ('exports', 'module' or 'main').`
+  );
 }
 
 function toSharedMappingInfo(

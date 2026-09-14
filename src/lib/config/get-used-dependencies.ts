@@ -8,7 +8,8 @@ import { type FileReaderPort } from '../domain/utils/io-port.contract.js';
 import { type PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { type UsedDependencies } from '../domain/utils/used-dependencies.contract.js';
 import { type ExposeEntry } from '../domain/config/federation-config.contract.js';
-import { isSharedMapping, matchMapping } from './match-mapping.js';
+import { isSharedMapping, matchMapping, matchMappingEntry } from './match-mapping.js';
+import { createPackageMappingPredicate } from './package-mapping.js';
 import { logger } from '../utils/logger.js';
 import * as path from 'path';
 
@@ -80,7 +81,7 @@ export function getUsedDependenciesFactoryCore(
 
     return {
       external: addTransientDeps(usedPackageNames, workspaceRoot, deps),
-      internal: resolveUsedMappings(fileInfos, workspaceRoot, config.sharedMappings),
+      internal: resolveUsedMappings(fileInfos, workspaceRoot, config.sharedMappings, deps.io),
     };
   };
 }
@@ -123,11 +124,13 @@ function addTransientDeps(
 function resolveUsedMappings(
   fileInfos: ProjectData,
   workspaceRoot: string,
-  sharedMappings: PathToImport
+  sharedMappings: PathToImport,
+  io: FileReaderPort
 ): PathToImport {
   const usedMappings: PathToImport = {};
   const matchesIgnoringCase = createCaseInsensitiveMatcher(sharedMappings);
   const caseOnlyMisses = new Set<string>();
+  const isPackage = createPackageMappingPredicate(io);
 
   for (const fileName of Object.keys(fileInfos)) {
     const fullFileName = path.join(workspaceRoot, fileName);
@@ -140,8 +143,8 @@ function resolveUsedMappings(
     // Check if any of this file's imports land in a shared mapping
     for (const imp of fileInfo.imports ?? []) {
       const fullImport = path.join(workspaceRoot, imp);
-      const match = matchMapping(fullImport, sharedMappings);
-      if (match) usedMappings[fullImport] = match;
+      const match = matchMappingEntry(fullImport, sharedMappings, { isPackage });
+      if (match) usedMappings[match.mappedPath] = match.importName;
       else if (matchesIgnoringCase(fullImport)) caseOnlyMisses.add(fullImport);
     }
   }
