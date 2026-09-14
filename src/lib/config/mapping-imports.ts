@@ -39,13 +39,26 @@ function parse(io: FileReaderPort, file: string): ts.SourceFile | null {
 }
 
 /**
+ * Where a name was declared. Two files publishing the same name say nothing about whether they
+ * publish the same binding, so the origin travels with it, see `createMappingImportResolver`.
+ */
+interface ExportOrigin {
+  file: string;
+  localName: string;
+}
+
+function sameOrigin(a: ExportOrigin, b: ExportOrigin): boolean {
+  return a.file === b.file && a.localName === b.localName;
+}
+
+/**
  * `complete` is false when the walk met an export form it cannot read. Which direction that is
  * safe in depends on the side: a short set of entry point names only fails a subset test, but a
  * short set of *target* names passes one it should have failed, so a caller that needs every
  * name a file publishes has to decline on it rather than treat it as the whole surface.
  */
 interface ExportSurface {
-  names: Set<string>;
+  names: Map<string, ExportOrigin>;
   complete: boolean;
 }
 
@@ -55,42 +68,47 @@ function hasModifier(statement: ts.Statement, kind: ts.SyntaxKind): boolean {
   );
 }
 
-function addBindingName(name: ts.BindingName, names: Set<string>): void {
+function addBindingName(name: ts.BindingName, file: string, into: Map<string, ExportOrigin>): void {
   if (ts.isIdentifier(name)) {
-    names.add(name.text);
+    into.set(name.text, { file, localName: name.text });
     return;
   }
 
   for (const element of name.elements) {
-    if (ts.isBindingElement(element)) addBindingName(element.name, names);
+    if (ts.isBindingElement(element)) addBindingName(element.name, file, into);
   }
 }
 
 /** Types are erased, so only value declarations are named here. */
-function addDeclaredNames(statement: ts.Statement, surface: ExportSurface): void {
+function addDeclaredNames(
+  statement: ts.Statement,
+  file: string,
+  into: Map<string, ExportOrigin>,
+  surface: ExportSurface
+): void {
   // Carries no modifiers, so it has to be read before the export check below.
   if (ts.isExportAssignment(statement)) {
     if (statement.isExportEquals) surface.complete = false;
-    else surface.names.add('default');
+    else into.set('default', { file, localName: 'default' });
     return;
   }
 
   if (!hasModifier(statement, ts.SyntaxKind.ExportKeyword)) return;
 
   if (hasModifier(statement, ts.SyntaxKind.DefaultKeyword)) {
-    surface.names.add('default');
+    into.set('default', { file, localName: 'default' });
     return;
   }
 
   if (ts.isVariableStatement(statement)) {
     for (const declaration of statement.declarationList.declarations) {
-      addBindingName(declaration.name, surface.names);
+      addBindingName(declaration.name, file, into);
     }
     return;
   }
 
   if (ts.isImportEqualsDeclaration(statement)) {
-    surface.names.add(statement.name.text);
+    into.set(statement.name.text, { file, localName: statement.name.text });
     return;
   }
 
@@ -100,7 +118,9 @@ function addDeclaredNames(statement: ts.Statement, surface: ExportSurface): void
     ts.isEnumDeclaration(statement) ||
     ts.isModuleDeclaration(statement)
   ) {
-    if (statement.name && ts.isIdentifier(statement.name)) surface.names.add(statement.name.text);
+    if (statement.name && ts.isIdentifier(statement.name)) {
+      into.set(statement.name.text, { file, localName: statement.name.text });
+    }
   }
 }
 
@@ -124,17 +144,24 @@ function createExportWalker(io: FileReaderPort): (file: string) => ExportSurface
 
     // A re-export cycle. The names on it are real, but enumerating them from here means
     // re-entering this walk, so report the surface as unknown rather than as short.
-    if (inProgress.has(file)) return { names: new Set(), complete: false };
+    if (inProgress.has(file)) return { names: new Map(), complete: false };
 
-    const surface: ExportSurface = { names: new Set(), complete: true };
+    const surface: ExportSurface = { names: new Map(), complete: true };
     inProgress.add(file);
 
     const source = parse(io, file);
     if (!source) surface.complete = false;
 
+    // An explicit export wins over an `export *` of the same name, and two stars carrying that
+    // name from different declarations make it ambiguous -- TypeScript then exports neither, so
+    // the two have to be collected apart and merged once the whole file has been read.
+    const explicit = new Map<string, ExportOrigin>();
+    const starred = new Map<string, ExportOrigin>();
+    const ambiguous = new Set<string>();
+
     for (const statement of source?.statements ?? []) {
       if (!ts.isExportDeclaration(statement)) {
-        addDeclaredNames(statement, surface);
+        addDeclaredNames(statement, file, explicit, surface);
         continue;
       }
 
@@ -149,20 +176,55 @@ function createExportWalker(io: FileReaderPort): (file: string) => ExportSurface
 
         const reexported = walk(target);
         // `export *` does not re-export the default binding.
-        for (const name of reexported.names) if (name !== 'default') surface.names.add(name);
+        for (const [name, origin] of reexported.names) {
+          if (name === 'default') continue;
+          const seen = starred.get(name);
+          if (seen && !sameOrigin(seen, origin)) {
+            ambiguous.add(name);
+            continue;
+          }
+          starred.set(name, origin);
+        }
         if (!reexported.complete) surface.complete = false;
         continue;
       }
 
       if (ts.isNamespaceExport(statement.exportClause)) {
-        surface.names.add(statement.exportClause.name.text);
+        // A namespace object of its own, not a republication of the target's bindings.
+        const name = statement.exportClause.name.text;
+        explicit.set(name, { file, localName: name });
         continue;
       }
 
+      const from = statement.moduleSpecifier
+        ? resolveReexport(io, statement.moduleSpecifier, file)
+        : null;
+      if (statement.moduleSpecifier && !from) surface.complete = false;
+
       for (const element of statement.exportClause.elements) {
-        if (!element.isTypeOnly) surface.names.add(element.name.text);
+        if (element.isTypeOnly) continue;
+        const localName = (element.propertyName ?? element.name).text;
+
+        if (!statement.moduleSpecifier) {
+          // A local `export { X }` may still be re-exporting an import, which this walk does not
+          // follow -- the origin is then this file rather than the declaring one, which can only
+          // cost a caller a match it would have been safe to make.
+          explicit.set(element.name.text, { file, localName });
+          continue;
+        }
+
+        // Followed so that `export { A } from './x'` and `export * from './x'` agree on where A
+        // came from; without it the two spellings would compare unequal.
+        const origin = from ? walk(from).names.get(localName) : undefined;
+        if (origin) explicit.set(element.name.text, origin);
+        else surface.complete = false;
       }
     }
+
+    for (const [name, origin] of starred) {
+      if (!ambiguous.has(name)) surface.names.set(name, origin);
+    }
+    for (const [name, origin] of explicit) surface.names.set(name, origin);
 
     inProgress.delete(file);
     cache.set(file, surface);
@@ -178,11 +240,12 @@ function createExportWalker(io: FileReaderPort): (file: string) => ExportSurface
  * leaves the file reachable while `ns.A` is undefined.
  *
  * A name this walk cannot read -- behind a bare re-export, an `export =`, a missing file -- is
- * left out, so the set is a lower bound. Callers that cannot tolerate that go through
- * `createMappingImportResolver`, which tracks the difference.
+ * left out, so the set is a lower bound. It also drops which declaration each name stands for,
+ * which is what decides whether two files publish the same binding, so callers comparing one
+ * file's surface against another's go through `createMappingImportResolver` instead.
  */
 export function mappingExportNames(filePath: string, io: FileReaderPort = nodeIo): Set<string> {
-  return createExportWalker(io)(filePath).names;
+  return new Set(createExportWalker(io)(filePath).names.keys());
 }
 
 /**
@@ -232,8 +295,9 @@ export function createMappingImportResolver(
 
     // The rewrite keeps the property access the compiler emitted, and which name that is
     // cannot be known here, so every name the target publishes has to survive the trip
-    // through the entry point. A target that exports nothing is imported for its side
-    // effects; the entry point runs more than that file, so leave it alone.
+    // through the entry point -- and land on the same declaration, or the access silently
+    // reads a namesake from a sibling file. A target that exports nothing is imported for
+    // its side effects; the entry point runs more than that file, so leave it alone.
     const reachable = exportsOf(target);
     if (!reachable.complete || reachable.names.size === 0) return null;
 
@@ -253,7 +317,11 @@ export function createMappingImportResolver(
       // Only the target's completeness is checked: a gap in an entry point's surface can just
       // fail this test, which is already the outcome it would decline to.
       const surface = exportsOf(mapping.entryPoint);
-      if ([...reachable.names].every(name => surface.names.has(name))) return mapping.importName;
+      const republished = [...reachable.names].every(([name, origin]) => {
+        const viaEntryPoint = surface.names.get(name);
+        return !!viaEntryPoint && sameOrigin(viaEntryPoint, origin);
+      });
+      if (republished) return mapping.importName;
     }
 
     return null;

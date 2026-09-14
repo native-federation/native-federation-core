@@ -23,13 +23,17 @@ describe('mappingExportNames', () => {
   });
 
   it('skips types, which are erased and would resolve to undefined after a rewrite', () => {
-    const io = createMemoryIo().setFile(
-      f('a.ts'),
-      `export interface Props {}
+    const io = createMemoryIo()
+      .setFile(
+        f('a.ts'),
+        `export interface Props {}
        export type Alias = string;
        export type { Gone } from './other';
        export { type AlsoGone, Kept } from './other';`
-    );
+      )
+      // Real, so the walk can read where `Kept` comes from; a re-export it cannot resolve is
+      // dropped rather than credited to this file.
+      .setFile(f('other.ts'), `export class Kept {} export class AlsoGone {}`);
     expect(names(io, f('a.ts'))).toEqual(['Kept']);
   });
 
@@ -124,6 +128,25 @@ describe('mappingExportNames', () => {
     expect(names(io, f('a.ts'))).toEqual(['A', 'B']);
   });
 
+  // TypeScript exports neither binding when two `export *` branches carry the same name.
+  it('drops a name two star re-exports disagree on', () => {
+    const io = createMemoryIo()
+      .setFile(f('index.ts'), `export * from './a'; export * from './b';`)
+      .setFile(f('a.ts'), `export class Dup {} export class OnlyA {}`)
+      .setFile(f('b.ts'), `export class Dup {} export class OnlyB {}`);
+    expect(names(io, f('index.ts'))).toEqual(['OnlyA', 'OnlyB']);
+  });
+
+  // The same file arriving through two branches is not a disagreement.
+  it('keeps a name two star re-exports agree on', () => {
+    const io = createMemoryIo()
+      .setFile(f('index.ts'), `export * from './a'; export * from './b';`)
+      .setFile(f('a.ts'), `export * from './shared';`)
+      .setFile(f('b.ts'), `export * from './shared';`)
+      .setFile(f('shared.ts'), `export class Shared {}`);
+    expect(names(io, f('index.ts'))).toEqual(['Shared']);
+  });
+
   it('returns nothing for a file that cannot be read', () => {
     expect(names(createMemoryIo(), f('missing.ts'))).toEqual([]);
   });
@@ -160,6 +183,60 @@ describe('createMappingImportResolver', () => {
     );
     const resolve = createMappingImportResolver(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/badge.component'), APP)).toBeNull();
+  });
+
+  // Two files under one mapping can declare the same name, and a set of names cannot tell them
+  // apart. The barrel republishes a's `Config`, so rewriting b onto the mapping would leave
+  // `i1.Config` reading a's class -- not duplicated, not undefined, just the wrong binding.
+  it('declines when the barrel exports the target’s name from a different file', () => {
+    const io = createMemoryIo()
+      .setFile(f('libs/ui/src/index.ts'), `export { Config } from './a';`)
+      .setFile(f('libs/ui/src/a.ts'), `export class Config {}`)
+      .setFile(f('libs/ui/src/b.ts'), `export class Config {}`);
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/b'), APP)).toBeNull();
+  });
+
+  // `export *` publishes neither when two branches disagree on a name, so the entry point does
+  // not carry it and the target cannot be reached through the mapping.
+  it('declines when two star re-exports make the target’s name ambiguous', () => {
+    const io = createMemoryIo()
+      .setFile(f('libs/ui/src/index.ts'), `export * from './a'; export * from './b';`)
+      .setFile(f('libs/ui/src/a.ts'), `export class Config {}`)
+      .setFile(f('libs/ui/src/b.ts'), `export class Config {}`);
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/b'), APP)).toBeNull();
+  });
+
+  // An explicit re-export shadows a star carrying the same name, so only one of the two files
+  // is actually reachable under it.
+  it('credits the name to the explicit re-export rather than the star it shadows', () => {
+    const io = createMemoryIo()
+      .setFile(f('libs/ui/src/index.ts'), `export * from './a'; export { Thing } from './b';`)
+      .setFile(f('libs/ui/src/a.ts'), `export class Thing {}`)
+      .setFile(f('libs/ui/src/b.ts'), `export class Thing {}`);
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/b'), APP)).toBe('@myorg/ui');
+    expect(resolve(f('libs/ui/src/a'), APP)).toBeNull();
+  });
+
+  // The two spellings have to agree about where a name came from, or a barrel that re-exports
+  // through an intermediate file would never match anything.
+  it('rewrites when the barrel reaches the target through an intermediate re-export', () => {
+    const io = createMemoryIo()
+      .setFile(f('libs/ui/src/index.ts'), `export { Deep } from './mid';`)
+      .setFile(f('libs/ui/src/mid.ts'), `export * from './deep';`)
+      .setFile(f('libs/ui/src/deep.ts'), `export class Deep {}`);
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/deep'), APP)).toBe('@myorg/ui');
+  });
+
+  it('declines when the target re-exports a name from a module it cannot resolve', () => {
+    const io = createMemoryIo()
+      .setFile(f('libs/ui/src/index.ts'), `export * from './re';`)
+      .setFile(f('libs/ui/src/re.ts'), `export { Gone } from './missing'; export class Own {}`);
+    const resolve = createMappingImportResolver(MAPPINGS, io);
+    expect(resolve(f('libs/ui/src/re'), APP)).toBeNull();
   });
 
   it('declines when the barrel publishes only some of the target names', () => {
