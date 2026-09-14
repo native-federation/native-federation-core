@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { assertBarrelMappings, isNonBarrelImport } from './validate-mappings.js';
+import {
+  assertBarrelMappings,
+  assertPrebuiltMappings,
+  explainMissingMappedPath,
+  isNonBarrelImport,
+} from './validate-mappings.js';
+import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
+import * as path from 'path';
 import { logger } from '../utils/logger.js';
 
 describe('isNonBarrelImport', () => {
@@ -75,5 +82,61 @@ describe('assertBarrelMappings', () => {
 
     expect(() => assertBarrelMappings(paths)).toThrow(/and 3 more\.$/);
     expect(warn).toHaveBeenCalledTimes(8);
+  });
+});
+
+const ROOT = path.resolve('/ws');
+const p = (...segs: string[]) => path.join(ROOT, ...segs);
+
+describe('explainMissingMappedPath', () => {
+  const io = createMemoryIo().setDir(p('dist/ui')).setFile(p('libs/url/src/public-api.ts'), '');
+
+  it('names the mapping, its path, and what to do about it', () => {
+    expect(() => explainMissingMappedPath(io, { [p('dist/gone')]: '@org/gone' })).toThrow(
+      /'@org\/gone'.*does not exist.*build that library before the app/s
+    );
+  });
+
+  it('counts the others without listing them all', () => {
+    expect(() =>
+      explainMissingMappedPath(io, {
+        [p('dist/gone')]: '@org/gone',
+        [p('dist/also-gone')]: '@org/also-gone',
+      })
+    ).toThrow(/and 1 other mapping/);
+  });
+
+  // The caller re-throws sheriff's own error when nothing here explains it.
+  it('returns quietly when every mapped path exists', () => {
+    expect(() =>
+      explainMissingMappedPath(io, {
+        [p('dist/ui')]: '@org/ui',
+        [p('libs/url/src/public-api.ts')]: '@org/url',
+      })
+    ).not.toThrow();
+  });
+
+  // Wildcards are patterns, not locations; they only become real once expanded.
+  it('ignores wildcard mappings', () => {
+    expect(() =>
+      explainMissingMappedPath(io, { [p('libs', '*', 'src')]: '@org/*' })
+    ).not.toThrow();
+  });
+});
+
+describe('assertPrebuiltMappings', () => {
+  const isPackage = (candidate: string) => candidate === p('dist/ui');
+
+  it('passes when every mapping is a built package', () => {
+    expect(() => assertPrebuiltMappings({ [p('dist/ui')]: '@org/ui' }, isPackage)).not.toThrow();
+  });
+
+  it('names the mappings that still resolve to source', () => {
+    expect(() =>
+      assertPrebuiltMappings(
+        { [p('dist/ui')]: '@org/ui', [p('libs/url/src/public-api.ts')]: '@org/url' },
+        isPackage
+      )
+    ).toThrow(/'prebuiltMappings'.*built package.*'@org\/url'/s);
   });
 });

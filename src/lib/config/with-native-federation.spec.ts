@@ -261,6 +261,7 @@ describe('withNativeFederation', () => {
       denseExternals: true,
       integrityHashes: false,
       synthesizeCjsExports: true,
+      prebuiltMappings: false,
     });
   });
 

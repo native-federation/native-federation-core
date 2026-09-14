@@ -53,6 +53,7 @@ export interface FederationConfig {
     denseExternals?: boolean;
     integrityHashes?: boolean;
     synthesizeCjsExports?: boolean;
+    prebuiltMappings?: boolean;
   };
 }
 
@@ -74,5 +75,6 @@ export interface NormalizedFederationConfig {
     denseExternals: boolean;
     integrityHashes: boolean;
     synthesizeCjsExports: boolean;
+    prebuiltMappings: boolean;
   };
 }
