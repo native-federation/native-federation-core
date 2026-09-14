@@ -183,7 +183,9 @@ export async function bundleSharedCore(
             outName
           )
         : null;
-    return { fileName: synthetic ?? pi.entryPoint, outName };
+    // Always built artifacts: these resolve through a dependency's manifest. The synthetic
+    // CJS shim is generated JS, so it is no more compilable than the package it wraps.
+    return { fileName: synthetic ?? pi.entryPoint, outName, kind: 'package' as const };
   });
 
   const fullOutputPath = path.join(fedOptions.workspaceRoot, fedOptions.outputPath);

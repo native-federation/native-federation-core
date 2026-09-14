@@ -56,19 +56,27 @@ export async function bundleExposedAndMappingsCore(
 
   const shared: EntryPoint[] = Object.entries(config.sharedMappings).map(
     ([entryPoint, mappedImport]) => {
+      const prebuilt = isPackageMapping(nodeIo, entryPoint);
       return {
         // A mapping onto a built package names a directory; the bundler needs the file its
         // manifest points at, and only here is a bundler entry point actually required.
-        fileName: toBundlerEntry(entryPoint, mappedImport),
+        fileName: prebuilt ? toPackageEntry(entryPoint, mappedImport) : entryPoint,
         outName: mappedImport.replace(/[^A-Za-z0-9]/g, '_') + '.js',
         key: mappedImport,
+        kind: prebuilt ? 'package' : 'source',
       };
     }
   );
   const exposes: Array<EntryPoint & { element?: string }> = Object.entries(config.exposes).map(
     ([key, expose]) => {
       const outFilePath = key + '.js';
-      return { fileName: expose.file, outName: outFilePath, key, element: expose.element };
+      return {
+        fileName: expose.file,
+        outName: outFilePath,
+        key,
+        kind: 'source' as const,
+        element: expose.element,
+      };
     }
   );
 
@@ -176,9 +184,7 @@ export async function bundleExposedAndMappingsCore(
   return { mappings: sharedResult, exposes: exposedResult, chunks: exportedChunks, integrity };
 }
 
-function toBundlerEntry(mappedPath: string, mappedImport: string): string {
-  if (!isPackageMapping(nodeIo, mappedPath)) return mappedPath;
-
+function toPackageEntry(mappedPath: string, mappedImport: string): string {
   const entry = resolvePackageMappingEntry(nodeIo, mappedPath);
   if (entry) return entry;
 

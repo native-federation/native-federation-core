@@ -23,10 +23,23 @@ export interface NFBuildAdapter {
   dispose(name?: string): Promise<void>;
 }
 
+/**
+ * Whether an entry point still has to be compiled.
+ *
+ * `'source'` is workspace source the adapter's own toolchain owns — exposes, and mappings onto a
+ * barrel. `'package'` is an already-built artifact with a manifest: a shared npm dependency, or a
+ * mapping onto a library's build output. An adapter that stands up a compiler (ngtsc) must keep
+ * `'package'` entries out of it; they are bundled, never compiled.
+ *
+ * Core decides this — an adapter cannot, and inferring it from the file extension is a guess.
+ */
+export type EntryPointKind = 'source' | 'package';
+
 export interface EntryPoint {
   fileName: string;
   outName: string;
   key?: string;
+  kind: EntryPointKind;
 }
 
 export interface NFBuildAdapterOptions<TBundlerCache = unknown> {
