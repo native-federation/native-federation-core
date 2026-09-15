@@ -8,7 +8,9 @@ import { type FileReaderPort } from '../domain/utils/io-port.contract.js';
 import { type PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { type UsedDependencies } from '../domain/utils/used-dependencies.contract.js';
 import { type ExposeEntry } from '../domain/config/federation-config.contract.js';
-import { isSharedMapping, matchMapping } from './match-mapping.js';
+import { isSharedMapping, matchMapping, matchMappingEntry } from './match-mapping.js';
+import { createPackageMappingPredicate } from './package-mapping.js';
+import { explainMissingMappedPath } from './validate-mappings.js';
 import { logger } from '../utils/logger.js';
 import * as path from 'path';
 
@@ -58,15 +60,23 @@ export function getUsedDependenciesFactoryCore(
       );
     // Not disk-cased like the cwd() in project-paths: sheriff relativizes every path it returns
     // against this root, so its spelling cancels before those paths are re-joined below.
-    const fileInfos = Object.values(entryPoints ?? []).reduce(
-      (acc, entryPoint) => ({
-        ...acc,
-        ...deps.getProjectData(entryPoint, cwd(), {
-          includeExternalLibraries: true,
+    let fileInfos: ProjectData;
+    try {
+      fileInfos = Object.values(entryPoints ?? []).reduce(
+        (acc, entryPoint) => ({
+          ...acc,
+          ...deps.getProjectData(entryPoint, cwd(), {
+            includeExternalLibraries: true,
+          }),
         }),
-      }),
-      {} as ProjectData
-    );
+        {} as ProjectData
+      );
+    } catch (error) {
+      // sheriff validates every tsconfig path up front and reports a missing one as SH-001,
+      // naming the alias but not the library. Re-state it if a mapping explains the failure.
+      explainMissingMappedPath(deps.io, config.sharedMappings);
+      throw error;
+    }
 
     const usedPackageNames = new Set<string>();
     for (const fileInfo of Object.values(fileInfos)) {
@@ -80,7 +90,7 @@ export function getUsedDependenciesFactoryCore(
 
     return {
       external: addTransientDeps(usedPackageNames, workspaceRoot, deps),
-      internal: resolveUsedMappings(fileInfos, workspaceRoot, config.sharedMappings),
+      internal: resolveUsedMappings(fileInfos, workspaceRoot, config.sharedMappings, deps.io),
     };
   };
 }
@@ -123,11 +133,13 @@ function addTransientDeps(
 function resolveUsedMappings(
   fileInfos: ProjectData,
   workspaceRoot: string,
-  sharedMappings: PathToImport
+  sharedMappings: PathToImport,
+  io: FileReaderPort
 ): PathToImport {
   const usedMappings: PathToImport = {};
   const matchesIgnoringCase = createCaseInsensitiveMatcher(sharedMappings);
   const caseOnlyMisses = new Set<string>();
+  const isPackage = createPackageMappingPredicate(io);
 
   for (const fileName of Object.keys(fileInfos)) {
     const fullFileName = path.join(workspaceRoot, fileName);
@@ -140,8 +152,8 @@ function resolveUsedMappings(
     // Check if any of this file's imports land in a shared mapping
     for (const imp of fileInfo.imports ?? []) {
       const fullImport = path.join(workspaceRoot, imp);
-      const match = matchMapping(fullImport, sharedMappings);
-      if (match) usedMappings[fullImport] = match;
+      const match = matchMappingEntry(fullImport, sharedMappings, { isPackage });
+      if (match) usedMappings[match.mappedPath] = match.importName;
       else if (matchesIgnoringCase(fullImport)) caseOnlyMisses.add(fullImport);
     }
   }

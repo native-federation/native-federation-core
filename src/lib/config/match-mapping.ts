@@ -23,12 +23,45 @@ export function isSharedMapping(filePath: string, sharedMappings: PathToImport):
   return false;
 }
 
+export interface MappingMatch {
+  /** The mapping's own path, not the file that matched it. */
+  mappedPath: string;
+  importName: string;
+}
+
+export interface MatchMappingOptions {
+  /**
+   * Answers whether a mapped path is a built package directory. Supplied by callers that have
+   * disk access; without it a package mapping only matches the directory itself, which is the
+   * pre-package behaviour.
+   */
+  isPackage?: (mappedPath: string) => boolean;
+}
+
 /**
  * The single rule that turns a file into the import specifier it is shared under. Both the
  * reachability walk and the `resolveGlob` expansion go through here, so an entry point cannot
  * end up advertised under a name the other side would not have produced.
  */
-export function matchMapping(filePath: string, sharedMappings: PathToImport): string | null {
+export function matchMapping(
+  filePath: string,
+  sharedMappings: PathToImport,
+  opts?: MatchMappingOptions
+): string | null {
+  return matchMappingEntry(filePath, sharedMappings, opts)?.importName ?? null;
+}
+
+/**
+ * As {@link matchMapping}, but also reports which mapping matched. A package mapping is matched
+ * by containment, so the file that matched (`types/ui.d.ts` from TypeScript, `fesm2022/ui.mjs`
+ * from esbuild) is an artefact of who asked — only the package directory identifies the mapping,
+ * and that is what a caller must key by.
+ */
+export function matchMappingEntry(
+  filePath: string,
+  sharedMappings: PathToImport,
+  opts?: MatchMappingOptions
+): MappingMatch | null {
   for (const [sharedPath, sharedImport] of Object.entries(sharedMappings)) {
     const { prefix, suffix, hasWildcard } = parseWildcard(sharedPath);
     if (hasWildcard) {
@@ -38,9 +71,18 @@ export function matchMapping(filePath: string, sharedMappings: PathToImport): st
       const captured = suffix
         ? filePath.slice(prefix.length, filePath.indexOf(suffix, prefix.length))
         : filePath.slice(prefix.length);
-      return substituteWildcard(sharedImport, toImportPath(captured));
+      return {
+        mappedPath: filePath,
+        importName: substituteWildcard(sharedImport, toImportPath(captured)),
+      };
     } else if (filePath === sharedPath || isIndexOf(filePath, sharedPath)) {
-      return sharedImport;
+      // The matched file, never the directory: a mapping onto `libs/ui/src` resolves through
+      // `index.ts`, and that file is what the bundler needs as an entry point.
+      return { mappedPath: filePath, importName: sharedImport };
+    } else if (isUnder(filePath, sharedPath) && opts?.isPackage?.(sharedPath)) {
+      // A package is the exception — its two resolvable files disagree, so only the directory
+      // identifies it, and the entry point is read from its manifest instead.
+      return { mappedPath: sharedPath, importName: sharedImport };
     }
   }
   return null;
@@ -52,7 +94,11 @@ export function matchMapping(filePath: string, sharedMappings: PathToImport): st
 const INDEX_PATTERN = /\/index\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
 
 function isIndexOf(filePath: string, dirPath: string): boolean {
-  return filePath.startsWith(dirPath + path.sep) && INDEX_PATTERN.test(filePath);
+  return isUnder(filePath, dirPath) && INDEX_PATTERN.test(filePath);
+}
+
+function isUnder(filePath: string, dirPath: string): boolean {
+  return filePath.startsWith(dirPath + path.sep);
 }
 
 function toImportPath(filePath: string): string {

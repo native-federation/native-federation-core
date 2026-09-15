@@ -20,6 +20,10 @@ import type { EntryPoint, NFBuildAdapter } from '../../domain/core/build-adapter
 import { rewriteChunkImports } from './rewrite-chunk-imports.js';
 import { getBuildAdapter } from './build-adapter.js';
 import { resolveMappingConfig } from '../../config/mapping-utils.js';
+import {
+  isPackageMapping,
+  resolvePackageMappingEntry,
+} from '../../config/package-mapping.js';
 
 export async function bundleExposedAndMappings(
   config: NormalizedFederationConfig,
@@ -52,17 +56,27 @@ export async function bundleExposedAndMappingsCore(
 
   const shared: EntryPoint[] = Object.entries(config.sharedMappings).map(
     ([entryPoint, mappedImport]) => {
+      const prebuilt = isPackageMapping(nodeIo, entryPoint);
       return {
-        fileName: entryPoint,
+        // A mapping onto a built package names a directory; the bundler needs the file its
+        // manifest points at, and only here is a bundler entry point actually required.
+        fileName: prebuilt ? toPackageEntry(entryPoint, mappedImport) : entryPoint,
         outName: mappedImport.replace(/[^A-Za-z0-9]/g, '_') + '.js',
         key: mappedImport,
+        kind: prebuilt ? 'package' : 'source',
       };
     }
   );
   const exposes: Array<EntryPoint & { element?: string }> = Object.entries(config.exposes).map(
     ([key, expose]) => {
       const outFilePath = key + '.js';
-      return { fileName: expose.file, outName: outFilePath, key, element: expose.element };
+      return {
+        fileName: expose.file,
+        outName: outFilePath,
+        key,
+        kind: 'source' as const,
+        element: expose.element,
+      };
     }
   );
 
@@ -168,6 +182,16 @@ export async function bundleExposedAndMappingsCore(
     : undefined;
 
   return { mappings: sharedResult, exposes: exposedResult, chunks: exportedChunks, integrity };
+}
+
+function toPackageEntry(mappedPath: string, mappedImport: string): string {
+  const entry = resolvePackageMappingEntry(nodeIo, mappedPath);
+  if (entry) return entry;
+
+  throw new Error(
+    `Shared mapping '${mappedImport}' points at '${mappedPath}', whose package.json names no ` +
+      `resolvable entry point ('exports', 'module' or 'main').`
+  );
 }
 
 function toSharedMappingInfo(
