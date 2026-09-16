@@ -17,7 +17,7 @@
     "esbuild": "^0.28.0",
     "fast-glob": "^3.3.3",
     "json5": "^2.2.3",
-    "typescript": "~6.0.0"
+    "typescript": "~7.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
