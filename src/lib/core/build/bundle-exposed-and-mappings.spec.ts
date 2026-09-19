@@ -405,6 +405,37 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     });
   });
 
+  it('names dense chunks after their content and points the rewritten entries at them', async () => {
+    const io = createMemoryIo();
+    const config = makeConfig({
+      exposes: { './Comp': { file: './src/comp.ts' } },
+      chunks: true,
+      features: { ...makeConfig().features, denseChunking: true },
+    });
+    const adapter = createFakeBuildAdapter({
+      results: () => {
+        io.setFile('dist/Comp.js', "export * from './chunk-AAAAAAAA.js';\n");
+        io.setFile('dist/chunk-AAAAAAAA.js', 'export const a = 1;\n');
+        return [{ fileName: 'dist/Comp.js' }, { fileName: 'dist/chunk-AAAAAAAA.js' }];
+      },
+    });
+
+    const result = await bundleExposedAndMappingsCore(
+      { adapter, io },
+      config,
+      makeFedOptions(),
+      []
+    );
+
+    const [chunk] = result.chunks!['mapping-or-exposed']!;
+    expect(chunk).toMatch(/^chunk-[A-Z2-7]{8}\.js$/);
+    expect(chunk).not.toBe('chunk-AAAAAAAA.js');
+    expect(io.isFile(`dist/${chunk}`)).toBe(true);
+    expect(io.isFile('dist/chunk-AAAAAAAA.js')).toBe(false);
+    expect(io.readText('dist/Comp.js')).toContain(`"@nf-internal/${chunk!.replace(/\.js$/, '')}"`);
+    expect(io.readText('dist/Comp.js')).not.toContain('AAAAAAAA');
+  });
+
   it('skips setup and forwards modifiedFiles on a rebuild', async () => {
     const adapter = createFakeBuildAdapter({ results: [] });
 

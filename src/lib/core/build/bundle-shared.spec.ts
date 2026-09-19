@@ -649,6 +649,91 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     expect(adapter.calls.setup).toHaveLength(0);
   });
 
+  describe('bundler chunks', () => {
+    // The adapter emits the entry plus a chunk it imports; the entry keeps its pre-hash name so
+    // the chunk rename shows up in the text the entry hash is then taken from.
+    const chunkedBuild = async (
+      mem: ReturnType<typeof createMemoryIo>,
+      chunkText: string,
+      denseChunking: boolean
+    ) => {
+      const adapter: FakeBuildAdapter = createFakeBuildAdapter({
+        results: name => {
+          const setup = [...adapter.calls.setup].reverse().find(s => s.name === name)!;
+          const entry = path.join(setup.options.outdir, setup.options.entryPoints[0]!.outName);
+          const chunk = path.join(setup.options.outdir, 'chunk-AAAAAAAA.js');
+          mem.setFile(entry, `export * from './chunk-AAAAAAAA.js';\n`);
+          mem.setFile(chunk, chunkText);
+          mem.setFile(`${chunk}.map`, '{"version":3}');
+          return [{ fileName: entry }, { fileName: chunk }, { fileName: `${chunk}.map` }];
+        },
+      });
+      const config = makeConfig();
+      config.features.denseChunking = denseChunking;
+      const result = await bundleSharedCore(
+        { io: mem, repo: repoAtVersion('2.0.0'), adapter },
+        fooWith(),
+        config,
+        makeFedOptions(),
+        [],
+        { ...BUILD_OPTIONS, chunks: true }
+      );
+      return result;
+    };
+
+    it('publishes a chunk under a name derived from its content, as a singleton', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+
+      const result = await chunkedBuild(mem, 'export const a = 1;\n', false);
+
+      const chunk = result.externals.find(e => e.packageName.startsWith('@nf-internal/'))!;
+      expect(chunk).toMatchObject({ singleton: true, strictVersion: false, version: '0.0.0' });
+      expect(chunk.outFileName).toMatch(/^chunk-[A-Z2-7]{8}\.js$/);
+      expect(chunk.outFileName).not.toBe('chunk-AAAAAAAA.js');
+      expect(chunk.packageName).toBe(`@nf-internal/${chunk.outFileName.replace(/\.js$/, '')}`);
+      expect(mem.isFile(path.join('/ws/dist', chunk.outFileName))).toBe(true);
+      expect(mem.isFile(path.join('/ws/dist', `${chunk.outFileName}.map`))).toBe(true);
+      expect(mem.isFile('/ws/dist/chunk-AAAAAAAA.js')).toBe(false);
+
+      const entry = mem.readText(path.join('/ws/dist', result.externals[0]!.outFileName));
+      expect(entry).toContain(`"${chunk.packageName}"`);
+      expect(entry).not.toContain('AAAAAAAA');
+    });
+
+    it('lists the content-derived name under the bundle when chunks are dense', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+
+      const result = await chunkedBuild(mem, 'export const a = 1;\n', true);
+
+      const [chunk] = result.chunks!['shared']!;
+      expect(chunk).toMatch(/^chunk-[A-Z2-7]{8}\.js$/);
+      expect(chunk).not.toBe('chunk-AAAAAAAA.js');
+      expect(mem.isFile(path.join('/ws/dist', chunk!))).toBe(true);
+      expect(result.externals.some(e => e.packageName.startsWith('@nf-internal/'))).toBe(false);
+    });
+
+    it('gives two builds the same chunk name exactly when the chunk bytes agree', async () => {
+      const same = await chunkedBuild(
+        createMemoryIo().setFile(ROOT_PKG, '{}'),
+        'export const a = 1;\n',
+        true
+      );
+      const again = await chunkedBuild(
+        createMemoryIo().setFile(ROOT_PKG, '{}'),
+        'export const a = 1;\n',
+        true
+      );
+      const other = await chunkedBuild(
+        createMemoryIo().setFile(ROOT_PKG, '{}'),
+        'export const a = 2;\n',
+        true
+      );
+
+      expect(same.chunks!['shared']).toEqual(again.chunks!['shared']);
+      expect(same.chunks!['shared']).not.toEqual(other.chunks!['shared']);
+    });
+  });
+
   // copyFiles runs on the fresh-build path too, so every name in the persisted metadata must
   // exist in the cache dir. Sourcemaps are the risky case: rewriteImports renames the entry to a
   // content hash and deletes the original, while the .map keeps its version-based name.

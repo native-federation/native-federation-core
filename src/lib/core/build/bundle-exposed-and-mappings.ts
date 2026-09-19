@@ -7,17 +7,18 @@ import type {
   IntegrityMap,
   SharedInfo,
 } from '../../domain/core/federation-info.contract.js';
-import type { FileReaderPort } from '../../domain/utils/io-port.contract.js';
+import type { FileReaderPort, IoPort } from '../../domain/utils/io-port.contract.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import { createBuildResultMap, popFromResultMap } from './build-result-map.js';
-import { computeIntegrityMap } from './compute-integrity.js';
+import { computeIntegrityMapCore } from './compute-integrity.js';
 import { logger } from '../../utils/logger.js';
 import { normalize } from '../../utils/normalize.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import { type NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
 import { AbortedError } from '../../utils/errors.js';
 import type { EntryPoint, NFBuildAdapter } from '../../domain/core/build-adapter.contract.js';
-import { rewriteChunkImports } from './rewrite-chunk-imports.js';
+import { rewriteChunkImportsCore } from './rewrite-chunk-imports.js';
+import { renameChunksByContentCore } from './rename-chunks-by-content.js';
 import { getBuildAdapter } from './build-adapter.js';
 import { resolveMappingConfig } from '../../config/mapping-utils.js';
 import { applyAutoRequiredOptions } from '../../config/version-lookup.js';
@@ -31,7 +32,7 @@ export async function bundleExposedAndMappings(
   signal?: AbortSignal
 ): Promise<ArtifactInfo> {
   return bundleExposedAndMappingsCore(
-    { adapter: getBuildAdapter() },
+    { adapter: getBuildAdapter(), io: nodeIo },
     config,
     fedOptions,
     externals,
@@ -41,7 +42,7 @@ export async function bundleExposedAndMappings(
 }
 
 export async function bundleExposedAndMappingsCore(
-  deps: { adapter: NFBuildAdapter },
+  deps: { adapter: NFBuildAdapter; io?: IoPort },
   config: NormalizedFederationConfig,
   fedOptions: NormalizedFederationOptions,
   externals: string[],
@@ -51,6 +52,7 @@ export async function bundleExposedAndMappingsCore(
   if (signal?.aborted) {
     throw new AbortedError('[bundle-exposed-and-mappings] Aborted before bundling');
   }
+  const io = deps.io ?? nodeIo;
 
   const shared: EntryPoint[] = Object.entries(config.sharedMappings).map(
     ([entryPoint, mappedImport]) => {
@@ -157,8 +159,8 @@ export async function bundleExposedAndMappingsCore(
   let exportedChunks: ChunkInfo | undefined = undefined;
   const chunkPaths: string[] = [];
   if (config.chunks && config.features.denseChunking) {
-    for (const entryFile of entryFiles) rewriteChunkImports(entryFile);
-    chunkPaths.push(...Object.values(resultMap));
+    for (const entryFile of entryFiles) rewriteChunkImportsCore(io, entryFile);
+    chunkPaths.push(...renameChunks(io, Object.values(resultMap), entryFiles));
     exportedChunks = {
       ['mapping-or-exposed']: chunkPaths.map(chunk => path.basename(chunk)),
     };
@@ -166,10 +168,26 @@ export async function bundleExposedAndMappingsCore(
 
   // Must run after rewriteChunkImports so SRI matches the final on-disk bytes.
   const integrity: IntegrityMap | undefined = config.features.integrityHashes
-    ? computeIntegrityMap([...entryFiles, ...chunkPaths], '')
+    ? computeIntegrityMapCore(io, [...entryFiles, ...chunkPaths], '')
     : undefined;
 
   return { mappings: sharedResult, exposes: exposedResult, chunks: exportedChunks, integrity };
+}
+
+// Chunks are published by name in the `chunks` map, so the name is made to say what the bytes are.
+function renameChunks(io: IoPort, chunkPaths: string[], entryFiles: string[]): string[] {
+  if (chunkPaths.length === 0) return chunkPaths;
+  const dir = path.dirname(chunkPaths[0]!);
+  const renamed = renameChunksByContentCore(
+    io,
+    dir,
+    chunkPaths.map(chunk => path.basename(chunk)),
+    entryFiles.map(entry => path.basename(entry))
+  );
+  return chunkPaths.map(chunk => {
+    const file = path.basename(chunk);
+    return path.join(dir, renamed.get(file) ?? file);
+  });
 }
 
 function toSharedMappingInfo(

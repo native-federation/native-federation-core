@@ -18,6 +18,7 @@ import { logger } from '../../utils/logger.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import { DEFAULT_EXTERNAL_LIST } from './default-external-list.js';
 import { isSourceFile, transformChunkImports } from './rewrite-chunk-imports.js';
+import { renameChunksByContentCore } from './rename-chunks-by-content.js';
 import { toChunkImport } from '../../domain/core/chunk.js';
 import { cacheEntryCore, getChecksumCore, getFilename } from '../cache/cache-persistence.js';
 import { linkedContentSignals } from './resolve-shared-dirs.js';
@@ -227,6 +228,7 @@ export async function bundleSharedCore(
       deps.io,
       cachedFiles,
       fedOptions.federationCache.cachePath,
+      new Set(entryPoints.map(ep => ep.outName)),
       hashEntries
     );
     applyRenames(bundleResult, entryPoints, renamed);
@@ -307,23 +309,39 @@ function rewriteImports(
   io: IoPort,
   cachedFiles: string[],
   cachePath: string,
+  entries: Set<string>,
   hashEntries: Set<string>
 ): Map<string, string> {
-  const renamed = new Map<string, string>();
+  const sourceFiles = cachedFiles.filter(isSourceFile);
 
-  for (const file of cachedFiles.filter(isSourceFile)) {
+  for (const file of sourceFiles) {
     const filePath = path.join(cachePath, file);
-    const rewritten = transformChunkImports(io.readText(filePath), file);
+    io.writeText(filePath, transformChunkImports(io.readText(filePath), file));
+  }
 
-    if (hashEntries.has(file)) {
-      const hashedName = `${file.split('.')[0]}.${calcHashCore(io, rewritten)}.js`;
-      io.writeText(path.join(cachePath, hashedName), rewritten);
-      // Cache hygiene: drop the version-named intermediate (untracked by metadata, so clear() can't reap it).
-      io.remove(filePath);
-      renamed.set(file, hashedName);
-    } else {
-      io.writeText(filePath, rewritten);
-    }
+  // Chunks are published under their file name, so the name has to say what the bytes are;
+  // entries import them, so they are renamed first and hashed after.
+  const renamed = new Map<string, string>();
+  const chunkRenames = renameChunksByContentCore(
+    io,
+    cachePath,
+    sourceFiles.filter(file => !entries.has(file)),
+    sourceFiles.filter(file => entries.has(file))
+  );
+  for (const [file, target] of chunkRenames) {
+    renamed.set(file, target);
+    if (io.exists(path.join(cachePath, `${target}.map`)))
+      renamed.set(`${file}.map`, `${target}.map`);
+  }
+
+  for (const file of sourceFiles.filter(file => hashEntries.has(file))) {
+    const filePath = path.join(cachePath, file);
+    const rewritten = io.readText(filePath);
+    const hashedName = `${file.split('.')[0]}.${calcHashCore(io, rewritten)}.js`;
+    io.writeText(path.join(cachePath, hashedName), rewritten);
+    // Cache hygiene: drop the version-named intermediate (untracked by metadata, so clear() can't reap it).
+    io.remove(filePath);
+    renamed.set(file, hashedName);
   }
 
   return renamed;
@@ -387,27 +405,19 @@ function getChunkFileNames(chunks: NFBuildAdapterResult[]): string[] {
   return chunks.map(chunk => path.basename(chunk.fileName));
 }
 
+// A chunk split off by the bundler has no version of its own; its name is a hash of its content
+// (see rename-chunks-by-content), so applications that publish the same name publish the same
+// bytes and the runtime can serve every one of them from the first copy it sees.
 function addChunksToResult(chunks: NFBuildAdapterResult[], result: SharedInfo[]) {
   for (const item of chunks) {
     const fileName = path.basename(item.fileName);
     result.push({
-      singleton: false,
+      singleton: true,
       strictVersion: false,
-      // Here, the version, singleton and strictversion
-      // do not matter because
-      // a) a chunk split off by the bundler does
-      // not have a version and b) it gets a hash
-      // code as part of the file name to be unique
-      // when requested via a _versioned_ package.
       version: '0.0.0',
       requiredVersion: '0.0.0',
       packageName: toChunkImport(fileName),
       outFileName: fileName,
-      // dev: dev
-      //   ? undefined
-      //   : {
-      //       entryPoint: normalize(fileName),
-      //     },
     });
   }
 }
