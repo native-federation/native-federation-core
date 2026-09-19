@@ -8,12 +8,18 @@ importers:
 
   .:
     dependencies:
+      '@jridgewell/sourcemap-codec':
+        specifier: ^1.6.0
+        version: 1.6.0
       '@softarc/sheriff-core':
         specifier: ^0.19.6
         version: 0.19.6(typescript@6.0.3)
       chalk:
         specifier: ^6.0.0
         version: 6.0.0
+      es-module-lexer:
+        specifier: ^2.3.2
+        version: 2.3.2
       esbuild:
         specifier: ^0.28.0
         version: 0.28.2

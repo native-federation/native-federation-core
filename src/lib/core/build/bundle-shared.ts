@@ -17,7 +17,12 @@ import { type NormalizedFederationOptions } from '../../domain/core/federation-o
 import { logger } from '../../utils/logger.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import { DEFAULT_EXTERNAL_LIST } from './default-external-list.js';
-import { isSourceFile, transformChunkImports } from './rewrite-chunk-imports.js';
+import {
+  applyEdits,
+  collectSpecifierEdits,
+  isSourceFile,
+  shiftSourceMap,
+} from './rewrite-chunk-imports.js';
 import { toChunkImport } from '../../domain/core/chunk.js';
 import { cacheEntryCore, getChecksumCore, getFilename } from '../cache/cache-persistence.js';
 import { linkedContentSignals } from './resolve-shared-dirs.js';
@@ -313,7 +318,11 @@ function rewriteImports(
 
   for (const file of cachedFiles.filter(isSourceFile)) {
     const filePath = path.join(cachePath, file);
-    const rewritten = transformChunkImports(io.readText(filePath), file);
+    const sourceCode = io.readText(filePath);
+    const edits = collectSpecifierEdits(sourceCode, file);
+    const rewritten = applyEdits(sourceCode, edits);
+    // The map esbuild wrote describes the text before the edits; move its columns along.
+    shiftSourceMap(io, `${filePath}.map`, sourceCode, edits);
 
     if (hashEntries.has(file)) {
       const hashedName = `${file.split('.')[0]}.${calcHashCore(io, rewritten)}.js`;
@@ -356,7 +365,12 @@ function createOutName(
   contentSignal = ''
 ) {
   const hashBase =
-    pi.version + '_' + pi.entryPoint + '_' + configState + (contentSignal ? '_' + contentSignal : '');
+    pi.version +
+    '_' +
+    pi.entryPoint +
+    '_' +
+    configState +
+    (contentSignal ? '_' + contentSignal : '');
   const hash = calcHashCore(io, hashBase);
 
   const outName = fedOptions.dev ? `${encName}.${hash}-dev.js` : `${encName}.${hash}.js`;
