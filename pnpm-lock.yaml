@@ -55,7 +55,7 @@ importers:
         specifier: ^6.34.0
         version: 6.35.1
       prettier:
-        specifier: ^3.9.4
+        specifier: ^3.9.6
         version: 3.9.6
       tslib:
         specifier: ^2.3.0
