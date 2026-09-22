@@ -24,6 +24,12 @@ import { resolveMappingConfig } from '../../config/mapping-utils.js';
 import { applyAutoRequiredOptions } from '../../config/version-lookup.js';
 import type { AutoRequiredOptions } from '../../domain/config/external-config.contract.js';
 
+// Shared mappings and exposed modules build separately so the bundler cannot factor one chunk out
+// of both: a chunk spanning them is reached through two import trails and evaluated twice.
+const MAPPING_BUNDLE = 'mapping-bundle';
+// Hard-coded in the orchestrator, which registers it for every remote it knows.
+const EXPOSED_BUNDLE = 'mapping-or-exposed';
+
 export async function bundleExposedAndMappings(
   config: NormalizedFederationConfig,
   fedOptions: NormalizedFederationOptions,
@@ -54,7 +60,7 @@ export async function bundleExposedAndMappingsCore(
   }
   const io = deps.io ?? nodeIo;
 
-  const shared: EntryPoint[] = Object.entries(config.sharedMappings).map(
+  const mappings: EntryPoint[] = Object.entries(config.sharedMappings).map(
     ([entryPoint, mappedImport]) => {
       return {
         fileName: entryPoint,
@@ -70,55 +76,77 @@ export async function bundleExposedAndMappingsCore(
     }
   );
 
-  const entryPoints: EntryPoint[] = [...shared, ...exposes];
-
   const hash = !fedOptions.dev;
 
-  let result;
-  try {
-    if (!modifiedFiles) {
-      await deps.adapter.setup('mapping-or-exposed', {
-        entryPoints,
-        outdir: fedOptions.outputPath,
-        tsConfigPath: fedOptions.tsConfig,
-        external: externals,
-        dev: !!fedOptions.dev,
-        watch: fedOptions.watch,
-        mappedPaths: config.sharedMappings,
-        chunks: config.chunks,
-        hash,
-        optimizedMappings: config.features.ignoreUnusedDeps,
-        isMappingOrExposed: true,
-        cache: fedOptions.federationCache,
-      });
+  const runBuild = async (
+    bundleName: string,
+    entryPoints: EntryPoint[]
+  ): Promise<Record<string, string>> => {
+    if (entryPoints.length === 0) return {};
+
+    let result;
+    try {
+      if (!modifiedFiles) {
+        await deps.adapter.setup(bundleName, {
+          entryPoints,
+          outdir: fedOptions.outputPath,
+          tsConfigPath: fedOptions.tsConfig,
+          external: externals,
+          dev: !!fedOptions.dev,
+          watch: fedOptions.watch,
+          mappedPaths: config.sharedMappings,
+          chunks: config.chunks,
+          hash,
+          optimizedMappings: config.features.ignoreUnusedDeps,
+          isMappingOrExposed: true,
+          cache: fedOptions.federationCache,
+        });
+      }
+
+      result = await deps.adapter.build(bundleName, { signal, modifiedFiles });
+
+      if (signal?.aborted) {
+        throw new AbortedError('[bundle-exposed-and-mappings] Aborted after bundle');
+      }
+    } catch (error) {
+      if (!(error instanceof AbortedError)) {
+        logger.error('Error building federation artifacts');
+      }
+      throw error;
     }
 
-    result = await deps.adapter.build('mapping-or-exposed', {
-      signal,
-      modifiedFiles,
-    });
+    return createBuildResultMap(
+      result,
+      hash,
+      entryPoints.map(ep => ep.outName)
+    );
+  };
 
-    if (signal?.aborted) {
-      throw new AbortedError('[bundle-exposed-and-mappings] Aborted after bundle');
-    }
-  } catch (error) {
-    if (!(error instanceof AbortedError)) {
-      logger.error('Error building federation artifacts');
-    }
-    throw error;
-  }
+  const dense = config.chunks && config.features.denseChunking;
+  const exportedChunks: ChunkInfo = {};
+  const chunkPaths: string[] = [];
 
-  const resultMap = createBuildResultMap(result, hash, [
-    ...shared.map(s => s.outName),
-    ...exposes.map(e => e.outName),
-  ]);
+  // Renamed before the next build runs, so the two never hold the bundler's names at once.
+  const takeChunks = (bundleName: string, resultMap: Record<string, string>, entries: string[]) => {
+    if (!dense || entries.length === 0) return;
+    const chunks = chunksOf(resultMap);
+    for (const entryFile of entries) rewriteChunkImportsCore(io, entryFile);
+    const renamed = renameChunks(io, chunks, entries);
+    const paths = chunks.map(chunk =>
+      path.join(path.dirname(chunk), renamed.get(path.basename(chunk)) ?? path.basename(chunk))
+    );
+    exportedChunks[bundleName] = paths.map(chunk => path.basename(chunk));
+    chunkPaths.push(...paths);
+  };
+
+  const mappingResults = await runBuild(MAPPING_BUNDLE, mappings);
 
   const sharedResult: Array<SharedInfo> = [];
-  const entryFiles: string[] = [];
+  const mappingFiles: string[] = [];
 
   // Pick shared-mappings
-  for (const item of shared) {
-    const distEntryFile = popFromResultMap(resultMap, item.outName);
+  for (const item of mappings) {
+    const distEntryFile = popFromResultMap(mappingResults, item.outName);
     sharedResult.push(
       toSharedMappingInfo(
         item.fileName,
@@ -128,14 +156,20 @@ export async function bundleExposedAndMappingsCore(
         fedOptions
       )
     );
-    entryFiles.push(distEntryFile);
+    mappingFiles.push(distEntryFile);
   }
 
+  if (dense) for (const external of sharedResult) external.bundle = MAPPING_BUNDLE;
+  takeChunks(MAPPING_BUNDLE, mappingResults, mappingFiles);
+
+  const exposedResults = await runBuild(EXPOSED_BUNDLE, exposes);
+
   const exposedResult: Array<ExposesInfo> = [];
+  const exposedFiles: string[] = [];
 
   // Pick exposed-modules
   for (const item of exposes) {
-    const distEntryFile = popFromResultMap(resultMap, item.outName);
+    const distEntryFile = popFromResultMap(exposedResults, item.outName);
 
     exposedResult.push({
       key: item.key!,
@@ -147,47 +181,44 @@ export async function bundleExposedAndMappingsCore(
             entryPoint: normalize(path.join(fedOptions.workspaceRoot, item.fileName!)),
           },
     });
-    entryFiles.push(distEntryFile);
+    exposedFiles.push(distEntryFile);
   }
 
-  // Remove .map files
-  Object.keys(resultMap)
-    .filter(f => f.endsWith('.map'))
-    .forEach(f => popFromResultMap(resultMap, f));
-
-  // Process remaining chunks and lazy loaded internal modules
-  let exportedChunks: ChunkInfo | undefined = undefined;
-  const chunkPaths: string[] = [];
-  if (config.chunks && config.features.denseChunking) {
-    for (const entryFile of entryFiles) rewriteChunkImportsCore(io, entryFile);
-    chunkPaths.push(...renameChunks(io, Object.values(resultMap), entryFiles));
-    exportedChunks = {
-      ['mapping-or-exposed']: chunkPaths.map(chunk => path.basename(chunk)),
-    };
-  }
+  takeChunks(EXPOSED_BUNDLE, exposedResults, exposedFiles);
 
   // Must run after rewriteChunkImports so SRI matches the final on-disk bytes.
   const integrity: IntegrityMap | undefined = config.features.integrityHashes
-    ? computeIntegrityMapCore(io, [...entryFiles, ...chunkPaths], '')
+    ? computeIntegrityMapCore(io, [...mappingFiles, ...exposedFiles, ...chunkPaths], '')
     : undefined;
 
-  return { mappings: sharedResult, exposes: exposedResult, chunks: exportedChunks, integrity };
+  return {
+    mappings: sharedResult,
+    exposes: exposedResult,
+    chunks: Object.keys(exportedChunks).length > 0 ? exportedChunks : undefined,
+    integrity,
+  };
+}
+
+function chunksOf(resultMap: Record<string, string>): string[] {
+  return Object.entries(resultMap)
+    .filter(([file]) => !file.endsWith('.map'))
+    .map(([, chunkPath]) => chunkPath);
 }
 
 // Chunks are published by name in the `chunks` map, so the name is made to say what the bytes are.
-function renameChunks(io: IoPort, chunkPaths: string[], entryFiles: string[]): string[] {
-  if (chunkPaths.length === 0) return chunkPaths;
+function renameChunks(
+  io: IoPort,
+  chunkPaths: string[],
+  entryFiles: string[]
+): Map<string, string> {
+  if (chunkPaths.length === 0) return new Map();
   const dir = path.dirname(chunkPaths[0]!);
-  const renamed = renameChunksByContentCore(
+  return renameChunksByContentCore(
     io,
     dir,
-    chunkPaths.map(chunk => path.basename(chunk)),
+    [...new Set(chunkPaths.map(chunk => path.basename(chunk)))],
     entryFiles.map(entry => path.basename(entry))
   );
-  return chunkPaths.map(chunk => {
-    const file = path.basename(chunk);
-    return path.join(dir, renamed.get(file) ?? file);
-  });
 }
 
 function toSharedMappingInfo(

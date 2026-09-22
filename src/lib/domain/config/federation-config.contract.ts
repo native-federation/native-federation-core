@@ -15,9 +15,8 @@ export type SharedMappingEntry = string | [string[], ExternalConfigInput];
 export type SharedMappingConfigs = Record<string, ExternalConfigInput>;
 
 /**
- * Only the subset of `ExternalConfig` a mapping can act on — mappings all share the
- * single `mapping-or-exposed` bundle, so `build`/`platform`/`chunks`/`packageInfo`
- * have nothing to select. `requiredVersion` and `version` stay optional because their
+ * Only the subset of `ExternalConfig` a mapping can act on — mappings all share the single
+ * `mapping-bundle`, so `build`/`platform`/`chunks`/`packageInfo` have nothing to select. `requiredVersion` and `version` stay optional because their
  * defaults are read from the mapped lib's package.json at build time, which is also why an
  * `AutoRequiredOptions` reaches this far unresolved.
  *

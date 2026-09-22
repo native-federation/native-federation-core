@@ -198,8 +198,17 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     expect(result.mappings).toEqual([
       expect.objectContaining({ packageName: 'foo', outFileName: 'foo.js' }),
     ]);
-    expect(adapter.calls.setup).toHaveLength(1);
-    expect(adapter.calls.build).toHaveLength(1);
+    expect(adapter.calls.setup.map(c => c.name)).toEqual(['mapping-bundle', 'mapping-or-exposed']);
+    expect(adapter.calls.build.map(c => c.name)).toEqual(['mapping-bundle', 'mapping-or-exposed']);
+  });
+
+  it('leaves the adapter alone for a side that has no entry points', async () => {
+    const config = makeConfig({ exposes: { './Comp': { file: './src/comp.ts' } } });
+    const adapter = createFakeBuildAdapter();
+
+    await bundleExposedAndMappingsCore({ adapter }, config, makeFedOptions(), []);
+
+    expect(adapter.calls.setup.map(c => c.name)).toEqual(['mapping-or-exposed']);
   });
 
   // mappingVersion is off in makeConfig, so this is the un-annotated baseline: no version
@@ -436,12 +445,50 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     expect(io.readText('dist/Comp.js')).not.toContain('AAAAAAAA');
   });
 
+  it('keeps a mapping chunk and an exposed chunk in separate bundles', async () => {
+    const io = createMemoryIo();
+    const config = makeConfig({
+      exposes: { './Comp': { file: './src/comp.ts' } },
+      sharedMappings: { './libs/foo': 'foo' },
+      chunks: true,
+      features: { ...makeConfig().features, denseChunking: true },
+    });
+    // Adversarial fixture: a real bundler hashes a chunk's output bytes, so one name means one
+    // set of bytes. Here both builds emit a differing chunk under one name, to pin that neither
+    // build can reach into the other's output.
+    const adapter = createFakeBuildAdapter({
+      results: name => {
+        const entry = name === 'mapping-bundle' ? 'dist/foo.js' : 'dist/Comp.js';
+        const body = name === 'mapping-bundle' ? 'export const m = 1;\n' : 'export const e = 2;\n';
+        io.setFile(entry, "export * from './chunk-AAAAAAAA.js';\n");
+        io.setFile('dist/chunk-AAAAAAAA.js', body);
+        return [{ fileName: entry }, { fileName: 'dist/chunk-AAAAAAAA.js' }];
+      },
+    });
+
+    const result = await bundleExposedAndMappingsCore(
+      { adapter, io },
+      config,
+      makeFedOptions(),
+      []
+    );
+
+    const [mappingChunk] = result.chunks!['mapping-bundle']!;
+    const [exposedChunk] = result.chunks!['mapping-or-exposed']!;
+    expect(mappingChunk).toMatch(/^chunk-[A-Z2-7]{8}\.js$/);
+    expect(exposedChunk).not.toBe(mappingChunk);
+    expect(io.readText(`dist/${mappingChunk}`)).toBe('export const m = 1;\n');
+    expect(io.readText(`dist/${exposedChunk}`)).toBe('export const e = 2;\n');
+    expect(result.mappings[0]).toMatchObject({ packageName: 'foo', bundle: 'mapping-bundle' });
+  });
+
   it('skips setup and forwards modifiedFiles on a rebuild', async () => {
-    const adapter = createFakeBuildAdapter({ results: [] });
+    // setup() is skipped on a rebuild, so the fake cannot echo the entry points back.
+    const adapter = createFakeBuildAdapter({ results: [{ fileName: 'dist/Comp.js' }] });
 
     await bundleExposedAndMappingsCore(
       { adapter },
-      makeConfig(),
+      makeConfig({ exposes: { './Comp': { file: './src/comp.ts' } } }),
       makeFedOptions(),
       [],
       ['/ws/src/x.ts']
