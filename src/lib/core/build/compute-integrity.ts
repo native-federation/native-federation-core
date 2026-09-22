@@ -1,8 +1,7 @@
 import * as path from 'path';
 import type { FileReaderPort, HashPort } from '../../domain/utils/io-port.contract.js';
 import type { IntegrityMap } from '../../domain/core/federation-info.contract.js';
-import { nodeIo } from '../../utils/io/node-io-adapter.js';
-import { integrityForFileCore } from '../../utils/hash-file.js';
+import { integrityForFileCore } from '../../utils/hash.js';
 
 type IntegrityDeps = FileReaderPort & HashPort;
 
@@ -24,8 +23,4 @@ export function computeIntegrityMapCore(
     integrity[path.basename(file)] = integrityForFileCore(io, fullPath);
   }
   return integrity;
-}
-
-export function computeIntegrityMap(files: string[], baseDir: string): IntegrityMap {
-  return computeIntegrityMapCore(nodeIo, files, baseDir);
 }

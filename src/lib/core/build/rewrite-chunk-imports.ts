@@ -2,7 +2,6 @@ import * as path from 'path';
 import { initSync, parse } from 'es-module-lexer';
 import { decode, encode } from '@jridgewell/sourcemap-codec';
 import type { FileReaderPort, FileWriterPort } from '../../domain/utils/io-port.contract.js';
-import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import { toChunkImport } from '../../domain/core/chunk.js';
 
 export interface SpecifierEdit {
@@ -119,10 +118,6 @@ export function shiftSourceMap(
 
   map.mappings = shiftMappings(map.mappings, sourceCode, edits);
   io.writeText(mapPath, JSON.stringify(map));
-}
-
-export function rewriteChunkImports(filePath: string): void {
-  rewriteChunkImportsCore(nodeIo, filePath);
 }
 
 export function rewriteChunkImportsCore(
