@@ -159,7 +159,7 @@ describe('renameChunksByContentCore', () => {
     expect(io.exists('/out/other.js')).toBe(true);
   });
 
-  it('keeps the slot of a name the bundler wrote in another alphabet', () => {
+  it('writes base32 at the length of a name the bundler wrote in another alphabet', () => {
     const io = createMemoryIo()
       .setFile('/out/index-DqQoMqkL.js', 'export const a = 1;\n')
       .setFile('/out/chunk-1a2b3c4d.js', 'export const b = 1;\n');
@@ -171,16 +171,16 @@ describe('renameChunksByContentCore', () => {
       []
     );
 
-    expect(renamed.get('index-DqQoMqkL.js')).toMatch(/^index-[A-Za-z0-9_$]{8}\.js$/);
-    expect(renamed.get('chunk-1a2b3c4d.js')).toMatch(/^chunk-[0-9a-f]{8}\.js$/);
+    expect(renamed.get('index-DqQoMqkL.js')).toMatch(/^index-[A-Z2-7]{8}\.js$/);
+    expect(renamed.get('chunk-1a2b3c4d.js')).toMatch(/^chunk-[A-Z2-7]{8}\.js$/);
   });
 
-  it('keeps a Rollup segment with `$` at its length', () => {
+  it('replaces a Rollup segment with `$` at its length', () => {
     const io = createMemoryIo().setFile('/out/index-Dq$oMqkL.js', 'export const a = 1;\n');
 
     const renamed = renameChunksByContentCore(io, '/out', ['index-Dq$oMqkL.js'], []);
 
-    expect(renamed.get('index-Dq$oMqkL.js')).toMatch(/^index-[A-Za-z0-9_$]{8}\.js$/);
+    expect(renamed.get('index-Dq$oMqkL.js')).toMatch(/^index-[A-Z2-7]{8}\.js$/);
   });
 
   it('does not take a short trailing word for a hash segment', () => {
