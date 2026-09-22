@@ -420,14 +420,14 @@ function getChunkFileNames(chunks: NFBuildAdapterResult[]): string[] {
   return chunks.map(chunk => path.basename(chunk.fileName));
 }
 
-// A chunk split off by the bundler has no version of its own; its name is a hash of its content
-// (see rename-chunks-by-content), so applications that publish the same name publish the same
-// bytes and the runtime can serve every one of them from the first copy it sees.
+// Never a singleton: a chunk belongs to a build, not to a dependency, so nothing downstream can
+// tell whether the external it was split out of asked for `singleton: false` or a share scope.
+// Its name says what its bytes are, but a name is not enough to share state on.
 function addChunksToResult(chunks: NFBuildAdapterResult[], result: SharedInfo[]) {
   for (const item of chunks) {
     const fileName = path.basename(item.fileName);
     result.push({
-      singleton: true,
+      singleton: false,
       strictVersion: false,
       version: '0.0.0',
       requiredVersion: '0.0.0',

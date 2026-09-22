@@ -643,13 +643,13 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       return result;
     };
 
-    it('publishes a chunk under a name derived from its content, as a singleton', async () => {
+    it('publishes a chunk under a name derived from its content, scoped to this remote', async () => {
       const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
 
       const result = await chunkedBuild(mem, 'export const a = 1;\n', false);
 
       const chunk = result.externals.find(e => e.packageName.startsWith('@nf-internal/'))!;
-      expect(chunk).toMatchObject({ singleton: true, strictVersion: false, version: '0.0.0' });
+      expect(chunk).toMatchObject({ singleton: false, strictVersion: false, version: '0.0.0' });
       expect(chunk.outFileName).toMatch(/^chunk-[A-Z2-7]{8}\.js$/);
       expect(chunk.outFileName).not.toBe('chunk-AAAAAAAA.js');
       expect(chunk.packageName).toBe(`@nf-internal/${chunk.outFileName.replace(/\.js$/, '')}`);

@@ -21,11 +21,10 @@ const SOURCE_MAP_COMMENT = /\/\/# sourceMappingURL=\S+\s*$/;
 const CHUNK_REFERENCE = new RegExp(`(['"])(?:\\.\\/([^'"/]+)|${CHUNK_PREFIX}\\/([^'"/]+))\\1`, 'g');
 
 /**
- * The bundler names a chunk after the build graph it belongs to, so two applications can emit
- * different bytes under one name and identical bytes under two. Both break sharing by name: the
- * first hands one application the other's file, the second keeps one module as two. The hash
- * segment is therefore replaced by a hash of the bytes that will be served, dependencies first,
- * because renaming a chunk changes the text of everything that imports it.
+ * The bundler names a chunk after the build graph it belongs to, so the same bytes can land under
+ * two names and different bytes under one. The hash segment is therefore replaced by a hash of the
+ * bytes that will be served, dependencies first, because renaming a chunk changes the text of
+ * everything that imports it.
  *
  * `chunks` and `referrers` are file names inside `dir`; only the former are renamed, the latter
  * have their references updated. Files that are not scripts are left alone. Returns the renames
