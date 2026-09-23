@@ -44,7 +44,7 @@ export function createMemoryIo(): MemoryIo {
     }
   };
 
-  // Segment-aware on purpose: fast-glob only honours '**' as a globstar when it is a whole
+  // Segment-aware on purpose: tinyglobby only honours '**' as a globstar when it is a whole
   // segment, and a double that lets 'ui-**' span separators hides real pattern bugs.
   const matcher = (pattern: string): RegExp => {
     const segments = pattern.split('/');

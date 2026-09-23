@@ -52,7 +52,7 @@ export default [
             'node:fs/promises',
             'crypto',
             'node:crypto',
-            'fast-glob',
+            'tinyglobby',
           ].map(name => ({
             name,
             message:

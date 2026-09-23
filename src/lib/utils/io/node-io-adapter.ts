@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import fg from 'fast-glob';
+import { globSync } from 'tinyglobby';
 import type {
   Digest,
   HashAlgorithm,
@@ -78,12 +78,15 @@ export const nodeIo: IoPort = {
     fs.unlinkSync(path);
   },
   globFiles(pattern, opts) {
-    return fg.sync(pattern, {
+    // Sorted because the result becomes esbuild's entry-point order, which decides how shared
+    // code is split into chunks; walk order differs per glob library and filesystem.
+    return globSync(pattern, {
       cwd: opts.cwd,
       ignore: opts.ignore,
       onlyFiles: true,
       deep: Infinity,
-    });
+      expandDirectories: false,
+    }).sort();
   },
   hash(algorithm: HashAlgorithm, data: Uint8Array | string): Digest {
     const sum = crypto.createHash(algorithm).update(data);

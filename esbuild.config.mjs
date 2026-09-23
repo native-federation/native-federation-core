@@ -1,5 +1,5 @@
 import { build } from 'esbuild';
-import fg from 'fast-glob';
+import { glob } from 'tinyglobby';
 
 // Raw esbuild build for @softarc/native-federation.
 //
@@ -7,7 +7,7 @@ import fg from 'fast-glob';
 // graph mirrors the source layout and keeps its explicit `./*.js` import
 // specifiers intact. Type declarations are emitted separately by
 // `tsc -p tsconfig.build.json` (esbuild does not generate `.d.ts`).
-const entryPoints = await fg('src/**/*.ts', {
+const entryPoints = await glob('src/**/*.ts', {
   ignore: ['src/**/*.spec.ts', 'src/**/*.test.ts', 'src/**/__test-helpers__/**'],
 });
 
