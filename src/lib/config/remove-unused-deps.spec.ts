@@ -417,6 +417,79 @@ describe('removeUnusedDeps', () => {
     });
   });
 
+  // esbuild keeps every subpath of an external verbatim and the import map has no key for it, so
+  // the warning is about what remoteEntry.json publishes, not about what reachability found.
+  describe('subpath-of-a-published-mapping warning', () => {
+    const subpath = /a subpath of the shared mapping '@org\/ui'/;
+    const mappingImports = new Map([['@org/ui/button.js', 'libs/feature/index.ts']]);
+
+    it('warns on a subpath of a reachable mapping, naming specifier and importer', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const used: UsedDependencies = {
+        external: new Set(),
+        internal: { '/ws/libs/ui/index.ts': '@org/ui' },
+        mappingImports,
+      };
+
+      run(used, makeConfig({}));
+
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]?.[0]).toMatch(subpath);
+      expect(warn.mock.calls[0]?.[0]).toContain(
+        "'libs/feature/index.ts' imports '@org/ui/button.js'"
+      );
+    });
+
+    // Nothing reaches @org/ui, but includeSecondaries publishes it anyway.
+    it('warns on a subpath of a mapping kept only by includeSecondaries', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const used: UsedDependencies = { external: new Set(), internal: {}, mappingImports };
+      const config = makeConfig(
+        {},
+        {
+          sharedMappings: { '/ws/libs/ui/index.ts': '@org/ui' },
+          sharedMappingsConfig: {
+            '@org/ui': { singleton: true, strictVersion: true, includeSecondaries: true },
+          },
+        }
+      );
+
+      run(used, config);
+
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(subpath));
+    });
+
+    // A skipped mapping is not external, so the bundler inlines the subpath and it works.
+    it('stays silent for a subpath of a skipped mapping', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const used: UsedDependencies = {
+        external: new Set(),
+        internal: { '/ws/libs/ui/index.ts': '@org/ui' },
+        mappingImports,
+      };
+
+      run(used, makeConfig({}, { skip: prepareSkipList(['@org/ui']) }));
+
+      expect(warn).not.toHaveBeenCalledWith(expect.stringMatching(subpath));
+    });
+
+    it('stays silent when a mapping is imported by its exact name', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const used: UsedDependencies = {
+        external: new Set(),
+        internal: {
+          '/ws/libs/ui/index.ts': '@org/ui',
+          '/ws/libs/ui/button/index.ts': '@org/ui/button',
+        },
+        mappingImports: new Map([['@org/ui/button', 'libs/feature/index.ts']]),
+      };
+
+      run(used, makeConfig({}));
+
+      expect(warn).not.toHaveBeenCalled();
+    });
+  });
+
   it('does not mutate the original config', () => {
     const used: UsedDependencies = { external: new Set(['keep']), internal: {} };
     const config = makeConfig({ keep: external(), drop: external() });

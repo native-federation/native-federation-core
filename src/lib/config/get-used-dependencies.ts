@@ -2,13 +2,14 @@ import { getProjectData as sheriffGetProjectData, type ProjectData } from '@soft
 import { cwd } from 'process';
 import { sharedPackageJsonRepository, tryGetPackageInfo } from '../utils/package/package-info.js';
 import { type PackageJsonRepository } from '../domain/utils/package-json.contract.js';
-import { getExternalImportsCore } from './get-external-imports.js';
+import { getBareSpecifiersCore, getExternalImportsCore } from './get-external-imports.js';
 import { nodeIo } from '../utils/io/node-io-adapter.js';
 import { type FileReaderPort } from '../domain/utils/io-port.contract.js';
 import { type PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { type UsedDependencies } from '../domain/utils/used-dependencies.contract.js';
 import { type ExposeEntry } from '../domain/config/federation-config.contract.js';
 import { isSharedMapping, matchMapping } from './match-mapping.js';
+import { isNonBarrelImport } from './validate-mappings.js';
 import { logger } from '../utils/logger.js';
 import * as path from 'path';
 
@@ -80,7 +81,7 @@ export function getUsedDependenciesFactoryCore(
 
     return {
       external: addTransientDeps(usedPackageNames, workspaceRoot, deps),
-      internal: resolveUsedMappings(fileInfos, workspaceRoot, config.sharedMappings),
+      ...resolveUsedMappings(fileInfos, workspaceRoot, config.sharedMappings, deps.io),
     };
   };
 }
@@ -123,41 +124,49 @@ function addTransientDeps(
 function resolveUsedMappings(
   fileInfos: ProjectData,
   workspaceRoot: string,
-  sharedMappings: PathToImport
-): PathToImport {
+  sharedMappings: PathToImport,
+  io: FileReaderPort
+): Pick<UsedDependencies, 'internal' | 'mappingImports'> {
   const usedMappings: PathToImport = {};
   const matchesIgnoringCase = createCaseInsensitiveMatcher(sharedMappings);
   const caseOnlyMisses = new Set<string>();
+  const specifiersInMappings = new Map<string, string>();
 
   for (const fileName of Object.keys(fileInfos)) {
     const fullFileName = path.join(workspaceRoot, fileName);
 
-    if (isSharedMapping(fullFileName, sharedMappings)) continue;
-
     const fileInfo = fileInfos[fileName];
     if (!fileInfo) continue;
 
-    // Check if any of this file's imports land in a shared mapping
+    // Inside a mapping, relative imports are the lib's own bundled code; only a barrel imported by
+    // specifier is another entry point that must be published (core#135).
+    let bySpecifier: Set<string> | null = null;
+    if (isSharedMapping(fullFileName, sharedMappings)) {
+      const specifiers = getBareSpecifiersCore(io, fullFileName);
+      for (const s of specifiers)
+        if (!specifiersInMappings.has(s)) specifiersInMappings.set(s, fileName);
+      bySpecifier = new Set(specifiers.filter(s => !isNonBarrelImport(s)));
+    }
+
     for (const imp of fileInfo.imports ?? []) {
       const fullImport = path.join(workspaceRoot, imp);
       const match = matchMapping(fullImport, sharedMappings);
-      if (match) usedMappings[fullImport] = match;
-      else if (matchesIgnoringCase(fullImport)) caseOnlyMisses.add(fullImport);
+      if (match) {
+        if (!bySpecifier || bySpecifier.has(match)) usedMappings[fullImport] = match;
+      } else if (!bySpecifier && matchesIgnoringCase(fullImport)) caseOnlyMisses.add(fullImport);
     }
   }
 
   warnOnCaseOnlyMisses(caseOnlyMisses);
 
-  return usedMappings;
+  return { internal: usedMappings, mappingImports: specifiersInMappings };
 }
 
 /**
  * Diagnosis only: never decides whether a mapping is used. Lower-casing the set once keeps it
  * cheap enough for every unmatched import, which is what makes a partial mismatch visible.
  */
-function createCaseInsensitiveMatcher(
-  sharedMappings: PathToImport
-): (filePath: string) => boolean {
+function createCaseInsensitiveMatcher(sharedMappings: PathToImport): (filePath: string) => boolean {
   const lowerCased = Object.fromEntries(
     Object.entries(sharedMappings).map(([sharedPath, sharedImport]) => [
       sharedPath.toLowerCase(),
@@ -178,7 +187,7 @@ function warnOnCaseOnlyMisses(misses: ReadonlySet<string>): void {
 
   logger.warn(
     `${misses.size} import(s) match a shared mapping only when case is ignored, so those ` +
-      `libraries were pruned from remoteEntry.json -- e.g. '${[...misses][0]}'.`
+      `libraries were pruned from remoteEntry.json:\n` +
+      [...misses].map(miss => `  - ${miss}`).join('\n')
   );
 }
-
