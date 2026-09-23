@@ -98,6 +98,7 @@ export function normalizeMappingConfig(
   return {
     singleton: cfg.singleton ?? true,
     strictVersion: cfg.strictVersion ?? mappingVersion,
+    ...(cfg.build && { build: cfg.build }),
     ...(cfg.requiredVersion !== undefined && { requiredVersion: cfg.requiredVersion }),
     ...(cfg.version !== undefined && { version: cfg.version }),
     ...(cfg.shareScope && { shareScope: cfg.shareScope }),

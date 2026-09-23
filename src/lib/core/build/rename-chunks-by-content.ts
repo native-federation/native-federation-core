@@ -5,7 +5,7 @@ import type {
   HashPort,
 } from '../../domain/utils/io-port.contract.js';
 import { CHUNK_PREFIX } from '../../domain/core/chunk.js';
-import { DEFAULT_HASH_SLOT, hashChunkContent, hashSlotOf } from '../../utils/hash.js';
+import { DEFAULT_HASH_LENGTH, hashChunkContent } from '../../utils/hash.js';
 import { isSourceFile } from './rewrite-chunk-imports.js';
 
 type RenameDeps = FileReaderPort & FileWriterPort & HashPort;
@@ -21,11 +21,10 @@ const SOURCE_MAP_COMMENT = /\/\/# sourceMappingURL=\S+\s*$/;
 const CHUNK_REFERENCE = new RegExp(`(['"])(?:\\.\\/([^'"/]+)|${CHUNK_PREFIX}\\/([^'"/]+))\\1`, 'g');
 
 /**
- * The bundler names a chunk after the build graph it belongs to, so two applications can emit
- * different bytes under one name and identical bytes under two. Both break sharing by name: the
- * first hands one application the other's file, the second keeps one module as two. The hash
- * segment is therefore replaced by a hash of the bytes that will be served, dependencies first,
- * because renaming a chunk changes the text of everything that imports it.
+ * The bundler names a chunk after the build graph it belongs to, so the same bytes can land under
+ * two names and different bytes under one. The hash segment is therefore replaced by a hash of the
+ * bytes that will be served, dependencies first, because renaming a chunk changes the text of
+ * everything that imports it.
  *
  * `chunks` and `referrers` are file names inside `dir`; only the former are renamed, the latter
  * have their references updated. Files that are not scripts are left alone. Returns the renames
@@ -41,7 +40,7 @@ export function renameChunksByContentCore(
   const chunkSet = new Set(scripts);
   const byStem = new Map(scripts.map(file => [stemOf(file), file]));
   const renamed = new Map<string, string>();
-  const bodies = new Map<string, string>();
+  const identities = new Map<string, string>();
   const texts = new Map<string, string>();
 
   const textOf = (file: string): string => {
@@ -80,13 +79,13 @@ export function renameChunksByContentCore(
   const bodyOf = (file: string): string =>
     withRenames(textOf(file)).replace(SOURCE_MAP_COMMENT, '');
 
-  const assign = (file: string, body: string): void => {
-    const target = hashedName(io, file, body);
-    const taken = bodies.get(target);
-    if (taken !== undefined && taken !== body) {
+  const assign = (file: string, identity: string): void => {
+    const target = hashedName(io, file, identity);
+    const taken = identities.get(target);
+    if (taken !== undefined && taken !== identity) {
       throw new Error(`Chunks with different content hash to the same name '${target}'.`);
     }
-    bodies.set(target, body);
+    identities.set(target, identity);
     renamed.set(file, target);
   };
 
@@ -103,7 +102,8 @@ export function renameChunksByContentCore(
     const order = [...members].sort((a, b) => compare(shape.get(a)!, shape.get(b)!));
     const index = new Map(order.map((file, at) => [file, at]));
     const unit = order.map(file => canonical(bodyOf(file), at => `#${index.get(at)}`)).join('\n');
-    for (const file of order) assign(file, `${unit}\n${index.get(file)}`);
+    const digest = io.hash('sha256', unit).base64();
+    for (const file of order) assign(file, `${digest}\n${index.get(file)}`);
   };
 
   const components = stronglyConnected(scripts, file => referencedChunks(textOf(file)));
@@ -188,11 +188,11 @@ function stemOf(file: string): string {
   return file.replace(SOURCE_EXTENSION, '');
 }
 
-function hashedName(io: HashPort, file: string, body: string): string {
+function hashedName(io: HashPort, file: string, identity: string): string {
   const extension = file.match(SOURCE_EXTENSION)?.[0] ?? '';
   const stem = stemOf(file);
   const segment = stem.match(HASH_SEGMENT);
-  const slot = segment ? hashSlotOf(segment[1]!) : DEFAULT_HASH_SLOT;
+  const length = segment ? segment[1]!.length : DEFAULT_HASH_LENGTH;
   const base = segment ? stem.slice(0, -segment[0].length) : stem;
-  return `${base}-${hashChunkContent(io, body, slot)}${extension}`;
+  return `${base}-${hashChunkContent(io, identity, length)}${extension}`;
 }

@@ -115,7 +115,7 @@ function normalizeShared(
   return result;
 }
 
-const IGNORED_MAPPING_PROPS = ['build', 'platform', 'chunks', 'packageInfo'] as const;
+const IGNORED_MAPPING_PROPS = ['platform', 'chunks', 'packageInfo'] as const;
 
 function normalizeMappingConfigs(
   configs: SharedMappingConfigs,
@@ -125,7 +125,7 @@ function normalizeMappingConfigs(
     const ignored = IGNORED_MAPPING_PROPS.filter(prop => cfg[prop] !== undefined);
     if (ignored.length > 0) {
       logger.warn(
-        `Mapping '${pattern}' sets ${ignored.join(', ')}, which mapped paths do not honour (they all share one bundle). Ignored.`
+        `Mapping '${pattern}' sets ${ignored.join(', ')}, which mapped paths do not honour. Ignored.`
       );
     }
 

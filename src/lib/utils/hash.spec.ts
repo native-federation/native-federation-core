@@ -5,7 +5,6 @@ import {
   hashChunkContent,
   hashEntryContent,
   hashFileCore,
-  hashSlotOf,
   integrityForFileCore,
 } from './hash.js';
 import { createMemoryIo } from './io/__test-helpers__/memory-io.js';
@@ -25,41 +24,19 @@ const dense = (data: string) =>
     .replace(/=/g, '')
     .substring(0, 10);
 
-describe('hashSlotOf', () => {
-  it('reads base32 from an esbuild segment', () => {
-    expect(hashSlotOf('ABCD2345')).toEqual({
-      alphabet: expect.stringMatching(/^[A-Z2-7]{32}$/),
-      length: 8,
-    });
-  });
-
-  it('reads hex from a lowercase hex segment', () => {
-    expect(hashSlotOf('1a2b3c4d')).toEqual({ alphabet: '0123456789abcdef', length: 8 });
-  });
-
-  it("reads Rollup's alphabet from a mixed-case segment", () => {
-    const slot = hashSlotOf('DqQoMqkL');
-    expect(slot.alphabet).toHaveLength(64);
-    expect(slot.alphabet).toContain('$');
-    expect(slot.alphabet).not.toContain('-');
-    expect(slot.length).toBe(8);
-  });
-});
-
 describe('hashChunkContent', () => {
-  it('fills the slot exactly, in its alphabet', () => {
-    for (const segment of ['ABCD2345', '1a2b3c4d', 'DqQoMqkL', 'ABCDEFGHIJKLMNOP']) {
-      const slot = hashSlotOf(segment);
-      const name = hashChunkContent(io, 'export const a = 1;\n', slot);
-      expect(name).toHaveLength(segment.length);
-      expect([...name].every(char => slot.alphabet.includes(char))).toBe(true);
+  it('fills the requested length in base32', () => {
+    // The lengths esbuild, Rollup and a hex-named bundler write into a chunk name.
+    for (const length of [8, 10, 16]) {
+      const name = hashChunkContent(io, 'export const a = 1;\n', length);
+      expect(name).toHaveLength(length);
+      expect(name).toMatch(/^[A-Z2-7]+$/);
     }
   });
 
   it('is a function of the text alone', () => {
-    const slot = hashSlotOf('ABCD2345');
-    expect(hashChunkContent(io, 'a', slot)).toBe(hashChunkContent(io, 'a', slot));
-    expect(hashChunkContent(io, 'a', slot)).not.toBe(hashChunkContent(io, 'b', slot));
+    expect(hashChunkContent(io, 'a', 8)).toBe(hashChunkContent(io, 'a', 8));
+    expect(hashChunkContent(io, 'a', 8)).not.toBe(hashChunkContent(io, 'b', 8));
   });
 });
 
