@@ -80,3 +80,37 @@ export function getExternalImportsCore(io: FileReaderPort, entryFilePath: string
 
   return Array.from(externals);
 }
+
+// One file, not followed: the specifiers exactly as written, dynamic imports included.
+export function getBareSpecifiersCore(io: FileReaderPort, filePath: string): string[] {
+  if (!io.isFile(filePath)) return [];
+
+  const sourceFile = ts.createSourceFile(
+    filePath,
+    io.readText(filePath),
+    ts.ScriptTarget.Latest,
+    true
+  );
+  const specifiers = new Set<string>();
+
+  function walk(node: ts.Node) {
+    let spec: ts.Expression | undefined;
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      spec = node.moduleSpecifier;
+    } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+      spec = node.arguments[0];
+    }
+    if (
+      spec &&
+      ts.isStringLiteralLike(spec) &&
+      !spec.text.startsWith('.') &&
+      !path.isAbsolute(spec.text)
+    ) {
+      specifiers.add(spec.text);
+    }
+    ts.forEachChild(node, walk);
+  }
+
+  ts.forEachChild(sourceFile, walk);
+  return [...specifiers];
+}

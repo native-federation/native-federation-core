@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as path from 'path';
-import { getExternalImportsCore } from './get-external-imports.js';
+import { getBareSpecifiersCore, getExternalImportsCore } from './get-external-imports.js';
 import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
 
 const ROOT = path.resolve('/proj');
@@ -44,5 +44,25 @@ describe('getExternalImportsCore', () => {
 
   it('returns nothing when the entry file does not exist', () => {
     expect(getExternalImportsCore(createMemoryIo(), f('missing.ts'))).toEqual([]);
+  });
+});
+
+describe('getBareSpecifiersCore', () => {
+  it('lists static, re-export and dynamic specifiers without following relative ones', () => {
+    const io = createMemoryIo()
+      .setFile(
+        f('entry.ts'),
+        `import { a } from '@org/a';
+export * from '@org/b';
+export * from './local';
+const lazy = () => import('@org/c');`
+      )
+      .setFile(f('local.ts'), `import '@org/not-followed';`);
+
+    expect(getBareSpecifiersCore(io, f('entry.ts')).sort()).toEqual(['@org/a', '@org/b', '@org/c']);
+  });
+
+  it('returns nothing when the file does not exist', () => {
+    expect(getBareSpecifiersCore(createMemoryIo(), f('missing.ts'))).toEqual([]);
   });
 });
