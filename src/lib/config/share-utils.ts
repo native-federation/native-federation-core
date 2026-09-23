@@ -10,6 +10,7 @@ import type { PackageJsonRepository } from '../domain/utils/package-json.contrac
 import { logger } from '../utils/logger.js';
 import { nodeIo } from '../utils/io/node-io-adapter.js';
 import type { FileReaderPort, GlobPort } from '../domain/utils/io-port.contract.js';
+import type { PackageJsonExternalsBuilder } from '../domain/config/config-builders.contract.js';
 import type {
   AutoRequiredOptions,
   ExternalConfig,
@@ -22,13 +23,22 @@ import type {
 import { findPackageJson, inferProjectPath } from './project-paths.js';
 import { isInferVersion, lookupVersion, applyAutoRequiredOptions } from './version-lookup.js';
 import { addSecondaries, getSecondaries } from './secondaries.js';
+import { matchesWildcard } from '../utils/path-patterns.js';
 
-export const fromPackageJson = (baseCfg: ShareAllExternalsOptions, projectPath?: string) => {
+export const fromPackageJson = (
+  baseCfg: ShareAllExternalsOptions,
+  projectPath?: string
+): PackageJsonExternalsBuilder => {
   const skipList: SkipList = [...DEFAULT_SKIP_LIST];
+  const selection: string[] = [];
   let overrides: ShareExternalsOptions = {};
   const patchList: Record<string, Partial<ExternalConfig>> = {};
 
-  const builder = {
+  const builder: PackageJsonExternalsBuilder = {
+    filter(patterns: string[]) {
+      selection.push(...patterns);
+      return builder;
+    },
     skip(externals: SkipList) {
       skipList.push(...externals);
       return builder;
@@ -52,6 +62,7 @@ export const fromPackageJson = (baseCfg: ShareAllExternalsOptions, projectPath?:
         projectPath,
         overrides,
         patchList,
+        ...(selection.length > 0 && { filter: [...selection] }),
       });
     },
   };
@@ -78,6 +89,7 @@ export function shareAllCore(
     projectPath?: string;
     overrides?: ShareExternalsOptions;
     patchList?: Record<string, Partial<ExternalConfig>>;
+    filter?: string[];
   } = {},
   repo: PackageJsonRepository = sharedPackageJsonRepository
 ): ResolvedSharedExternalsConfig {
@@ -90,6 +102,9 @@ export function shareAllCore(
   for (const versions of versionMaps) {
     for (const key in versions) {
       if (isInSkipList(key, prepareSkipList(skipList))) {
+        continue;
+      }
+      if (opts.filter && !opts.filter.some(f => matchesWildcard(key, f))) {
         continue;
       }
       if (!!opts.overrides && Object.keys(opts.overrides).some(o => key.startsWith(o))) {
@@ -134,7 +149,7 @@ export function shareAllCore(
 /**
  * Merges `patchList` overrides onto the shared externals. Patches only affect
  * externals that are actually being shared: a patch for an external that isn't
- * in the list (unknown dependency, skipped, or shadowed by `overrides`) is
+ * in the list (unknown dependency, skipped, filtered out, or shadowed by `overrides`) is
  * ignored with a warning.
  */
 function applyPatchList(
@@ -155,7 +170,7 @@ function applyPatchList(
       logger.warn(
         shadowedByOverride
           ? `Ignoring patch for '${external}': it is already configured via 'overrides' ('patch' and 'overrides' are mutually exclusive per external).`
-          : `Ignoring patch for '${external}': it is not a shared external (unknown dependency or skipped).`
+          : `Ignoring patch for '${external}': it is not a shared external (unknown dependency, skipped, or not selected by filter()).`
       );
       continue;
     }

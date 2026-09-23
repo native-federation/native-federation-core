@@ -6,6 +6,7 @@ import type {
   NormalizedSharedExternalsConfig,
   SharedExternalsConfig,
 } from './external-config.contract.js';
+import type { ConfigBuilder } from './config-builders.contract.js';
 
 export type ExposeEntry = { file: string; element?: string };
 
@@ -41,9 +42,9 @@ export type NormalizedSharedMappingConfigs = Record<string, NormalizedMappingCon
 export interface FederationConfig {
   name?: string;
   exposes?: Record<string, string | ExposeEntry>;
-  shared?: SharedExternalsConfig;
+  shared?: SharedExternalsConfig | ConfigBuilder<SharedExternalsConfig>;
   platform?: 'browser' | 'node';
-  sharedMappings?: Array<SharedMappingEntry>;
+  sharedMappings?: Array<SharedMappingEntry> | ConfigBuilder<Array<SharedMappingEntry>>;
   chunks?: boolean;
   skip?: SkipList;
   externals?: string[];
