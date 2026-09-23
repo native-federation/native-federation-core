@@ -37,7 +37,10 @@ describe('getUsedDependenciesFactoryCore', () => {
       },
     } as unknown as ProjectData);
 
-    const used = getUsedDependenciesFactoryCore(deps, '/ws')({
+    const used = getUsedDependenciesFactoryCore(
+      deps,
+      '/ws'
+    )({
       exposes: { './Comp': { file: 'src/comp.ts' } },
       sharedMappings: {},
     });
@@ -61,7 +64,10 @@ describe('getUsedDependenciesFactoryCore', () => {
       }
     );
 
-    const used = getUsedDependenciesFactoryCore(deps, '/ws')({
+    const used = getUsedDependenciesFactoryCore(
+      deps,
+      '/ws'
+    )({
       exposes: { './Comp': { file: 'src/comp.ts' } },
       sharedMappings: {},
     });
@@ -79,7 +85,10 @@ describe('getUsedDependenciesFactoryCore', () => {
       },
     } as unknown as ProjectData);
 
-    const used = getUsedDependenciesFactoryCore(deps, '/ws')({
+    const used = getUsedDependenciesFactoryCore(
+      deps,
+      '/ws'
+    )({
       exposes: { './Comp': { file: 'src/comp.ts' } },
       sharedMappings: { '/ws/libs/ui/*': '@org/ui/*' },
     });
@@ -163,10 +172,9 @@ describe('getUsedDependenciesFactoryCore', () => {
     });
 
     // A deep import through the alias names a file, not an entry point: publishing it would make
-    // assertBarrelMappings fail the build. It is not bundled either: esbuild keeps every subpath of
-    // the external '@internal/kit' verbatim, which the import map cannot resolve, hence the warning.
-    it('does not publish a non-barrel specifier a mapping imports, and warns', () => {
-      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    // assertBarrelMappings fail the build. It is still reported, so removeUnusedDeps can warn once
+    // it knows which mappings are published.
+    it('does not publish a non-barrel specifier a mapping imports, but reports it', () => {
       const used = run(
         kitFixture("export * from '@internal/kit/sub/widget.component';", [
           'libs/internal/src/kit/sub/widget.component.ts',
@@ -174,29 +182,15 @@ describe('getUsedDependenciesFactoryCore', () => {
       );
 
       expect(used.internal).toEqual({ '/ws/libs/internal/src/kit/index.ts': '@internal/kit' });
-      expect(warn).toHaveBeenCalledOnce();
-      expect(warn.mock.calls[0]?.[0]).toContain("'@internal/kit/sub/widget.component'");
-      expect(warn.mock.calls[0]?.[0]).toContain("shared mapping '@internal/kit'");
-      vi.restoreAllMocks();
+      expect(used.mappingImports).toEqual(
+        new Map([['@internal/kit/sub/widget.component', 'libs/internal/src/kit/index.ts']])
+      );
     });
 
-    // NodeNext spells the barrel as its index file. The sub mapping is still published (the kit
-    // barrel does not reach it by name), but that spelling would reach the browser as written.
-    it('warns on a mapping imported through its index file', () => {
-      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-      run(kitFixture("export * from '@internal/kit/sub/index.js';"));
+    it('does not report imports from outside a mapping', () => {
+      const used = run(kitFixture("export * from './kit.module';"));
 
-      expect(warn).toHaveBeenCalledOnce();
-      expect(warn.mock.calls[0]?.[0]).toContain("'@internal/kit/sub/index.js'");
-      vi.restoreAllMocks();
-    });
-
-    it('does not warn when a mapping is imported by its exact name', () => {
-      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-      run(kitFixture("export * from './kit.module';\nexport * from '@internal/kit/sub';"));
-
-      expect(warn).not.toHaveBeenCalled();
-      vi.restoreAllMocks();
+      expect(used.mappingImports).toEqual(new Map());
     });
   });
 
@@ -223,7 +217,10 @@ describe('getUsedDependenciesFactoryCore', () => {
         },
       } as unknown as ProjectData);
 
-      return getUsedDependenciesFactoryCore(deps, workspaceRoot)({
+      return getUsedDependenciesFactoryCore(
+        deps,
+        workspaceRoot
+      )({
         exposes: { './Comp': { file: 'src/comp.ts' } },
         sharedMappings,
       });

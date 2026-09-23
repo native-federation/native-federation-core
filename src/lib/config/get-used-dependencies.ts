@@ -81,7 +81,7 @@ export function getUsedDependenciesFactoryCore(
 
     return {
       external: addTransientDeps(usedPackageNames, workspaceRoot, deps),
-      internal: resolveUsedMappings(fileInfos, workspaceRoot, config.sharedMappings, deps.io),
+      ...resolveUsedMappings(fileInfos, workspaceRoot, config.sharedMappings, deps.io),
     };
   };
 }
@@ -126,7 +126,7 @@ function resolveUsedMappings(
   workspaceRoot: string,
   sharedMappings: PathToImport,
   io: FileReaderPort
-): PathToImport {
+): Pick<UsedDependencies, 'internal' | 'mappingImports'> {
   const usedMappings: PathToImport = {};
   const matchesIgnoringCase = createCaseInsensitiveMatcher(sharedMappings);
   const caseOnlyMisses = new Set<string>();
@@ -158,32 +158,8 @@ function resolveUsedMappings(
   }
 
   warnOnCaseOnlyMisses(caseOnlyMisses);
-  warnOnUnresolvableSubpaths(specifiersInMappings, new Set(Object.values(usedMappings)));
 
-  return usedMappings;
-}
-
-// esbuild treats every subpath of an external as external and keeps it verbatim, but the import
-// map only has a key for the mapping itself, so the import fails at runtime.
-function warnOnUnresolvableSubpaths(
-  specifiers: ReadonlyMap<string, string>,
-  published: ReadonlySet<string>
-): void {
-  for (const [specifier, importer] of specifiers) {
-    if (published.has(specifier)) continue;
-
-    for (let i = specifier.lastIndexOf('/'); i > 0; i = specifier.lastIndexOf('/', i - 1)) {
-      const mapping = specifier.slice(0, i);
-      if (!published.has(mapping)) continue;
-
-      logger.warn(
-        `'${importer}' imports '${specifier}', a subpath of the shared mapping '${mapping}'. ` +
-          `The bundler keeps it external, but the import map cannot resolve it. Import a ` +
-          `mapping by its exact name instead.`
-      );
-      break;
-    }
-  }
+  return { internal: usedMappings, mappingImports: specifiersInMappings };
 }
 
 /**
