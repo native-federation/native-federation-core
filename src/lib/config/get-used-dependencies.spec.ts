@@ -162,10 +162,11 @@ describe('getUsedDependenciesFactoryCore', () => {
       expect(used.internal).toEqual({ '/ws/libs/internal/src/kit/index.ts': '@internal/kit' });
     });
 
-    // A deep import through the alias names a file, not an entry point: '@internal/kit/sub/
-    // widget.component' cannot resolve from an import map, so publishing it would make
-    // assertBarrelMappings fail a build that bundling it into the kit mapping handles fine.
-    it('does not publish a non-barrel specifier a mapping imports', () => {
+    // A deep import through the alias names a file, not an entry point: publishing it would make
+    // assertBarrelMappings fail the build. It is not bundled either: esbuild keeps every subpath of
+    // the external '@internal/kit' verbatim, which the import map cannot resolve, hence the warning.
+    it('does not publish a non-barrel specifier a mapping imports, and warns', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
       const used = run(
         kitFixture("export * from '@internal/kit/sub/widget.component';", [
           'libs/internal/src/kit/sub/widget.component.ts',
@@ -173,6 +174,29 @@ describe('getUsedDependenciesFactoryCore', () => {
       );
 
       expect(used.internal).toEqual({ '/ws/libs/internal/src/kit/index.ts': '@internal/kit' });
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]?.[0]).toContain("'@internal/kit/sub/widget.component'");
+      expect(warn.mock.calls[0]?.[0]).toContain("shared mapping '@internal/kit'");
+      vi.restoreAllMocks();
+    });
+
+    // NodeNext spells the barrel as its index file. The sub mapping is still published (the kit
+    // barrel does not reach it by name), but that spelling would reach the browser as written.
+    it('warns on a mapping imported through its index file', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      run(kitFixture("export * from '@internal/kit/sub/index.js';"));
+
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]?.[0]).toContain("'@internal/kit/sub/index.js'");
+      vi.restoreAllMocks();
+    });
+
+    it('does not warn when a mapping is imported by its exact name', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      run(kitFixture("export * from './kit.module';\nexport * from '@internal/kit/sub';"));
+
+      expect(warn).not.toHaveBeenCalled();
+      vi.restoreAllMocks();
     });
   });
 
@@ -186,10 +210,14 @@ describe('getUsedDependenciesFactoryCore', () => {
       vi.restoreAllMocks();
     });
 
-    function runWith(sharedMappings: Record<string, string>, workspaceRoot = 'c:/ws') {
+    function runWith(
+      sharedMappings: Record<string, string>,
+      workspaceRoot = 'c:/ws',
+      imports = ['libs/ui/button.ts']
+    ) {
       const deps = makeDeps({
         'src/comp.ts': {
-          imports: ['libs/ui/button.ts'],
+          imports,
           externalLibraries: [],
           unresolvedImports: [],
         },
@@ -210,14 +238,18 @@ describe('getUsedDependenciesFactoryCore', () => {
       expect(warn).toHaveBeenCalledWith(expect.stringMatching(caseOnly));
     });
 
-    it('names one of the affected imports so the mismatch is visible', () => {
+    // A partial list sends the reader hunting for the rest, so every affected import is named.
+    it('names every affected import so the mismatch is visible', () => {
       const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
 
-      runWith({ 'C:/ws/libs/ui/*': '@org/ui/*' });
+      runWith({ 'C:/ws/libs/ui/*': '@org/ui/*' }, 'c:/ws', [
+        'libs/ui/button.ts',
+        'libs/ui/card.ts',
+      ]);
 
-      expect(warn).toHaveBeenCalledWith(
-        expect.stringContaining(path.join('c:/ws', 'libs/ui/button.ts'))
-      );
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]?.[0]).toContain(path.join('c:/ws', 'libs/ui/button.ts'));
+      expect(warn.mock.calls[0]?.[0]).toContain(path.join('c:/ws', 'libs/ui/card.ts'));
     });
 
     it('stays silent when the import genuinely reaches no mapping', () => {

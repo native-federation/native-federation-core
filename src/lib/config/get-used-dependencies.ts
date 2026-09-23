@@ -130,6 +130,7 @@ function resolveUsedMappings(
   const usedMappings: PathToImport = {};
   const matchesIgnoringCase = createCaseInsensitiveMatcher(sharedMappings);
   const caseOnlyMisses = new Set<string>();
+  const specifiersInMappings = new Map<string, string>();
 
   for (const fileName of Object.keys(fileInfos)) {
     const fullFileName = path.join(workspaceRoot, fileName);
@@ -139,9 +140,13 @@ function resolveUsedMappings(
 
     // Inside a mapping, relative imports are the lib's own bundled code; only a barrel imported by
     // specifier is another entry point that must be published (core#135).
-    const bySpecifier = isSharedMapping(fullFileName, sharedMappings)
-      ? new Set(getBareSpecifiersCore(io, fullFileName).filter(s => !isNonBarrelImport(s)))
-      : null;
+    let bySpecifier: Set<string> | null = null;
+    if (isSharedMapping(fullFileName, sharedMappings)) {
+      const specifiers = getBareSpecifiersCore(io, fullFileName);
+      for (const s of specifiers)
+        if (!specifiersInMappings.has(s)) specifiersInMappings.set(s, fileName);
+      bySpecifier = new Set(specifiers.filter(s => !isNonBarrelImport(s)));
+    }
 
     for (const imp of fileInfo.imports ?? []) {
       const fullImport = path.join(workspaceRoot, imp);
@@ -153,17 +158,39 @@ function resolveUsedMappings(
   }
 
   warnOnCaseOnlyMisses(caseOnlyMisses);
+  warnOnUnresolvableSubpaths(specifiersInMappings, new Set(Object.values(usedMappings)));
 
   return usedMappings;
+}
+
+// esbuild treats every subpath of an external as external and keeps it verbatim, but the import
+// map only has a key for the mapping itself, so the import fails at runtime.
+function warnOnUnresolvableSubpaths(
+  specifiers: ReadonlyMap<string, string>,
+  published: ReadonlySet<string>
+): void {
+  for (const [specifier, importer] of specifiers) {
+    if (published.has(specifier)) continue;
+
+    for (let i = specifier.lastIndexOf('/'); i > 0; i = specifier.lastIndexOf('/', i - 1)) {
+      const mapping = specifier.slice(0, i);
+      if (!published.has(mapping)) continue;
+
+      logger.warn(
+        `'${importer}' imports '${specifier}', a subpath of the shared mapping '${mapping}'. ` +
+          `The bundler keeps it external, but the import map cannot resolve it. Import a ` +
+          `mapping by its exact name instead.`
+      );
+      break;
+    }
+  }
 }
 
 /**
  * Diagnosis only: never decides whether a mapping is used. Lower-casing the set once keeps it
  * cheap enough for every unmatched import, which is what makes a partial mismatch visible.
  */
-function createCaseInsensitiveMatcher(
-  sharedMappings: PathToImport
-): (filePath: string) => boolean {
+function createCaseInsensitiveMatcher(sharedMappings: PathToImport): (filePath: string) => boolean {
   const lowerCased = Object.fromEntries(
     Object.entries(sharedMappings).map(([sharedPath, sharedImport]) => [
       sharedPath.toLowerCase(),
@@ -184,7 +211,7 @@ function warnOnCaseOnlyMisses(misses: ReadonlySet<string>): void {
 
   logger.warn(
     `${misses.size} import(s) match a shared mapping only when case is ignored, so those ` +
-      `libraries were pruned from remoteEntry.json -- e.g. '${[...misses][0]}'.`
+      `libraries were pruned from remoteEntry.json:\n` +
+      [...misses].map(miss => `  - ${miss}`).join('\n')
   );
 }
-
