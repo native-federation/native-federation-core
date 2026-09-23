@@ -70,6 +70,32 @@ describe('withNativeFederation', () => {
     expect(shareAll).not.toHaveBeenCalled();
   });
 
+  // Lets a config pass fromPackageJson(...) / mappingsFromWorkspace(...) without calling .get().
+  it('resolves a builder passed as shared', () => {
+    const result = withNativeFederation({
+      shared: { get: () => ({ react: { singleton: true } }) },
+    });
+
+    expect(shareAll).not.toHaveBeenCalled();
+    expect(Object.keys(result.shared)).toEqual(['react']);
+    expect(result.shared['react']).toMatchObject({ singleton: true });
+  });
+
+  // `get` is a legal package name; only a function marks a builder.
+  it('treats a shared package named "get" as a package, not a builder', () => {
+    const result = withNativeFederation({ shared: { get: { singleton: true } } });
+
+    expect(Object.keys(result.shared)).toEqual(['get']);
+  });
+
+  it('resolves a builder passed as sharedMappings', () => {
+    withNativeFederation({ sharedMappings: { get: () => [[['@org/*'], { singleton: true }]] } });
+
+    expect(getRawMappedPaths).toHaveBeenCalledWith('/ws/tsconfig.json', [
+      [['@org/*'], { singleton: true }],
+    ]);
+  });
+
   it('normalizes string exposes into { file } entries and passes objects through', () => {
     const result = withNativeFederation({
       exposes: {

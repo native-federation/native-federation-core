@@ -1,3 +1,4 @@
+import type { WorkspaceMappingsBuilder } from '../domain/config/config-builders.contract.js';
 import type { ExternalConfigInput } from '../domain/config/external-config.contract.js';
 import type {
   NormalizedMappingConfig,
@@ -11,12 +12,6 @@ import { matchesWildcard } from '../utils/path-patterns.js';
 import { logger } from '../utils/logger.js';
 
 const ALL = '*';
-
-export interface WorkspaceMappingsBuilder {
-  filter(patterns: string[]): WorkspaceMappingsBuilder;
-  patch(patterns: string[], cfg: Partial<ExternalConfigInput>): WorkspaceMappingsBuilder;
-  get(): SharedMappingEntry[];
-}
 
 /**
  * Sugar over the `sharedMappings` array form: `get()` returns entries that could equally

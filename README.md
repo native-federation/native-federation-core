@@ -147,7 +147,7 @@ The `withNativeFederation` function sets up a configuration for your application
 
 #### The `fromPackageJson` helper (recommended)
 
-`fromPackageJson` is the recommended way to share your dependencies. It shares **all** dependencies found in your `package.json` and exposes a small fluent builder so you can fine-tune the result. The base options you pass are applied to every shared dependency; you then chain `.skip(...)`, `.override(...)` and `.patch(...)` as needed and finish with `.get()`:
+`fromPackageJson` is the recommended way to share your dependencies. It shares **all** dependencies found in your `package.json` and exposes a small fluent builder so you can fine-tune the result. The base options you pass are applied to every shared dependency; you then chain `.filter(...)`, `.skip(...)`, `.override(...)` and `.patch(...)` as needed and finish with `.get()`:
 
 ```typescript
 // shell/federation.config.js
@@ -169,8 +169,9 @@ export default withNativeFederation({
 > [!TIP]
 > If you omit the `shared` property entirely, Native Federation applies exactly this `fromPackageJson` configuration for you (with `singleton`, `strictVersion` and `requiredVersion: 'auto'`). So the snippet above is also a good description of the default behavior.
 
-The builder returned by `fromPackageJson` offers three chainable methods, each of which returns the builder so you can combine them:
+The builder returned by `fromPackageJson` offers four chainable methods, each of which returns the builder so you can combine them:
 
+- **`.filter(patterns)`** — only share the `package.json` dependencies matching these patterns (e.g. `['@angular/*', 'rxjs']`). Repeated calls add to the selection; omit it to share every dependency. Packages added via `.override(...)` are not affected, and patching a package the filter excluded is ignored with a warning.
 - **`.skip(externals)`** — exclude packages from sharing (added on top of the [default skip list](#sharing)).
 - **`.override(externals)`** — replace the configuration for specific packages entirely. Use this when a package needs a completely different set of options.
 - **`.patch(externals, cfg)`** — merge a partial configuration onto specific shared externals, keeping the base options for everything you don't touch.
@@ -209,6 +210,8 @@ export default withNativeFederation({
     .get(),
 });
 ```
+
+The trailing `.get()` is optional: `shared` also accepts the builder itself, and `withNativeFederation` calls `.get()` for you.
 
 By default the closest `package.json` (relative to your `federation.config.js`) is used. You can point at a different one by passing its path as the second argument: `fromPackageJson(baseCfg, projectPath)`.
 
@@ -510,6 +513,7 @@ module.exports = withNativeFederation({
 
 - Omit `.filter()` to select every mapped path — the same default as omitting `sharedMappings`.
 - `.patch()` annotates a subset; it never widens the selection, so patching a pattern that `.filter()` excluded is ignored with a warning.
+- `.get()` is optional: `sharedMappings` also accepts the builder itself.
 
 #### Keeping mappings that nothing imports
 

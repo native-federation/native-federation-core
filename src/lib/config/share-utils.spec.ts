@@ -231,6 +231,69 @@ describe('shareAllCore (end-to-end via injected repository)', () => {
     expect(result!['overridden']).toMatchObject({ singleton: false, requiredVersion: '~3.1.0' });
   });
 
+  it('narrows the package.json dependencies to those matching the filter', () => {
+    const io = createMemoryIo().setFile(
+      path.join(PROJECT, 'package.json'),
+      JSON.stringify({
+        dependencies: { '@org/a': '^1.0.0', '@org/b': '^1.0.0', rxjs: '^7.0.0', other: '^1.0.0' },
+      })
+    );
+    const repo = createPackageJsonRepository(io);
+
+    const result = shareAllCore(
+      io,
+      { singleton: true, includeSecondaries: false },
+      { projectPath: PROJECT, filter: ['@org/*', 'rxjs'] },
+      repo
+    );
+
+    expect(Object.keys(result!).sort()).toEqual(['@org/a', '@org/b', 'rxjs']);
+  });
+
+  // Overrides are explicit additions, so the filter does not apply to them.
+  it('keeps overrides that the filter does not cover', () => {
+    const io = createMemoryIo().setFile(
+      path.join(PROJECT, 'package.json'),
+      JSON.stringify({ dependencies: { mylib: '^1.2.3', overridden: '^3.0.0' } })
+    );
+    const repo = createPackageJsonRepository(io);
+
+    const result = shareAllCore(
+      io,
+      { singleton: true, includeSecondaries: false },
+      {
+        projectPath: PROJECT,
+        filter: ['mylib'],
+        overrides: {
+          overridden: { singleton: false, requiredVersion: '~3.1.0', includeSecondaries: false },
+        },
+      },
+      repo
+    );
+
+    expect(Object.keys(result!).sort()).toEqual(['mylib', 'overridden']);
+  });
+
+  it('ignores a patch for an external the filter excluded and warns', () => {
+    const io = createMemoryIo().setFile(
+      path.join(PROJECT, 'package.json'),
+      JSON.stringify({ dependencies: { mylib: '^1.2.3', other: '^1.0.0' } })
+    );
+    const repo = createPackageJsonRepository(io);
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    const result = shareAllCore(
+      io,
+      { singleton: true, includeSecondaries: false },
+      { projectPath: PROJECT, filter: ['mylib'], patchList: { other: { singleton: false } } },
+      repo
+    );
+
+    expect(Object.keys(result!)).toEqual(['mylib']);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("'other'"));
+    warn.mockRestore();
+  });
+
   it('patches a shared external in place', () => {
     const io = createMemoryIo().setFile(
       path.join(PROJECT, 'package.json'),
