@@ -241,6 +241,27 @@ Not covered by any of this: events the platform itself drops (inotify `IN_Q_OVER
 `git checkout` or `npm install` churn). Recovering those needs a reconciliation sweep that
 re-stats the tracked set — deliberately out of scope here, own issue.
 
+## Chunks
+
+A chunk is code the bundler split out of one or more entry points. It has no version and no
+package name of its own, and it belongs to a *build*, not to a dependency — so nothing
+downstream can tell whether the external it was split out of asked for `singleton: false` or a
+share scope. Chunks are therefore never shared between applications: `addChunksToResult`
+publishes them with `singleton: false`, and with `denseChunking` the orchestrator maps them into
+the emitting remote's own scope. A chunk name is a build-local identifier, not a share key.
+
+`rename-chunks-by-content.ts` still names every chunk after a hash of the bytes it will serve,
+so identical bytes keep one name across rebuilds and a changed chunk always gets a new one. The
+hash fills the slot the bundler sized — its length, so every reference keeps its byte length and
+the emitted source maps stay valid — and is always written in base32, because a mixed-case name
+would collapse to one file on a case-insensitive filesystem.
+
+Shared mappings and exposed modules are built separately (`mapping-bundle` and
+`mapping-or-exposed`), because a chunk factored out of both is reached through two import trails
+— the mapping may be served by another remote, the exposed module never is — and is then
+evaluated twice. `mapping-or-exposed` is a fixed name: the orchestrator registers it for every
+remote it knows.
+
 ## Caching System
 
 Native Federation uses an intelligent caching system to speed up builds:
