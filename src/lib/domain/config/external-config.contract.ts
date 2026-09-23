@@ -52,11 +52,13 @@ export type SharedExternalsConfig = Record<string, ExternalConfig>;
 
 export type NormalizedSharedExternalsConfig = Record<string, NormalizedExternalConfig>;
 
-export type ShareAllExternalsOptions = Omit<ExternalConfig, 'requiredVersion'> & {
+export type ExternalConfigInput = Omit<ExternalConfig, 'requiredVersion'> & {
   requiredVersion?: string | AutoRequiredOptions;
 };
 
-export type ShareExternalsOptions = Record<string, ShareAllExternalsOptions>;
+export type ShareAllExternalsOptions = ExternalConfigInput;
+
+export type ShareExternalsOptions = Record<string, ExternalConfigInput>;
 
 export type ResolvedExternalConfig = Omit<ExternalConfig, 'includeSecondaries'> & {
   includeSecondaries?: boolean;

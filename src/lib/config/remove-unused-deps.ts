@@ -35,6 +35,11 @@ export function removeUnusedDeps(
 
   // Legitimate often enough to warn rather than throw, but invisible otherwise: the build
   // succeeds and only surfaces as a runtime NG0201, far from the cause.
+  warnOnUnresolvableSubpaths(
+    usedDependencies.mappingImports,
+    new Set(Object.values(sharedMappings))
+  );
+
   if (Object.keys(config.sharedMappings).length > 0 && Object.keys(sharedMappings).length === 0) {
     logger.warn(
       'No shared mapping is reachable from the entry points, so remoteEntry.json will ship ' +
@@ -47,6 +52,29 @@ export function removeUnusedDeps(
     shared: filteredDependencies,
     sharedMappings,
   };
+}
+
+// esbuild treats every subpath of an external as external and keeps it verbatim, but the import
+// map only has a key for the mapping itself, so the import fails at runtime.
+function warnOnUnresolvableSubpaths(
+  specifiers: ReadonlyMap<string, string> | undefined,
+  published: ReadonlySet<string>
+): void {
+  for (const [specifier, importer] of specifiers ?? []) {
+    if (published.has(specifier)) continue;
+
+    for (let i = specifier.lastIndexOf('/'); i > 0; i = specifier.lastIndexOf('/', i - 1)) {
+      const mapping = specifier.slice(0, i);
+      if (!published.has(mapping)) continue;
+
+      logger.warn(
+        `'${importer}' imports '${specifier}', a subpath of the shared mapping '${mapping}'. ` +
+          `The bundler keeps it external, but the import map cannot resolve it. Import a ` +
+          `mapping by its exact name instead.`
+      );
+      break;
+    }
+  }
 }
 
 // Mappings that opted out of reachability pruning, wildcards expanded on disk.

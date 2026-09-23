@@ -37,7 +37,10 @@ describe('getUsedDependenciesFactoryCore', () => {
       },
     } as unknown as ProjectData);
 
-    const used = getUsedDependenciesFactoryCore(deps, '/ws')({
+    const used = getUsedDependenciesFactoryCore(
+      deps,
+      '/ws'
+    )({
       exposes: { './Comp': { file: 'src/comp.ts' } },
       sharedMappings: {},
     });
@@ -61,7 +64,10 @@ describe('getUsedDependenciesFactoryCore', () => {
       }
     );
 
-    const used = getUsedDependenciesFactoryCore(deps, '/ws')({
+    const used = getUsedDependenciesFactoryCore(
+      deps,
+      '/ws'
+    )({
       exposes: { './Comp': { file: 'src/comp.ts' } },
       sharedMappings: {},
     });
@@ -79,12 +85,113 @@ describe('getUsedDependenciesFactoryCore', () => {
       },
     } as unknown as ProjectData);
 
-    const used = getUsedDependenciesFactoryCore(deps, '/ws')({
+    const used = getUsedDependenciesFactoryCore(
+      deps,
+      '/ws'
+    )({
       exposes: { './Comp': { file: 'src/comp.ts' } },
       sharedMappings: { '/ws/libs/ui/*': '@org/ui/*' },
     });
 
     expect(used.internal).toEqual({ '/ws/libs/ui/button.ts': '@org/ui/button' });
+  });
+
+  // core#135: a mapping reachable only through another mapping's barrel was pruned, while the
+  // surviving barrel chunk still imported it, so the app failed to resolve the specifier.
+  describe('mapping-to-mapping references', () => {
+    const sharedMappings = { '/ws/libs/internal/src/*': '@internal/*' };
+
+    // The issue's fixture: the host imports @internal/kit, whose barrel republishes
+    // @internal/kit/sub through its own alias. Nothing in app code names the sub entry point.
+    function kitFixture(
+      kitBarrel: string,
+      kitImports = ['libs/internal/src/kit/kit.module.ts', 'libs/internal/src/kit/sub/index.ts']
+    ) {
+      return makeDeps(
+        {
+          'src/main.ts': {
+            imports: ['libs/internal/src/kit/index.ts'],
+            externalLibraries: [],
+            unresolvedImports: [],
+          },
+          'libs/internal/src/kit/index.ts': {
+            imports: kitImports,
+            externalLibraries: [],
+            unresolvedImports: [],
+          },
+          'libs/internal/src/kit/kit.module.ts': {
+            imports: [],
+            externalLibraries: [],
+            unresolvedImports: [],
+          },
+          'libs/internal/src/kit/sub/index.ts': {
+            imports: ['libs/internal/src/kit/sub/widget.component.ts'],
+            externalLibraries: [],
+            unresolvedImports: [],
+          },
+          'libs/internal/src/kit/sub/widget.component.ts': {
+            imports: [],
+            externalLibraries: [],
+            unresolvedImports: [],
+          },
+        } as unknown as ProjectData,
+        {
+          '/ws/libs/internal/src/kit/index.ts': kitBarrel,
+          '/ws/libs/internal/src/kit/sub/index.ts': "export * from './widget.component';",
+        }
+      );
+    }
+
+    const run = (deps: UsedDependenciesDeps) =>
+      getUsedDependenciesFactoryCore(deps, '/ws', ['src/main.ts'])({ sharedMappings });
+
+    it('keeps a mapping that only another mapping imports by specifier', () => {
+      const used = run(
+        kitFixture("export * from './kit.module';\nexport * from '@internal/kit/sub';")
+      );
+
+      expect(used.internal).toEqual({
+        '/ws/libs/internal/src/kit/index.ts': '@internal/kit',
+        '/ws/libs/internal/src/kit/sub/index.ts': '@internal/kit/sub',
+      });
+    });
+
+    it('counts a dynamic import by specifier too', () => {
+      const used = run(kitFixture("export const load = () => import('@internal/kit/sub');"));
+
+      expect(used.internal['/ws/libs/internal/src/kit/sub/index.ts']).toBe('@internal/kit/sub');
+    });
+
+    // Relative imports are the lib's own implementation and are bundled into it. Counting them
+    // would publish every internal file of a wildcard lib, including non-barrel specifiers such
+    // as '@internal/kit/kit.module' that assertBarrelMappings rejects.
+    it('does not publish files a mapping reaches through relative imports', () => {
+      const used = run(kitFixture("export * from './kit.module';\nexport * from './sub';"));
+
+      expect(used.internal).toEqual({ '/ws/libs/internal/src/kit/index.ts': '@internal/kit' });
+    });
+
+    // A deep import through the alias names a file, not an entry point: publishing it would make
+    // assertBarrelMappings fail the build. It is still reported, so removeUnusedDeps can warn once
+    // it knows which mappings are published.
+    it('does not publish a non-barrel specifier a mapping imports, but reports it', () => {
+      const used = run(
+        kitFixture("export * from '@internal/kit/sub/widget.component';", [
+          'libs/internal/src/kit/sub/widget.component.ts',
+        ])
+      );
+
+      expect(used.internal).toEqual({ '/ws/libs/internal/src/kit/index.ts': '@internal/kit' });
+      expect(used.mappingImports).toEqual(
+        new Map([['@internal/kit/sub/widget.component', 'libs/internal/src/kit/index.ts']])
+      );
+    });
+
+    it('does not report imports from outside a mapping', () => {
+      const used = run(kitFixture("export * from './kit.module';"));
+
+      expect(used.mappingImports).toEqual(new Map());
+    });
   });
 
   // The reported failure mode: mapping keys spelled 'C:/ws/…' (from cwd) against imports built
@@ -97,16 +204,23 @@ describe('getUsedDependenciesFactoryCore', () => {
       vi.restoreAllMocks();
     });
 
-    function runWith(sharedMappings: Record<string, string>, workspaceRoot = 'c:/ws') {
+    function runWith(
+      sharedMappings: Record<string, string>,
+      workspaceRoot = 'c:/ws',
+      imports = ['libs/ui/button.ts']
+    ) {
       const deps = makeDeps({
         'src/comp.ts': {
-          imports: ['libs/ui/button.ts'],
+          imports,
           externalLibraries: [],
           unresolvedImports: [],
         },
       } as unknown as ProjectData);
 
-      return getUsedDependenciesFactoryCore(deps, workspaceRoot)({
+      return getUsedDependenciesFactoryCore(
+        deps,
+        workspaceRoot
+      )({
         exposes: { './Comp': { file: 'src/comp.ts' } },
         sharedMappings,
       });
@@ -121,14 +235,18 @@ describe('getUsedDependenciesFactoryCore', () => {
       expect(warn).toHaveBeenCalledWith(expect.stringMatching(caseOnly));
     });
 
-    it('names one of the affected imports so the mismatch is visible', () => {
+    // A partial list sends the reader hunting for the rest, so every affected import is named.
+    it('names every affected import so the mismatch is visible', () => {
       const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
 
-      runWith({ 'C:/ws/libs/ui/*': '@org/ui/*' });
+      runWith({ 'C:/ws/libs/ui/*': '@org/ui/*' }, 'c:/ws', [
+        'libs/ui/button.ts',
+        'libs/ui/card.ts',
+      ]);
 
-      expect(warn).toHaveBeenCalledWith(
-        expect.stringContaining(path.join('c:/ws', 'libs/ui/button.ts'))
-      );
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]?.[0]).toContain(path.join('c:/ws', 'libs/ui/button.ts'));
+      expect(warn.mock.calls[0]?.[0]).toContain(path.join('c:/ws', 'libs/ui/card.ts'));
     });
 
     it('stays silent when the import genuinely reaches no mapping', () => {

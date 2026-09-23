@@ -61,7 +61,7 @@ export function applyAutoRequiredOptions(
   // Minor/patch segments are optional and default to '0'. Still anchored end-to-end so
   // complex multi-comparator ranges (e.g. '>=1.0.0 <2.0.0') fall through unchanged.
   const singleTokenMatch = raw.match(
-    /^(?:[~^<>=]*\s*)?v?(\d+)(?:\.(\d+))?(?:\.(\d+))?((?:[-+][\w.]+)?)$/
+    /^(?:[~^<>=]*\s*)?v?(\d+)(?:\.(\d+))?(?:\.(\d+))?((?:-[\w.-]+)?(?:\+[\w.-]+)?)$/
   );
   if (!singleTokenMatch) {
     return raw;

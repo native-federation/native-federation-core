@@ -12,7 +12,10 @@ import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
 import { createFakeBuildAdapter } from './__test-helpers__/fake-build-adapter.js';
 import { prepareSkipList } from '../../config/default-skip-list.js';
 import { logger } from '../../utils/logger.js';
-import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
+import type {
+  NormalizedFederationConfig,
+  NormalizedMappingConfig,
+} from '../../domain/config/federation-config.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
 
 describe('getMappingVersion', () => {
@@ -195,8 +198,17 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     expect(result.mappings).toEqual([
       expect.objectContaining({ packageName: 'foo', outFileName: 'foo.js' }),
     ]);
-    expect(adapter.calls.setup).toHaveLength(1);
-    expect(adapter.calls.build).toHaveLength(1);
+    expect(adapter.calls.setup.map(c => c.name)).toEqual(['mapping-bundle', 'mapping-or-exposed']);
+    expect(adapter.calls.build.map(c => c.name)).toEqual(['mapping-bundle', 'mapping-or-exposed']);
+  });
+
+  it('leaves the adapter alone for a side that has no entry points', async () => {
+    const config = makeConfig({ exposes: { './Comp': { file: './src/comp.ts' } } });
+    const adapter = createFakeBuildAdapter();
+
+    await bundleExposedAndMappingsCore({ adapter }, config, makeFedOptions(), []);
+
+    expect(adapter.calls.setup.map(c => c.name)).toEqual(['mapping-or-exposed']);
   });
 
   // mappingVersion is off in makeConfig, so this is the un-annotated baseline: no version
@@ -273,6 +285,115 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     expect(result.mappings[0]).toMatchObject({ requiredVersion: '^2.0.0', version: '2.1.0' });
   });
 
+  describe('requiredVersion as a range format', () => {
+    async function mappingFor(cfg: Partial<NormalizedMappingConfig>) {
+      const config = makeConfig({
+        sharedMappings: { './libs/foo': 'foo' },
+        sharedMappingsConfig: { foo: { singleton: true, strictVersion: true, ...cfg } },
+      });
+
+      const result = await bundleExposedAndMappingsCore(
+        { adapter: createFakeBuildAdapter() },
+        config,
+        makeFedOptions({ dev: false }),
+        []
+      );
+      return result.mappings[0]!;
+    }
+
+    it('formats the version with the requested range', async () => {
+      expect(await mappingFor({ version: '2.1.0', requiredVersion: { range: '^' } })).toMatchObject(
+        {
+          requiredVersion: '^2.1.0',
+          version: '2.1.0',
+        }
+      );
+    });
+
+    it('drops the prefix for an exact range', async () => {
+      expect(
+        await mappingFor({ version: '2.1.0', requiredVersion: { range: 'exact' } })
+      ).toMatchObject({ requiredVersion: '2.1.0' });
+    });
+
+    it("maps 'minor' to ^ and 'patch' to ~", async () => {
+      const minor = await mappingFor({ version: '2.1.0', requiredVersion: { range: 'minor' } });
+      const patch = await mappingFor({ version: '2.1.0', requiredVersion: { range: 'patch' } });
+
+      expect(minor.requiredVersion).toBe('^2.1.0');
+      expect(patch.requiredVersion).toBe('~2.1.0');
+    });
+
+    // The one place mappings differ from a shared package, whose baseline is the raw spec.
+    it('keeps the ~ default when no range is named', async () => {
+      expect(await mappingFor({ version: '2.1.0', requiredVersion: {} })).toMatchObject({
+        requiredVersion: '~2.1.0',
+      });
+    });
+
+    it('lets the version inside requiredVersion drive both fields', async () => {
+      expect(
+        await mappingFor({ version: '2.1.0', requiredVersion: { version: '3.0.0', range: '^' } })
+      ).toMatchObject({ requiredVersion: '^3.0.0', version: '3.0.0' });
+    });
+
+    it("falls back to the configured version when the object asks for 'auto'", async () => {
+      expect(
+        await mappingFor({ version: '2.1.0', requiredVersion: { version: 'auto', range: '^' } })
+      ).toMatchObject({ requiredVersion: '^2.1.0', version: '2.1.0' });
+    });
+
+    it('keeps a prerelease tag attached', async () => {
+      expect(
+        await mappingFor({ version: '2.1.0-next.1', requiredVersion: { range: '^' } })
+      ).toMatchObject({ requiredVersion: '^2.1.0-next.1' });
+    });
+
+    // A prerelease with a dash inside the tag, or build metadata after it, must still reach
+    // the formatter -- falling through would turn the ~ default into an exact pin.
+    it('keeps the default ~ on an awkward prerelease tag', async () => {
+      expect(await mappingFor({ version: '1.0.0-rc-1' })).toMatchObject({
+        requiredVersion: '~1.0.0-rc-1',
+      });
+      expect(await mappingFor({ version: '1.0.0-beta.1+sha' })).toMatchObject({
+        requiredVersion: '~1.0.0-beta.1+sha',
+      });
+    });
+
+    // federation.config.js is plain JS, so null gets past the types.
+    it('treats a null requiredVersion as absent', async () => {
+      expect(
+        await mappingFor({ version: '2.1.0', requiredVersion: null as unknown as undefined })
+      ).toMatchObject({ requiredVersion: '~2.1.0', version: '2.1.0' });
+    });
+
+    it('ignores an empty version inside the object', async () => {
+      expect(
+        await mappingFor({ version: '2.1.0', requiredVersion: { version: '', range: '^' } })
+      ).toMatchObject({ requiredVersion: '^2.1.0', version: '2.1.0' });
+    });
+
+    it('leaves a multi-comparator range alone', async () => {
+      expect(
+        await mappingFor({ version: '>=1.0.0 <2.0.0', requiredVersion: { range: '^' } })
+      ).toMatchObject({ requiredVersion: '>=1.0.0 <2.0.0' });
+    });
+
+    // mappingVersion is off in makeConfig, so nothing is detected.
+    it('stays empty when no version is known', async () => {
+      expect(await mappingFor({ requiredVersion: { range: '^' } })).toMatchObject({
+        requiredVersion: '',
+        version: '',
+      });
+    });
+
+    it('still takes a literal string verbatim', async () => {
+      expect(
+        await mappingFor({ version: '2.1.0', requiredVersion: '>=1.0.0 <3.0.0' })
+      ).toMatchObject({ requiredVersion: '>=1.0.0 <3.0.0' });
+    });
+  });
+
   // The config table is keyed by the pattern the user wrote, not the resolved import.
   it('matches a resolved mapping import against its wildcard pattern', async () => {
     const config = makeConfig({
@@ -293,12 +414,110 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     });
   });
 
+  it('names dense chunks after their content and points the rewritten entries at them', async () => {
+    const io = createMemoryIo();
+    const config = makeConfig({
+      exposes: { './Comp': { file: './src/comp.ts' } },
+      chunks: true,
+      features: { ...makeConfig().features, denseChunking: true },
+    });
+    const adapter = createFakeBuildAdapter({
+      results: () => {
+        io.setFile('dist/Comp.js', "export * from './chunk-AAAAAAAA.js';\n");
+        io.setFile('dist/chunk-AAAAAAAA.js', 'export const a = 1;\n');
+        return [{ fileName: 'dist/Comp.js' }, { fileName: 'dist/chunk-AAAAAAAA.js' }];
+      },
+    });
+
+    const result = await bundleExposedAndMappingsCore(
+      { adapter, io },
+      config,
+      makeFedOptions(),
+      []
+    );
+
+    const [chunk] = result.chunks!['mapping-or-exposed']!;
+    expect(chunk).toMatch(/^chunk-[A-Z2-7]{8}\.js$/);
+    expect(chunk).not.toBe('chunk-AAAAAAAA.js');
+    expect(io.isFile(`dist/${chunk}`)).toBe(true);
+    expect(io.isFile('dist/chunk-AAAAAAAA.js')).toBe(false);
+    expect(io.readText('dist/Comp.js')).toContain(`@nf-internal/${chunk!.replace(/\.js$/, '')}`);
+    expect(io.readText('dist/Comp.js')).not.toContain('AAAAAAAA');
+  });
+
+  it('builds a mapping that asked for its own bundle apart from the rest', async () => {
+    const config = makeConfig({
+      exposes: { './Comp': { file: './src/comp.ts' } },
+      sharedMappings: { './libs/a': '@org/a', './libs/b': '@org/b' },
+      sharedMappingsConfig: { '@org/a': { singleton: true, strictVersion: false, build: 'separate' } },
+      chunks: true,
+      features: { ...makeConfig().features, denseChunking: true },
+    });
+    const io = createMemoryIo();
+    const adapter = createFakeBuildAdapter({ io });
+
+    const result = await bundleExposedAndMappingsCore(
+      { adapter, io },
+      config,
+      makeFedOptions(),
+      []
+    );
+
+    expect(adapter.calls.build.map(c => c.name)).toEqual([
+      'mapping-org_a',
+      'mapping-bundle',
+      'mapping-or-exposed',
+    ]);
+    expect(result.mappings).toEqual([
+      expect.objectContaining({ packageName: '@org/a', bundle: 'mapping-org_a' }),
+      expect.objectContaining({ packageName: '@org/b', bundle: 'mapping-bundle' }),
+    ]);
+  });
+
+  it('keeps a mapping chunk and an exposed chunk in separate bundles', async () => {
+    const io = createMemoryIo();
+    const config = makeConfig({
+      exposes: { './Comp': { file: './src/comp.ts' } },
+      sharedMappings: { './libs/foo': 'foo' },
+      chunks: true,
+      features: { ...makeConfig().features, denseChunking: true },
+    });
+    // Adversarial fixture: a real bundler hashes a chunk's output bytes, so one name means one
+    // set of bytes. Here both builds emit a differing chunk under one name, to pin that neither
+    // build can reach into the other's output.
+    const adapter = createFakeBuildAdapter({
+      results: name => {
+        const entry = name === 'mapping-bundle' ? 'dist/foo.js' : 'dist/Comp.js';
+        const body = name === 'mapping-bundle' ? 'export const m = 1;\n' : 'export const e = 2;\n';
+        io.setFile(entry, "export * from './chunk-AAAAAAAA.js';\n");
+        io.setFile('dist/chunk-AAAAAAAA.js', body);
+        return [{ fileName: entry }, { fileName: 'dist/chunk-AAAAAAAA.js' }];
+      },
+    });
+
+    const result = await bundleExposedAndMappingsCore(
+      { adapter, io },
+      config,
+      makeFedOptions(),
+      []
+    );
+
+    const [mappingChunk] = result.chunks!['mapping-bundle']!;
+    const [exposedChunk] = result.chunks!['mapping-or-exposed']!;
+    expect(mappingChunk).toMatch(/^chunk-[A-Z2-7]{8}\.js$/);
+    expect(exposedChunk).not.toBe(mappingChunk);
+    expect(io.readText(`dist/${mappingChunk}`)).toBe('export const m = 1;\n');
+    expect(io.readText(`dist/${exposedChunk}`)).toBe('export const e = 2;\n');
+    expect(result.mappings[0]).toMatchObject({ packageName: 'foo', bundle: 'mapping-bundle' });
+  });
+
   it('skips setup and forwards modifiedFiles on a rebuild', async () => {
-    const adapter = createFakeBuildAdapter({ results: [] });
+    // setup() is skipped on a rebuild, so the fake cannot echo the entry points back.
+    const adapter = createFakeBuildAdapter({ results: [{ fileName: 'dist/Comp.js' }] });
 
     await bundleExposedAndMappingsCore(
       { adapter },
-      makeConfig(),
+      makeConfig({ exposes: { './Comp': { file: './src/comp.ts' } } }),
       makeFedOptions(),
       [],
       ['/ws/src/x.ts']

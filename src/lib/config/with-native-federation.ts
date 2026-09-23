@@ -11,9 +11,11 @@ import type {
 import { isInSkipList, prepareSkipList } from './default-skip-list.js';
 import { normalizeMappingConfig, withoutSkippedMappings } from './mapping-utils.js';
 import { type PreparedSkipList } from '../domain/config/skip-list.contract.js';
+import type { ConfigBuilder } from '../domain/config/config-builders.contract.js';
 import type {
   NormalizedExternalConfig,
   NormalizedSharedExternalsConfig,
+  SharedExternalsConfig,
 } from '../domain/config/external-config.contract.js';
 import { logger } from '../utils/logger.js';
 
@@ -23,7 +25,10 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
   const chunks = config.chunks ?? true;
   const mappingVersion = config.features?.mappingVersion ?? true;
 
-  const { paths, configs } = getRawMappedPaths(findRootTsConfigJson(), config.sharedMappings);
+  const { paths, configs } = getRawMappedPaths(
+    findRootTsConfigJson(),
+    fromBuilder(config.sharedMappings)
+  );
 
   const normalized: NormalizedFederationConfig = {
     $type: 'classic',
@@ -49,6 +54,13 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
   return normalized;
 }
 
+// A shared config may legitimately contain a package named `get`, but its value is an object.
+function fromBuilder<T>(value: T | ConfigBuilder<T> | undefined): T | undefined {
+  return typeof (value as ConfigBuilder<T> | undefined)?.get === 'function'
+    ? (value as ConfigBuilder<T>).get()
+    : (value as T | undefined);
+}
+
 function normalizeExposes(exposes: FederationConfig['exposes']): Record<string, ExposeEntry> {
   if (!exposes) return {};
   return Object.fromEntries(
@@ -67,7 +79,7 @@ function normalizeShared(
   let result: NormalizedSharedExternalsConfig = {};
 
   const shared =
-    config.shared ??
+    fromBuilder<SharedExternalsConfig>(config.shared) ??
     (fromPackageJson({
       singleton: true,
       strictVersion: true,
@@ -115,7 +127,7 @@ function normalizeShared(
   return result;
 }
 
-const IGNORED_MAPPING_PROPS = ['build', 'platform', 'chunks', 'packageInfo'] as const;
+const IGNORED_MAPPING_PROPS = ['platform', 'chunks', 'packageInfo'] as const;
 
 function normalizeMappingConfigs(
   configs: SharedMappingConfigs,
@@ -125,7 +137,7 @@ function normalizeMappingConfigs(
     const ignored = IGNORED_MAPPING_PROPS.filter(prop => cfg[prop] !== undefined);
     if (ignored.length > 0) {
       logger.warn(
-        `Mapping '${pattern}' sets ${ignored.join(', ')}, which mapped paths do not honour (they all share one bundle). Ignored.`
+        `Mapping '${pattern}' sets ${ignored.join(', ')}, which mapped paths do not honour. Ignored.`
       );
     }
 

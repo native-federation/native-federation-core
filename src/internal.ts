@@ -8,7 +8,7 @@ export * from './internal/browser.js';
 
 export * from './lib/core/build/build-result-map.js';
 
-export { hashFile } from './lib/utils/hash-file.js';
+export { hashFile } from './lib/utils/hash.js';
 export { logger, setLogLevel } from './lib/utils/logger.js';
 
 export { RebuildQueue, type TrackResult } from './lib/core/rebuild-queue.js';
@@ -44,3 +44,7 @@ export { linkedSharedDirs, sharedMappingDirs } from './lib/core/build/resolve-sh
 // Correlates watcher paths with linkedSharedDirs output; both are posix, so consumers
 // must not hand-roll the prefix check with path.sep.
 export { isUnderDir, isUnderAnyDir } from './lib/utils/path-patterns.js';
+export {
+  createMappingImportResolver,
+  type MappingImportResolver,
+} from './lib/config/mapping-imports.js';

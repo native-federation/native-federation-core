@@ -115,7 +115,7 @@ export default withNativeFederation({
 
   features: {
     denseChunking: true, // Optimize remoteEntry.json structure
-    denseExternals: true, // Group all entrypoints of a shared external under one object (opt-in)
+    denseExternals: true, // Group all entrypoints of a shared external under one object (opt-in); entries only merge when all metadata but file and dev hint match
     mappingVersion: true, // Use versions for shared mappings, is now opt-out
   },
 });
@@ -128,7 +128,7 @@ export default withNativeFederation({
 - **`singleton`**: Ensures only one instance of a dependency is loaded
 - **`strictVersion`**: Throws error on version mismatch instead of loading multiple versions
 - **`chunks`**: Can be set globally or per-package to control code-splitting
-- **`sharedMappings`**: Entries are patterns, and may be paired with an `ExternalConfig` as `[['@my-org/ui/*'], { singleton: false }]` (first matching entry wins). `mappingsFromWorkspace()` builds the same array. `includeSecondaries` exempts a mapping from `ignoreUnusedDeps` reachability entirely — either `true` or `{ keepAll: true }` does it here, unlike a shared package where `true` is the default and only `{ keepAll: true }` affects pruning; wildcards additionally need `{ resolveGlob: true }`. Only barrel imports can be shared as a mapped path: a specifier with a dot in its last segment cannot be resolved from an import map ([vite#21036](https://github.com/vitejs/vite/issues/21036)). `assertBarrelMappings` therefore throws on anything that would reach `remoteEntry.json`; paths that are pruned or dropped by wildcard expansion are never published, so they are filtered silently instead. `build`, `platform`, `chunks` and `packageInfo` are not honoured for mappings and warn.
+- **`sharedMappings`**: Entries are patterns, and may be paired with an `ExternalConfig` as `[['@my-org/ui/*'], { singleton: false }]` (first matching entry wins). `mappingsFromWorkspace()` builds the same array. `includeSecondaries` exempts a mapping from `ignoreUnusedDeps` reachability entirely — either `true` or `{ keepAll: true }` does it here, unlike a shared package where `true` is the default and only `{ keepAll: true }` affects pruning; wildcards additionally need `{ resolveGlob: true }`. Without that exemption, reachability resolves wildcards itself — no `resolveGlob` needed — and also follows imports by specifier from one mapping into another, so an entry point only another mapping's barrel re-exports stays published (core#135); relative imports inside a mapping are its own code and are bundled. Only barrel imports can be shared as a mapped path: a specifier with a dot in its last segment cannot be resolved from an import map ([vite#21036](https://github.com/vitejs/vite/issues/21036)). `assertBarrelMappings` therefore throws on anything that would reach `remoteEntry.json`; paths that are pruned or dropped by wildcard expansion are never published, so they are filtered silently instead. A mapping entry point that imports a subpath of a mapping `remoteEntry.json` publishes (`@my-org/ui/button.js`, `@my-org/ui/index.js`) gets a warning: esbuild keeps every subpath of an external verbatim, and the import map has no key for it. Only files the mapping itself matches are scanned, which for a single-file mapping is just its barrel; a skipped mapping is bundled, so its subpaths never warn. `build` selects a bundle (see the Chunks section); `platform`, `chunks` and `packageInfo` are not honoured for mappings and warn.
 - **`build: 'package'`**: Bundle a shared dependency in isolation (not in the shared bundle)
 
 ## File Watching & Development
@@ -240,6 +240,28 @@ line per path would flood.
 Not covered by any of this: events the platform itself drops (inotify `IN_Q_OVERFLOW` under
 `git checkout` or `npm install` churn). Recovering those needs a reconciliation sweep that
 re-stats the tracked set — deliberately out of scope here, own issue.
+
+## Chunks
+
+A chunk is code the bundler split out of one or more entry points. It has no version and no
+package name of its own, and it belongs to a *build*, not to a dependency — so nothing
+downstream can tell whether the external it was split out of asked for `singleton: false` or a
+share scope. Chunks are therefore never shared between applications: `addChunksToResult`
+publishes them with `singleton: false`, and with `denseChunking` the orchestrator maps them into
+the emitting remote's own scope. A chunk name is a build-local identifier, not a share key.
+
+`rename-chunks-by-content.ts` still names every chunk after a hash of the bytes it will serve,
+so identical bytes keep one name across rebuilds and a changed chunk always gets a new one. The
+hash fills the slot the bundler sized — its length, so every reference keeps its byte length and
+the emitted source maps stay valid — and is always written in base32, because a mixed-case name
+would collapse to one file on a case-insensitive filesystem.
+
+Shared mappings and exposed modules are built separately, because a chunk factored out of both is
+reached through two import trails — the mapping may be served by another remote, the exposed
+module never is — and is then evaluated twice. Mappings default to one `mapping-bundle`;
+`build: 'separate'` gives a mapping its own bundle and `build: 'package'` one per mapped package,
+the same way a shared external is planned (`planMappingBundles`). `mapping-or-exposed` is a fixed
+name: the orchestrator registers it for every remote it knows.
 
 ## Caching System
 

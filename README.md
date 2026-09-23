@@ -147,7 +147,7 @@ The `withNativeFederation` function sets up a configuration for your application
 
 #### The `fromPackageJson` helper (recommended)
 
-`fromPackageJson` is the recommended way to share your dependencies. It shares **all** dependencies found in your `package.json` and exposes a small fluent builder so you can fine-tune the result. The base options you pass are applied to every shared dependency; you then chain `.skip(...)`, `.override(...)` and `.patch(...)` as needed and finish with `.get()`:
+`fromPackageJson` is the recommended way to share your dependencies. It shares **all** dependencies found in your `package.json` and exposes a small fluent builder so you can fine-tune the result. The base options you pass are applied to every shared dependency; you then chain `.filter(...)`, `.skip(...)`, `.override(...)` and `.patch(...)` as needed and finish with `.get()`:
 
 ```typescript
 // shell/federation.config.js
@@ -169,8 +169,9 @@ export default withNativeFederation({
 > [!TIP]
 > If you omit the `shared` property entirely, Native Federation applies exactly this `fromPackageJson` configuration for you (with `singleton`, `strictVersion` and `requiredVersion: 'auto'`). So the snippet above is also a good description of the default behavior.
 
-The builder returned by `fromPackageJson` offers three chainable methods, each of which returns the builder so you can combine them:
+The builder returned by `fromPackageJson` offers four chainable methods, each of which returns the builder so you can combine them:
 
+- **`.filter(patterns)`** — only share the `package.json` dependencies matching these patterns (e.g. `['@angular/*', 'rxjs']`). Repeated calls add to the selection; omit it to share every dependency. Packages added via `.override(...)` are not affected, and patching a package the filter excluded is ignored with a warning.
 - **`.skip(externals)`** — exclude packages from sharing (added on top of the [default skip list](#sharing)).
 - **`.override(externals)`** — replace the configuration for specific packages entirely. Use this when a package needs a completely different set of options.
 - **`.patch(externals, cfg)`** — merge a partial configuration onto specific shared externals, keeping the base options for everything you don't touch.
@@ -209,6 +210,8 @@ export default withNativeFederation({
     .get(),
 });
 ```
+
+The trailing `.get()` is optional: `shared` also accepts the builder itself, and `withNativeFederation` calls `.get()` for you.
 
 By default the closest `package.json` (relative to your `federation.config.js`) is used. You can point at a different one by passing its path as the second argument: `fromPackageJson(baseCfg, projectPath)`.
 
@@ -309,6 +312,28 @@ Instead of setting `requiredVersion` to `auto` time and again, you can also skip
 setInferVersion(true);
 ```
 
+##### Choosing the emitted range
+
+The detected version is emitted exactly as your `package.json` spells it. To pick the format instead, pass an object:
+
+```typescript
+share({
+  '@my-org/lib': { singleton: true, requiredVersion: { range: '^' } },
+});
+```
+
+| `range`   | `1.2.3` becomes |
+| --------- | --------------- |
+| `'exact'` | `1.2.3`         |
+| `'^'`     | `^1.2.3`        |
+| `'~'`     | `~1.2.3`        |
+| `'minor'` | `^1.2.3`        |
+| `'patch'` | `~1.2.3`        |
+
+Any prefix already on the detected version is replaced, and a prerelease tag is kept (`2.0.0-next.1` → `^2.0.0-next.1`). A range the format cannot be applied to — a multi-comparator one such as `>=1.0.0 <2.0.0` — is left alone.
+
+`version` may be set alongside `range` to format a version of your own instead of the detected one. `version: 'auto'` means "look the version up", so inside `share()` it overrides a `version` set next to it and falls back to the lookup in `package.json` — which fails if the package is not declared there.
+
 #### includeSecondaries
 
 If set to `true`, all secondary entry points are added too. In the case of `@angular/common` this is also `@angular/common/http`, `@angular/common/http/testing`, `@angular/common/testing`, `@angular/common/http/upgrade`, and `@angular/common/locales`. This exhaustive list shows that using this option for `@angular/common` is not the best idea because normally, you don't need most of them.
@@ -377,7 +402,7 @@ shared: share({
 })
 ```
 
-`keepAll` is read per **package family**, not per entry point: every entry point of @angular/core is published as long as _something_ still reaches @angular/core, but a package nothing imports at all is pruned anyway. That is what keeps the feature meaningful when `keepAll` is applied to every package at once — it exempts the secondaries from reachability, not the package itself. For a package with no secondary entry points the family is the package itself, so the flag changes nothing there. Use `ignoreUnusedDeps: false` to publish everything unconditionally.
+`keepAll` is read per **package family**, not per entry point: every entry point of @angular/core is published as long as _something_ still reaches @angular/core, but a package nothing imports at all is pruned anyway. That is what keeps the feature meaningful when `keepAll` is applied to every package at once — it exempts the secondaries from reachability, not the package itself. For a package with no secondary entry points the family is the package itself, so the flag changes nothing there. Use `ignoreUnusedDeps: false` to publish everything unconditionally — except wildcard `sharedMappings`, which still need `resolveGlob: true` (see [Keeping mappings that nothing imports](#keeping-mappings-that-nothing-imports)).
 
 Note that mapped paths read the same flag differently: there, `keepAll` opts the mapping out of reachability entirely (see [Keeping mappings that nothing imports](#keeping-mappings-that-nothing-imports)).
 
@@ -461,6 +486,16 @@ Plain strings and annotated pairs can be mixed freely. When several entries matc
 
 The honoured properties are `singleton`, `strictVersion`, `requiredVersion`, `version`, `shareScope`, `pool` and `includeSecondaries`. Anything omitted keeps its current default: `singleton: true`, `strictVersion` following the `mappingVersion` flag, and the version read from the mapped library's nearest `package.json`. Setting `version` explicitly also drives `requiredVersion` unless you set that too.
 
+`requiredVersion` takes [the same object form as a shared package](#choosing-the-emitted-range), so a mapping can follow its library's version and still pick the range:
+
+```js
+module.exports = withNativeFederation({
+  sharedMappings: [[['@my-org/ui/*'], { requiredVersion: { range: '^' } }]],
+});
+```
+
+A mapped path defaults to `~<version>`: an in-workspace library is versioned in lockstep with nothing, so `~` is the safest bet. That default holds for an object that names no `range`, which is the one place mappings differ from a shared package.
+
 `build`, `platform`, `chunks` and `packageInfo` are **not** honoured for mapped paths — every mapping is built into the same bundle, so there is nothing for them to select.
 
 For anything beyond a couple of entries, `mappingsFromWorkspace` is easier to read. It produces exactly the array form above:
@@ -478,6 +513,7 @@ module.exports = withNativeFederation({
 
 - Omit `.filter()` to select every mapped path — the same default as omitting `sharedMappings`.
 - `.patch()` annotates a subset; it never widens the selection, so patching a pattern that `.filter()` excluded is ignored with a warning.
+- `.get()` is optional: `sharedMappings` also accepts the builder itself.
 
 #### Keeping mappings that nothing imports
 
@@ -492,7 +528,7 @@ module.exports = withNativeFederation({
 ```
 
 - `keepAll` keeps the mapping even when nothing imports it, and on a mapping a bare `includeSecondaries: true` means the same thing — a mapping has no secondary entry points, so the flag can only mean "exempt from reachability". A shared package reads it differently: `true` is the default there and only means "share the secondaries", so `{ keepAll: true }` is the only spelling that affects pruning — and even then the package itself still has to be reached.
-- `resolveGlob` is additionally required for **wildcard** mappings. A wildcard is a pattern rather than an entry point, and normally only the reachability scan turns it into concrete files; `resolveGlob` expands it against the filesystem instead. Without it, a wildcard mapping is dropped with a warning.
+- `resolveGlob` is additionally required for **wildcard** mappings. A wildcard is a pattern rather than an entry point, and normally only the reachability scan turns it into concrete files; `resolveGlob` expands it against the filesystem instead. Without it, a wildcard mapping is dropped with a warning. That includes `ignoreUnusedDeps: false`: with no reachability scan running, `resolveGlob` is the only thing that can expand a wildcard, so turning pruning off without it drops every wildcard mapping.
 
 An expanded wildcard is named by the same rule the reachability scan uses, so `libs/ui/*` matching `libs/ui/button/index.ts` is shared as `@my-org/ui/button`.
 
@@ -512,7 +548,7 @@ If it would not, nothing is reported — there is no reason to fail a build over
 - **pruned away** by `ignoreUnusedDeps` — nothing imports it, so it is already gone.
 - **skipped by a wildcard expansion** — `resolveGlob` is a guess about your public surface, so it drops non-barrel matches rather than inventing a build error out of `*.service.ts` files nobody imports.
 
-What is left is the case worth stopping for: something genuinely imports `@my-org/ui/button/button.component`, so it is about to be published and would break at runtime. Import the barrel (`@my-org/ui/button`) and re-export from it. Note that with `ignoreUnusedDeps: false` nothing is pruned, so every mapped path is published and therefore checked.
+What is left is the case worth stopping for: something genuinely imports `@my-org/ui/button/button.component`, so it is about to be published and would break at runtime. Import the barrel (`@my-org/ui/button`) and re-export from it. Note that with `ignoreUnusedDeps: false` nothing is pruned, so every mapped path is published and therefore checked — wildcard mappings included, as long as they set `resolveGlob`.
 
 Note that a host providing libraries its remotes depend on couples the two: the remote can no longer run standalone. Letting each application share the entry points it imports and leaving the orchestrator to deduplicate at runtime is usually the better default.
 

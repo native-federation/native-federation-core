@@ -1,4 +1,5 @@
-import type { ExternalConfig } from '../domain/config/external-config.contract.js';
+import type { WorkspaceMappingsBuilder } from '../domain/config/config-builders.contract.js';
+import type { ExternalConfigInput } from '../domain/config/external-config.contract.js';
 import type {
   NormalizedMappingConfig,
   NormalizedSharedMappingConfigs,
@@ -12,26 +13,20 @@ import { logger } from '../utils/logger.js';
 
 const ALL = '*';
 
-export interface WorkspaceMappingsBuilder {
-  filter(patterns: string[]): WorkspaceMappingsBuilder;
-  patch(patterns: string[], cfg: Partial<ExternalConfig>): WorkspaceMappingsBuilder;
-  get(): SharedMappingEntry[];
-}
-
 /**
  * Sugar over the `sharedMappings` array form: `get()` returns entries that could equally
  * be written by hand. Without `filter()` the selection is every tsconfig path mapping.
  */
-export function mappingsFromWorkspace(baseCfg: ExternalConfig = {}): WorkspaceMappingsBuilder {
+export function mappingsFromWorkspace(baseCfg: ExternalConfigInput = {}): WorkspaceMappingsBuilder {
   const selection: string[] = [];
-  const patches: Array<{ patterns: string[]; cfg: Partial<ExternalConfig> }> = [];
+  const patches: Array<{ patterns: string[]; cfg: Partial<ExternalConfigInput> }> = [];
 
   const builder: WorkspaceMappingsBuilder = {
     filter(patterns: string[]) {
       selection.push(...patterns);
       return builder;
     },
-    patch(patterns: string[], cfg: Partial<ExternalConfig>) {
+    patch(patterns: string[], cfg: Partial<ExternalConfigInput>) {
       patches.push({ patterns, cfg });
       return builder;
     },
@@ -87,7 +82,7 @@ export function withoutSkippedMappings(
  * is lifted out because it steers wildcard expansion, not secondary entry points.
  */
 export function normalizeMappingConfig(
-  cfg: ExternalConfig,
+  cfg: ExternalConfigInput,
   mappingVersion: boolean
 ): NormalizedMappingConfig {
   const includeSecondaries =
@@ -98,6 +93,7 @@ export function normalizeMappingConfig(
   return {
     singleton: cfg.singleton ?? true,
     strictVersion: cfg.strictVersion ?? mappingVersion,
+    ...(cfg.build && { build: cfg.build }),
     ...(cfg.requiredVersion !== undefined && { requiredVersion: cfg.requiredVersion }),
     ...(cfg.version !== undefined && { version: cfg.version }),
     ...(cfg.shareScope && { shareScope: cfg.shareScope }),
