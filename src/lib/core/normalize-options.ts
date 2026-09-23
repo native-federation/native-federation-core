@@ -124,7 +124,7 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
     });
     logger.info('Removed unused dependencies.');
     logger.debug(
-      'Keep everything with "ignoreUnusedDeps: false", or one mapping with "includeSecondaries: {keepAll: true}". On a shared package that flag only keeps the secondaries of a package something still imports.'
+      'Keep everything with "ignoreUnusedDeps: false" (wildcard (*) mappings then need globbing enabled separately with "includeSecondaries: {resolveGlob: true}" to be resolved), or one mapping with "includeSecondaries: {keepAll: true}". On a shared package that flag only keeps the secondaries of a package something still imports.'
     );
   } else {
     config.sharedMappings = expandOrDropWildcards(config, {
