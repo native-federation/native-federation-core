@@ -143,6 +143,8 @@ export async function bundleExposedAndMappingsCore(
 
   // Pick shared-mappings
   for (const plan of mappingPlans) {
+    logger.info(`Bundling shared mappings with bundle type '${plan.bundleName}'`);
+    const start = process.hrtime();
     const results = await runBuild(plan.bundleName, plan.entryPoints);
     const files: string[] = [];
 
@@ -162,8 +164,11 @@ export async function bundleExposedAndMappingsCore(
 
     takeChunks(plan.bundleName, results, files);
     mappingFiles.push(...files);
+    logger.measure(start, `Bundling '${plan.bundleName}' shared mappings`);
   }
 
+  if (exposes.length > 0) logger.info('Bundling exposed modules');
+  const exposedStart = process.hrtime();
   const exposedResults = await runBuild(EXPOSED_BUNDLE, exposes);
 
   const exposedResult: Array<ExposesInfo> = [];
@@ -187,6 +192,7 @@ export async function bundleExposedAndMappingsCore(
   }
 
   takeChunks(EXPOSED_BUNDLE, exposedResults, exposedFiles);
+  if (exposes.length > 0) logger.measure(exposedStart, 'Bundling exposed modules');
 
   // Must run after rewriteChunkImports so SRI matches the final on-disk bytes.
   const integrity: IntegrityMap | undefined = config.features.integrityHashes

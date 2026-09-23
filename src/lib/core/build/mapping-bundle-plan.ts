@@ -3,7 +3,7 @@ import type { PathToImport } from '../../domain/utils/mapped-path.contract.js';
 import { resolveMappingConfig } from '../../config/mapping-utils.js';
 import { inferPackageFromSecondary, normalizePackageName } from '../../utils/normalize.js';
 
-export const DEFAULT_MAPPING_BUNDLE = 'mapping-bundle';
+const DEFAULT_MAPPING_BUNDLE = 'mapping-bundle';
 
 export interface MappingBundlePlan {
   bundleName: string;
