@@ -402,7 +402,7 @@ shared: share({
 })
 ```
 
-`keepAll` is read per **package family**, not per entry point: every entry point of @angular/core is published as long as _something_ still reaches @angular/core, but a package nothing imports at all is pruned anyway. That is what keeps the feature meaningful when `keepAll` is applied to every package at once — it exempts the secondaries from reachability, not the package itself. For a package with no secondary entry points the family is the package itself, so the flag changes nothing there. Use `ignoreUnusedDeps: false` to publish everything unconditionally.
+`keepAll` is read per **package family**, not per entry point: every entry point of @angular/core is published as long as _something_ still reaches @angular/core, but a package nothing imports at all is pruned anyway. That is what keeps the feature meaningful when `keepAll` is applied to every package at once — it exempts the secondaries from reachability, not the package itself. For a package with no secondary entry points the family is the package itself, so the flag changes nothing there. Use `ignoreUnusedDeps: false` to publish everything unconditionally — except wildcard `sharedMappings`, which still need `resolveGlob: true` (see [Keeping mappings that nothing imports](#keeping-mappings-that-nothing-imports)).
 
 Note that mapped paths read the same flag differently: there, `keepAll` opts the mapping out of reachability entirely (see [Keeping mappings that nothing imports](#keeping-mappings-that-nothing-imports)).
 
@@ -528,7 +528,7 @@ module.exports = withNativeFederation({
 ```
 
 - `keepAll` keeps the mapping even when nothing imports it, and on a mapping a bare `includeSecondaries: true` means the same thing — a mapping has no secondary entry points, so the flag can only mean "exempt from reachability". A shared package reads it differently: `true` is the default there and only means "share the secondaries", so `{ keepAll: true }` is the only spelling that affects pruning — and even then the package itself still has to be reached.
-- `resolveGlob` is additionally required for **wildcard** mappings. A wildcard is a pattern rather than an entry point, and normally only the reachability scan turns it into concrete files; `resolveGlob` expands it against the filesystem instead. Without it, a wildcard mapping is dropped with a warning.
+- `resolveGlob` is additionally required for **wildcard** mappings. A wildcard is a pattern rather than an entry point, and normally only the reachability scan turns it into concrete files; `resolveGlob` expands it against the filesystem instead. Without it, a wildcard mapping is dropped with a warning. That includes `ignoreUnusedDeps: false`: with no reachability scan running, `resolveGlob` is the only thing that can expand a wildcard, so turning pruning off without it drops every wildcard mapping.
 
 An expanded wildcard is named by the same rule the reachability scan uses, so `libs/ui/*` matching `libs/ui/button/index.ts` is shared as `@my-org/ui/button`.
 
@@ -548,7 +548,7 @@ If it would not, nothing is reported — there is no reason to fail a build over
 - **pruned away** by `ignoreUnusedDeps` — nothing imports it, so it is already gone.
 - **skipped by a wildcard expansion** — `resolveGlob` is a guess about your public surface, so it drops non-barrel matches rather than inventing a build error out of `*.service.ts` files nobody imports.
 
-What is left is the case worth stopping for: something genuinely imports `@my-org/ui/button/button.component`, so it is about to be published and would break at runtime. Import the barrel (`@my-org/ui/button`) and re-export from it. Note that with `ignoreUnusedDeps: false` nothing is pruned, so every mapped path is published and therefore checked.
+What is left is the case worth stopping for: something genuinely imports `@my-org/ui/button/button.component`, so it is about to be published and would break at runtime. Import the barrel (`@my-org/ui/button`) and re-export from it. Note that with `ignoreUnusedDeps: false` nothing is pruned, so every mapped path is published and therefore checked — wildcard mappings included, as long as they set `resolveGlob`.
 
 Note that a host providing libraries its remotes depend on couples the two: the remote can no longer run standalone. Letting each application share the entry points it imports and leaving the orchestrator to deduplicate at runtime is usually the better default.
 
