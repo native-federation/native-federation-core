@@ -23,11 +23,11 @@ import { getBuildAdapter } from './build-adapter.js';
 import { resolveMappingConfig } from '../../config/mapping-utils.js';
 import { applyAutoRequiredOptions } from '../../config/version-lookup.js';
 import type { AutoRequiredOptions } from '../../domain/config/external-config.contract.js';
+import { planMappingBundles } from './mapping-bundle-plan.js';
 
 // Shared mappings and exposed modules build separately so the bundler cannot factor one chunk out
 // of both: a chunk spanning them is reached through two import trails and evaluated twice.
-const MAPPING_BUNDLE = 'mapping-bundle';
-// Hard-coded in the orchestrator, which registers it for every remote it knows.
+// The exposed build's name is hard-coded in the orchestrator, which registers it for every remote.
 const EXPOSED_BUNDLE = 'mapping-or-exposed';
 
 export async function bundleExposedAndMappings(
@@ -60,15 +60,14 @@ export async function bundleExposedAndMappingsCore(
   }
   const io = deps.io ?? nodeIo;
 
-  const mappings: EntryPoint[] = Object.entries(config.sharedMappings).map(
-    ([entryPoint, mappedImport]) => {
-      return {
-        fileName: entryPoint,
-        outName: mappedImport.replace(/[^A-Za-z0-9]/g, '_') + '.js',
-        key: mappedImport,
-      };
-    }
-  );
+  const mappingPlans = planMappingBundles(config).map(plan => ({
+    bundleName: plan.bundleName,
+    entryPoints: Object.entries(plan.entries).map(([entryPoint, mappedImport]) => ({
+      fileName: entryPoint,
+      outName: mappedImport.replace(/[^A-Za-z0-9]/g, '_') + '.js',
+      key: mappedImport,
+    })),
+  }));
   const exposes: Array<EntryPoint & { element?: string }> = Object.entries(config.exposes).map(
     ([key, expose]) => {
       const outFilePath = key + '.js';
@@ -139,28 +138,31 @@ export async function bundleExposedAndMappingsCore(
     chunkPaths.push(...paths);
   };
 
-  const mappingResults = await runBuild(MAPPING_BUNDLE, mappings);
-
   const sharedResult: Array<SharedInfo> = [];
   const mappingFiles: string[] = [];
 
   // Pick shared-mappings
-  for (const item of mappings) {
-    const distEntryFile = popFromResultMap(mappingResults, item.outName);
-    sharedResult.push(
-      toSharedMappingInfo(
+  for (const plan of mappingPlans) {
+    const results = await runBuild(plan.bundleName, plan.entryPoints);
+    const files: string[] = [];
+
+    for (const item of plan.entryPoints) {
+      const distEntryFile = popFromResultMap(results, item.outName);
+      const mapping = toSharedMappingInfo(
         item.fileName,
-        item.key!,
+        item.key,
         path.basename(distEntryFile),
         config,
         fedOptions
-      )
-    );
-    mappingFiles.push(distEntryFile);
-  }
+      );
+      if (dense) mapping.bundle = plan.bundleName;
+      sharedResult.push(mapping);
+      files.push(distEntryFile);
+    }
 
-  if (dense) for (const external of sharedResult) external.bundle = MAPPING_BUNDLE;
-  takeChunks(MAPPING_BUNDLE, mappingResults, mappingFiles);
+    takeChunks(plan.bundleName, results, files);
+    mappingFiles.push(...files);
+  }
 
   const exposedResults = await runBuild(EXPOSED_BUNDLE, exposes);
 

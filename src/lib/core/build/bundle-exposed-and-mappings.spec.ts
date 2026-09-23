@@ -445,6 +445,35 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     expect(io.readText('dist/Comp.js')).not.toContain('AAAAAAAA');
   });
 
+  it('builds a mapping that asked for its own bundle apart from the rest', async () => {
+    const config = makeConfig({
+      exposes: { './Comp': { file: './src/comp.ts' } },
+      sharedMappings: { './libs/a': '@org/a', './libs/b': '@org/b' },
+      sharedMappingsConfig: { '@org/a': { singleton: true, strictVersion: false, build: 'separate' } },
+      chunks: true,
+      features: { ...makeConfig().features, denseChunking: true },
+    });
+    const io = createMemoryIo();
+    const adapter = createFakeBuildAdapter({ io });
+
+    const result = await bundleExposedAndMappingsCore(
+      { adapter, io },
+      config,
+      makeFedOptions(),
+      []
+    );
+
+    expect(adapter.calls.build.map(c => c.name)).toEqual([
+      'mapping-org_a',
+      'mapping-bundle',
+      'mapping-or-exposed',
+    ]);
+    expect(result.mappings).toEqual([
+      expect.objectContaining({ packageName: '@org/a', bundle: 'mapping-org_a' }),
+      expect.objectContaining({ packageName: '@org/b', bundle: 'mapping-bundle' }),
+    ]);
+  });
+
   it('keeps a mapping chunk and an exposed chunk in separate bundles', async () => {
     const io = createMemoryIo();
     const config = makeConfig({

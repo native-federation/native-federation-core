@@ -128,7 +128,7 @@ export default withNativeFederation({
 - **`singleton`**: Ensures only one instance of a dependency is loaded
 - **`strictVersion`**: Throws error on version mismatch instead of loading multiple versions
 - **`chunks`**: Can be set globally or per-package to control code-splitting
-- **`sharedMappings`**: Entries are patterns, and may be paired with an `ExternalConfig` as `[['@my-org/ui/*'], { singleton: false }]` (first matching entry wins). `mappingsFromWorkspace()` builds the same array. `includeSecondaries` exempts a mapping from `ignoreUnusedDeps` reachability entirely — either `true` or `{ keepAll: true }` does it here, unlike a shared package where `true` is the default and only `{ keepAll: true }` affects pruning; wildcards additionally need `{ resolveGlob: true }`. Only barrel imports can be shared as a mapped path: a specifier with a dot in its last segment cannot be resolved from an import map ([vite#21036](https://github.com/vitejs/vite/issues/21036)). `assertBarrelMappings` therefore throws on anything that would reach `remoteEntry.json`; paths that are pruned or dropped by wildcard expansion are never published, so they are filtered silently instead. `build`, `platform`, `chunks` and `packageInfo` are not honoured for mappings and warn.
+- **`sharedMappings`**: Entries are patterns, and may be paired with an `ExternalConfig` as `[['@my-org/ui/*'], { singleton: false }]` (first matching entry wins). `mappingsFromWorkspace()` builds the same array. `includeSecondaries` exempts a mapping from `ignoreUnusedDeps` reachability entirely — either `true` or `{ keepAll: true }` does it here, unlike a shared package where `true` is the default and only `{ keepAll: true }` affects pruning; wildcards additionally need `{ resolveGlob: true }`. Only barrel imports can be shared as a mapped path: a specifier with a dot in its last segment cannot be resolved from an import map ([vite#21036](https://github.com/vitejs/vite/issues/21036)). `assertBarrelMappings` therefore throws on anything that would reach `remoteEntry.json`; paths that are pruned or dropped by wildcard expansion are never published, so they are filtered silently instead. `build` selects a bundle (see the Chunks section); `platform`, `chunks` and `packageInfo` are not honoured for mappings and warn.
 - **`build: 'package'`**: Bundle a shared dependency in isolation (not in the shared bundle)
 
 ## File Watching & Development
@@ -256,11 +256,12 @@ hash fills the slot the bundler sized — its length, so every reference keeps i
 the emitted source maps stay valid — and is always written in base32, because a mixed-case name
 would collapse to one file on a case-insensitive filesystem.
 
-Shared mappings and exposed modules are built separately (`mapping-bundle` and
-`mapping-or-exposed`), because a chunk factored out of both is reached through two import trails
-— the mapping may be served by another remote, the exposed module never is — and is then
-evaluated twice. `mapping-or-exposed` is a fixed name: the orchestrator registers it for every
-remote it knows.
+Shared mappings and exposed modules are built separately, because a chunk factored out of both is
+reached through two import trails — the mapping may be served by another remote, the exposed
+module never is — and is then evaluated twice. Mappings default to one `mapping-bundle`;
+`build: 'separate'` gives a mapping its own bundle and `build: 'package'` one per mapped package,
+the same way a shared external is planned (`planMappingBundles`). `mapping-or-exposed` is a fixed
+name: the orchestrator registers it for every remote it knows.
 
 ## Caching System
 
