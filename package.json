@@ -1,6 +1,6 @@
 {
   "name": "@softarc/native-federation",
-  "version": "4.6.0",
+  "version": "4.7.0",
   "type": "module",
   "license": "MIT",
   "packageManager": "pnpm@11.25.0",
