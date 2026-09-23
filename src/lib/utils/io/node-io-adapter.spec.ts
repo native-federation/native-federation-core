@@ -81,6 +81,22 @@ describe('nodeIo', () => {
       expect(glob('libs/**/*')).toEqual(['libs/ui/deep/a/b/index.ts', 'libs/ui/index.ts']);
     });
 
+    it('returns paths sorted, not in walk order', () => {
+      // tinyglobby interleaves a directory's files with its subdirectories' contents (fast-glob
+      // listed files first); either order leaks into esbuild's chunking, so the port sorts.
+      touch('libs/b.ts');
+      touch('libs/a/z.ts');
+      touch('libs/c/d/e.ts');
+      touch('libs/a.ts');
+
+      expect(nodeIo.globFiles('libs/**/*', { cwd: root })).toEqual([
+        'libs/a.ts',
+        'libs/a/z.ts',
+        'libs/b.ts',
+        'libs/c/d/e.ts',
+      ]);
+    });
+
     it('never returns directories, even when the pattern names one', () => {
       touch('libs/ui/index.ts');
 
