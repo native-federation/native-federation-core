@@ -112,6 +112,83 @@ describe('densifyExternals', () => {
     expect(b.version).toBe('9.9.9');
   });
 
+  // core#145: mappings expanded from '@org/ui/*' with build: 'separate' each get their own bundle.
+  it('splits mapping secondaries planned into different bundles', () => {
+    const result = densifyExternals([
+      flat('@org/ui/button', 'button.js', { bundle: 'mapping-org_ui_button' }),
+      flat('@org/ui/card', 'card.js', { bundle: 'mapping-org_ui_card' }),
+    ]);
+
+    expect(result).toEqual([
+      expect.objectContaining({ bundle: 'mapping-org_ui_button', entries: { '@org/ui/button': 'button.js' } }),
+      expect.objectContaining({ bundle: 'mapping-org_ui_card', entries: { '@org/ui/card': 'card.js' } }),
+    ]);
+  });
+
+  it('splits a separate mapping from one left in the default mapping bundle', () => {
+    const result = densifyExternals([
+      flat('@org/ui/button', 'button.js', { bundle: 'mapping-org_ui_button' }),
+      flat('@org/ui/card', 'card.js', { bundle: 'mapping-bundle' }),
+    ]);
+
+    expect(result.map(r => r.bundle)).toEqual(['mapping-org_ui_button', 'mapping-bundle']);
+  });
+
+  it('splits external secondaries planned into different bundles but merges those sharing one', () => {
+    const result = densifyExternals([
+      flat('rxjs', 'rxjs.js', { bundle: 'browser-rxjs' }),
+      flat('rxjs/operators', 'rxjs-operators.js', { bundle: 'browser-rxjs_operators' }),
+      flat('rxjs/ajax', 'rxjs-ajax.js', { bundle: 'browser-rxjs' }),
+    ]);
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        bundle: 'browser-rxjs',
+        entries: { rxjs: 'rxjs.js', 'rxjs/ajax': 'rxjs-ajax.js' },
+      }),
+      expect.objectContaining({
+        bundle: 'browser-rxjs_operators',
+        entries: { 'rxjs/operators': 'rxjs-operators.js' },
+      }),
+    ]);
+  });
+
+  it('splits secondaries in different pools', () => {
+    const result = densifyExternals([
+      flat('rxjs', 'rxjs.js', { pool: 'a' }),
+      flat('rxjs/operators', 'rxjs-operators.js', { pool: 'b' }),
+    ]);
+
+    expect(result.map(r => r.pool)).toEqual(['a', 'b']);
+  });
+
+  // Guards the denylist: a field the densifier does not know about must not be silently merged.
+  it('splits on a metadata field it has no special handling for', () => {
+    const result = densifyExternals([
+      flat('rxjs', 'rxjs.js', { future: 1 } as Partial<SharedInfo>),
+      flat('rxjs/operators', 'rxjs-operators.js', { future: 2 } as Partial<SharedInfo>),
+    ]);
+
+    expect(result).toHaveLength(2);
+  });
+
+  it('groups entries whose optional fields were added in a different order', () => {
+    const a = { ...flat('rxjs', 'rxjs.js'), bundle: 'browser-shared', pool: 'p' };
+    const b = { ...flat('rxjs/operators', 'rxjs-operators.js'), pool: 'p', bundle: 'browser-shared' };
+
+    expect(densifyExternals([a, b])).toHaveLength(1);
+  });
+
+  it('keeps the first dev hint when merging, without letting it split the group', () => {
+    const result = densifyExternals([
+      flat('rxjs', 'rxjs.js', { dev: { entryPoint: 'rxjs/index.js' } }),
+      flat('rxjs/operators', 'rxjs-operators.js', { dev: { entryPoint: 'rxjs/operators/index.js' } }),
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.dev).toEqual({ entryPoint: 'rxjs/index.js' });
+  });
+
   it('never emits outFileName on a dense object and never entries on a flat one', () => {
     const chunk = flat(`${CHUNK_PREFIX}/chunk-x`, 'chunk-x.js');
     const result = densifyExternals([flat('tslib', 'tslib.js'), chunk]);

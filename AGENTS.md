@@ -115,7 +115,7 @@ export default withNativeFederation({
 
   features: {
     denseChunking: true, // Optimize remoteEntry.json structure
-    denseExternals: true, // Group all entrypoints of a shared external under one object (opt-in)
+    denseExternals: true, // Group all entrypoints of a shared external under one object (opt-in); entries only merge when all metadata but file and dev hint match
     mappingVersion: true, // Use versions for shared mappings, is now opt-out
   },
 });

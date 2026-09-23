@@ -34,35 +34,25 @@ export function densifyExternals(
       continue;
     }
 
-    const parent = inferPackageFromSecondary(entry.packageName);
-    const sig = JSON.stringify({
-      singleton: entry.singleton,
-      strictVersion: entry.strictVersion,
-      requiredVersion: entry.requiredVersion,
-      version: entry.version,
-      shareScope: entry.shareScope,
-    });
+    const { outFileName, packageName, dev, ...meta } = entry;
+    const parent = inferPackageFromSecondary(packageName);
+    // Denylist, so a field added to SharedInfo later splits groups instead of being dropped.
+    const sig = JSON.stringify(meta, Object.keys(meta).sort());
     const key = parent + ' ' + sig;
 
     const existing = groupIndex.get(key);
     if (existing === undefined) {
       const dense: DenseSharedInfo = {
-        singleton: entry.singleton,
-        strictVersion: entry.strictVersion,
-        requiredVersion: entry.requiredVersion,
+        ...meta,
         packageName: parent,
-        entries: { [entry.packageName]: entry.outFileName },
+        entries: { [packageName]: outFileName },
       };
-      if (entry.version !== undefined) dense.version = entry.version;
-      if (entry.shareScope !== undefined) dense.shareScope = entry.shareScope;
-      if (entry.bundle !== undefined) dense.bundle = entry.bundle;
-      if (entry.pool !== undefined) dense.pool = entry.pool;
-      if (entry.dev !== undefined) dense.dev = entry.dev;
+      if (dev !== undefined) dense.dev = dev;
 
       groupIndex.set(key, result.length);
       result.push(dense);
     } else {
-      (result[existing] as DenseSharedInfo).entries[entry.packageName] = entry.outFileName;
+      (result[existing] as DenseSharedInfo).entries[packageName] = outFileName;
     }
   }
 
