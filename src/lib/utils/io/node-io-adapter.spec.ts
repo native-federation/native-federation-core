@@ -63,6 +63,64 @@ describe('nodeIo', () => {
     });
   });
 
+  // Pins the glob semantics expand-mappings and resolve-wildcard-keys rely on, and that
+  // createMemoryIo mimics; the glob library was swapped once already (angular-adapter#140).
+  describe('globFiles', () => {
+    const touch = (rel: string) => {
+      const file = path.join(root, rel);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, '');
+    };
+    const glob = (pattern: string, ignore?: string[]) =>
+      nodeIo.globFiles(pattern, { cwd: root, ignore }).sort();
+
+    it('returns files at any depth as posix paths relative to cwd', () => {
+      touch('libs/ui/index.ts');
+      touch('libs/ui/deep/a/b/index.ts');
+
+      expect(glob('libs/**/*')).toEqual(['libs/ui/deep/a/b/index.ts', 'libs/ui/index.ts']);
+    });
+
+    it('never returns directories, even when the pattern names one', () => {
+      touch('libs/ui/index.ts');
+
+      // A library that expands directories (tinyglobby's default) would return index.ts here.
+      expect(glob('libs/ui')).toEqual([]);
+      expect(glob('libs/*')).toEqual([]);
+    });
+
+    it('honours node_modules ignores', () => {
+      touch('libs/ui/index.ts');
+      touch('libs/ui/node_modules/lodash/index.ts');
+
+      expect(glob('libs/**/*', ['**/node_modules/**'])).toEqual(['libs/ui/index.ts']);
+    });
+
+    it('skips dotfiles and dot directories', () => {
+      touch('libs/ui/index.ts');
+      touch('libs/ui/.cache/index.ts');
+      touch('libs/ui/.eslintrc.ts');
+
+      expect(glob('libs/**/*')).toEqual(['libs/ui/index.ts']);
+    });
+
+    it('follows symlinked directories', () => {
+      touch('packages/button/index.ts');
+      fs.mkdirSync(path.join(root, 'libs'));
+      fs.symlinkSync(path.join(root, 'packages/button'), path.join(root, 'libs/button'), 'dir');
+
+      expect(glob('libs/**/*')).toEqual(['libs/button/index.ts']);
+    });
+
+    it("treats a mid-segment '**' as a single-segment wildcard", () => {
+      // The same rule createMemoryIo's matcher enforces; see path-patterns.spec.ts.
+      touch('libs/ui-button/index.ts');
+
+      expect(glob('libs/ui-**')).toEqual([]);
+      expect(glob('libs/ui-**/index.ts')).toEqual(['libs/ui-button/index.ts']);
+    });
+  });
+
   describe('watch (poll)', () => {
     beforeEach(() => vi.useFakeTimers());
     afterEach(() => vi.useRealTimers());

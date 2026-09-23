@@ -140,7 +140,7 @@ describe('toGlobPattern', () => {
     expect(toGlobPattern(parseWildcard('libs/ui/*'))).toBe('libs/ui/**/*');
   });
 
-  // 'libs/ui-**' is not a globstar — fast-glob reads it as 'libs/ui-*', which needs one more
+  // 'libs/ui-**' is not a globstar — tinyglobby reads it as 'libs/ui-*', which needs one more
   // directory level than the pattern does and so matches nothing.
   it('widens a prefix that stops mid-segment back to its directory', () => {
     expect(toGlobPattern(parseWildcard('libs/ui-*/src/index.ts'))).toBe('libs/**/*/src/index.ts');

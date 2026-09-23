@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import fg from 'fast-glob';
+import { globSync } from 'tinyglobby';
 import type {
   Digest,
   HashAlgorithm,
@@ -78,11 +78,12 @@ export const nodeIo: IoPort = {
     fs.unlinkSync(path);
   },
   globFiles(pattern, opts) {
-    return fg.sync(pattern, {
+    return globSync(pattern, {
       cwd: opts.cwd,
       ignore: opts.ignore,
       onlyFiles: true,
       deep: Infinity,
+      expandDirectories: false,
     });
   },
   hash(algorithm: HashAlgorithm, data: Uint8Array | string): Digest {
