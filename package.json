@@ -3,6 +3,12 @@
   "version": "4.7.0",
   "type": "module",
   "license": "MIT",
+  "homepage": "https://native-federation.com/docs/v4/core/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/native-federation/native-federation-core.git"
+  },
+  "bugs": "https://github.com/native-federation/native-federation-core/issues",
   "packageManager": "pnpm@11.25.0",
   "scripts": {
     "build": "node esbuild.config.mjs && tsc -p tsconfig.build.json",

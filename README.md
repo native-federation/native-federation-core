@@ -1,836 +1,108 @@
 # @softarc/native-federation
 
-Native Federation is a "browser-native" implementation of the successful mental model behind webpack Module Federation. It can be **used with any framework and build tool** for implementing **Micro Frontends** and plugin-based architectures.
+[![npm version](https://img.shields.io/npm/v/@softarc/native-federation)](https://www.npmjs.com/package/@softarc/native-federation)
+[![npm downloads](https://img.shields.io/npm/dm/@softarc/native-federation)](https://www.npmjs.com/package/@softarc/native-federation)
+[![license](https://img.shields.io/npm/l/@softarc/native-federation)](https://github.com/native-federation/native-federation-core/blob/main/LICENSE.md)
 
-> [!WARNING]
-> **This is our v4 version**. For the v3 version, check out the [module-federation-plugin repository](https://github.com/angular-architects/module-federation-plugin/tree/main/libs/native-federation-core).
+The build-tool and framework agnostic core of **Native Federation**: the mental model of Module Federation, implemented on browser standards (ES modules and import maps) for Micro Frontends and plugin-based architectures.
+
+📖 **[Documentation](https://native-federation.com/docs/v4/core/)**
+
+> [!NOTE]
+> This is **v4**. Upgrading? See the [migration guide](https://native-federation.com/docs/v4/migration/). The v3 source lives in the [module-federation-plugin repository](https://github.com/angular-architects/module-federation-plugin/tree/21.x.x/libs/native-federation-core).
 
 ## Features
 
-- ✅ Mental Model of Module Federation
-- ✅ Future Proof: Independent of build tools like webpack and frameworks
-- ✅ Embraces Import Maps -- an emerging browser technology -- and EcmaScript modules
-- ✅ Easy to configure
-- ✅ Blazing Fast: The reference implementation not only uses the fast esbuild; it also caches already built shared dependencies (like Angular itself). However, as mentioned above, feel free to use it with any other build tool.
+- **Any framework, any bundler** — the core talks to your bundler through a small [adapter contract](https://native-federation.com/docs/v4/core/build-adapters/).
+- **Web standards** — remotes are plain ES modules wired together by an import map, no custom loader necessary (polyfill support via es-module-shims).
+- **Shared dependencies** — load a library once across host and remotes, with semver-aware version negotiation.
+- **Fast** — shared dependencies are bundled once and cached across builds.
 
-## Stack
+## Which package do I need?
 
-This library allows to augment your build process, to configure hosts (Micro Frontend shells) and remotes (Micro Frontends), and to load remotes at runtime.
+This package is the low-level builder. Most apps use it through an adapter:
 
-While this core library can be used with any framework and build tool, there is a higher level API on top of it. It hooks into the Angular CLI and provides a builder and schematics:
+| You are…                               | Use                                                                                                     |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Building an Angular app                | [`@angular-architects/native-federation`](https://native-federation.com/docs/v4/angular-adapter/)       |
+| Building with esbuild (React, vanilla) | [`@softarc/native-federation-esbuild`](https://native-federation.com/docs/v4/adapters/esbuild/)         |
+| Loading remotes into a host page       | [`@softarc/native-federation-orchestrator`](https://native-federation.com/docs/v4/orchestrator/)        |
+| Wiring a custom stack or new adapter   | this package — [build your own adapter](https://native-federation.com/docs/v4/adapters/build-your-own/) |
 
-![Stack](https://github.com/angular-architects/module-federation-plugin/raw/main/libs/native-federation-core/stack.png)
+## Install
 
-> Please find the [Angular-based version here](https://www.npmjs.com/package/@angular-architects/native-federation).
-
-> Please find the [vite plugin here](https://www.npmjs.com/package/@gioboa/vite-module-federation).
-
-Also, other higher level abstractions on top of this core library are possible.
-
-## About the Mental Model
-
-The underlying mental model allows for runtime integration: Loading a part of a separately built and deployed application into your host. This is needed for Micro Frontend architectures but also for plugin-based solutions.
-
-For this, the mental model introduces several concepts:
-
-- **Remote:** The remote is a separately built and deployed application. It can **expose EcmaScript** modules that can be loaded into other applications.
-- **Host:** The host loads one or several remotes on demand. For your framework's perspective, this looks like traditional lazy loading. The big difference is that the host doesn't know the remotes at compilation time.
-- **Shared Dependencies:** If several remotes and the host use the same library, you might not want to download it several times. Instead, you might want to just download it once and share it at runtime. For this use case, the mental model allows for defining such shared dependencies.
-- **Version Mismatch:** If two or more applications use a different version of the same shared library, we need to prevent a version mismatch. To deal with it, the mental model defines several strategies, like falling back to another version that fits the application, using a different compatible one (according to semantic versioning) or throwing an error.
-
-## Example
-
-- [VanillaJS example](https://github.com/manfredsteyer/native-federation-core-microfrontend).
-- [React example](https://github.com/manfredsteyer/native-federation-react-example)
-  - This example also shows the **watch mode** for compiling a federated application
-- [Vite + Svelte example](https://github.com/gioboa/svelte-microfrontend-demo)
-- [Vite + Angular example powered by AnalogJS](https://github.com/manfredsteyer/native-federation-vite-angular-demo)
-- **Your Example:** If you have an example with aspects not covered here, let us know. We are happy to link it here.
-
-## Credits
-
-Big thanks to:
-
-- [Zack Jackson](https://twitter.com/ScriptedAlchemy) for originally coming up with the great idea of Module Federation and its successful mental model
-- [Florian Rappl](https://twitter.com/FlorianRappl) for a good discussion about these topics during a speakers dinner in Nuremberg
-- [Michael Egger-Zikes](https://twitter.com/MikeZks) for contributing to our Module Federation efforts and bringing in valuable feedback
-- The Angular CLI-Team, esp. [Alan Agius](https://twitter.com/AlanAgius4) and [Charles Lyding](https://twitter.com/charleslyding), for working on the experimental esbuild builder for Angular
-
-## Using this Library
-
-### Installing the Library
-
-```
+```bash
 npm i @softarc/native-federation
 ```
 
-As Native Federation is tooling agnostic, we need an adapter to make it work with specific build tools. The package `@softarc/native-federation-esbuild` contains a simple adapter that uses esbuild.
+## Usage
 
-```
-npm i @softarc/native-federation-esbuild
-```
+Describe what an application shares and exposes in `federation.config.(m)js`:
 
-You can also provide your own adapter by providing a function aligning with the `NFBuildAdapter` [[src](https://github.com/native-federation/native-federation-core/blob/main/src/lib/core/build-adapter.ts)] type.
-
-### Augment your Build Process
-
-> [!WARNING]
-> The esbuild adapter is currently under construction, check the progress here: https://github.com/native-federation/esbuild-adapter
-
-Just call three helper methods provided by our `federationBuilder` in your build process to adjust it for Native Federation.
-
-```typescript
-import * as esbuild from 'esbuild';
-import * as path from 'path';
-import * as fs from 'fs';
-import { esBuildAdapter } from '@softarc/native-federation-esbuild';
-import { federationBuilder } from '@softarc/native-federation';
-
-
-const projectName = 'shell';
-const tsConfig = 'tsconfig.json';
-const outputPath = `dist/${projectName}`;
-
-/*
- *  Step 1: Initialize Native Federation
-*/
-await federationBuilder.init({
-    options: {
-        workspaceRoot: path.join(__dirname, '..'),
-        outputPath,
-        tsConfig,
-        federationConfig: `${projectName}/federation.config.js`,
-        verbose: false,
-    },
-
-    /*
-      * As this core lib is tooling-agnostic, you
-      * need a simple adapter for your bundler.
-      * It's just a matter of one function.
-    */
-    adapter: esBuildAdapter
-});
-
-/*
-  * Step 2: Trigger your build process
-  *
-  * You can use any tool for this. Here, we go
-  * with a very simple esbuild-based build.
-  *
-  * Just respect the externals in
-  * `federationBuilder.externals`.
-*/
-
-[...]
-
-await esbuild.build({
-    [...]
-    external: federationBuilder.externals,
-    [...]
-});
-
-[...]
-
-/*
-  * Step 3: Let the build method do the additional tasks
-  *   for supporting Native Federation
-*/
-
-await federationBuilder.build();
-```
-
-The method `federationBuilder.build` bundles the shared and exposed parts of your app.
-
-### Configuring Hosts
-
-The `withNativeFederation` function sets up a configuration for your applications. This is an example configuration for a host.
-
-#### The `fromPackageJson` helper (recommended)
-
-`fromPackageJson` is the recommended way to share your dependencies. It shares **all** dependencies found in your `package.json` and exposes a small fluent builder so you can fine-tune the result. The base options you pass are applied to every shared dependency; you then chain `.filter(...)`, `.skip(...)`, `.override(...)` and `.patch(...)` as needed and finish with `.get()`:
-
-```typescript
-// shell/federation.config.js
-
+```js
 import { withNativeFederation, fromPackageJson } from '@softarc/native-federation/config';
-
-export default withNativeFederation({
-  name: 'host',
-
-  shared: fromPackageJson({
-    singleton: true,
-    strictVersion: true,
-    requiredVersion: 'auto',
-    includeSecondaries: false,
-  }).get(),
-});
-```
-
-> [!TIP]
-> If you omit the `shared` property entirely, Native Federation applies exactly this `fromPackageJson` configuration for you (with `singleton`, `strictVersion` and `requiredVersion: 'auto'`). So the snippet above is also a good description of the default behavior.
-
-The builder returned by `fromPackageJson` offers four chainable methods, each of which returns the builder so you can combine them:
-
-- **`.filter(patterns)`** — only share the `package.json` dependencies matching these patterns (e.g. `['@angular/*', 'rxjs']`). Repeated calls add to the selection; omit it to share every dependency. Packages added via `.override(...)` are not affected, and patching a package the filter excluded is ignored with a warning.
-- **`.skip(externals)`** — exclude packages from sharing (added on top of the [default skip list](#sharing)).
-- **`.override(externals)`** — replace the configuration for specific packages entirely. Use this when a package needs a completely different set of options.
-- **`.patch(externals, cfg)`** — merge a partial configuration onto specific shared externals, keeping the base options for everything you don't touch.
-
-```typescript
-// shell/federation.config.js
-
-import { withNativeFederation, fromPackageJson } from '@softarc/native-federation/config';
-
-export default withNativeFederation({
-  name: 'host',
-
-  shared: fromPackageJson({
-    singleton: true,
-    strictVersion: true,
-    requiredVersion: 'auto',
-  })
-    // Don't share these dependencies at all
-    .skip(['my-lib', 'some-dev-only-lib'])
-    // Give a package a completely different configuration
-    .override({
-      'package-a/themes/xyz': {
-        singleton: true,
-        strictVersion: true,
-        requiredVersion: 'auto',
-        includeSecondaries: { skip: '@package-a/themes/xyz/*' },
-        build: 'package',
-      },
-    })
-    // Tweak a few options on specific packages while keeping the base config
-    .patch(['package-b'], {
-      singleton: false,
-      includeSecondaries: { skip: 'package-b/icons/*' },
-      build: 'package',
-    })
-    .get(),
-});
-```
-
-The trailing `.get()` is optional: `shared` also accepts the builder itself, and `withNativeFederation` calls `.get()` for you.
-
-By default the closest `package.json` (relative to your `federation.config.js`) is used. You can point at a different one by passing its path as the second argument: `fromPackageJson(baseCfg, projectPath)`.
-
-#### Alternative: the `shareAll` helper
-
-`shareAll` is the older, object-spread style alternative to `fromPackageJson`. It also shares all dependencies defined in your `package.json`, but instead of a fluent builder it returns a plain object that you spread into `shared`:
-
-```typescript
-// shell/federation.config.js
-
-import { withNativeFederation, shareAll } from '@softarc/native-federation/config';
-
-export default withNativeFederation({
-  name: 'host',
-
-  shared: {
-    ...shareAll({
-      singleton: true,
-      strictVersion: true,
-      requiredVersion: 'auto',
-      includeSecondaries: false,
-    }),
-  },
-});
-```
-
-The options passed to `shareAll` are applied to all dependencies found in your `package.json`. This might come in handy in a monorepo scenario and when doing some experiments / troubleshooting.
-
-You can also add overrides to `shareAll` for specific packages, via the second argument:
-
-```typescript
-// shell/federation.config.js
-
-import { withNativeFederation, shareAll } from '@softarc/native-federation/config';
-
-export default withNativeFederation({
-  name: 'host',
-
-  shared: {
-    ...shareAll(
-      {
-        singleton: true,
-        strictVersion: true,
-        requiredVersion: 'auto',
-      },
-      {
-        overrides: {
-          'package-a/themes/xyz': {
-            singleton: true,
-            strictVersion: true,
-            requiredVersion: 'auto',
-            includeSecondaries: { skip: '@package-a/themes/xyz/*' },
-            build: 'package',
-          },
-          'package-b': {
-            singleton: false,
-            strictVersion: true,
-            requiredVersion: 'auto',
-            includeSecondaries: { skip: 'package-b/icons/*' },
-            build: 'package',
-          },
-        },
-      }
-    ),
-  },
-});
-```
-
-### Share Helper
-
-The helper function share adds some additional options for the shared dependencies:
-
-```typescript
-shared: share({
-    "package-a": {
-        singleton: true,
-        strictVersion: true,
-        requiredVersion: 'auto',
-        includeSecondaries: true
-    },
-    [...]
-})
-```
-
-The added options are `requiredVersion: 'auto'` and `includeSecondaries`.
-
-#### requiredVersion: 'auto'
-
-If you set `requiredVersion` to `'auto'`, the helper takes the version defined in your `package.json`.
-
-This helps to solve issues with not (fully) met peer dependencies and secondary entry points.
-
-By default, it takes the `package.json` that is closest to the caller (normally the `federation.config.js`). However, you can pass the path to another `package.json` using the second optional parameter. Also, you need to define the shared library within the dependencies in your `package.json`.
-
-Instead of setting `requiredVersion` to `auto` time and again, you can also skip this option and call `setInferVersion(true)` before:
-
-```typescript
-setInferVersion(true);
-```
-
-##### Choosing the emitted range
-
-The detected version is emitted exactly as your `package.json` spells it. To pick the format instead, pass an object:
-
-```typescript
-share({
-  '@my-org/lib': { singleton: true, requiredVersion: { range: '^' } },
-});
-```
-
-| `range`   | `1.2.3` becomes |
-| --------- | --------------- |
-| `'exact'` | `1.2.3`         |
-| `'^'`     | `^1.2.3`        |
-| `'~'`     | `~1.2.3`        |
-| `'minor'` | `^1.2.3`        |
-| `'patch'` | `~1.2.3`        |
-
-Any prefix already on the detected version is replaced, and a prerelease tag is kept (`2.0.0-next.1` → `^2.0.0-next.1`). A range the format cannot be applied to — a multi-comparator one such as `>=1.0.0 <2.0.0` — is left alone.
-
-`version` may be set alongside `range` to format a version of your own instead of the detected one. `version: 'auto'` means "look the version up", so inside `share()` it overrides a `version` set next to it and falls back to the lookup in `package.json` — which fails if the package is not declared there.
-
-#### includeSecondaries
-
-If set to `true`, all secondary entry points are added too. In the case of `@angular/common` this is also `@angular/common/http`, `@angular/common/http/testing`, `@angular/common/testing`, `@angular/common/http/upgrade`, and `@angular/common/locales`. This exhaustive list shows that using this option for `@angular/common` is not the best idea because normally, you don't need most of them.
-
-> `includeSecondaries` is true by default.
-
-However, this option can come in handy for quick experiments or if you want to quickly share a package like `@angular/material` that comes with a myriad of secondary entry points.
-
-Even if you share too much, Native Federation will only load the needed ones at runtime. However, please keep in mind that shared packages can not be tree-shaken.
-
-To skip some secondary entry points, you can assign a configuration option instead of `true`:
-
-```typescript
-shared: share({
-    "@angular/common": {
-        singleton: true,
-        strictVersion: true,
-        requiredVersion: 'auto',
-        includeSecondaries: {
-            skip: ['@angular/common/http/testing']
-        }
-    },
-    [...]
-})
-```
-
-Wildcard (`*`) export entry points are not expanded by default. To resolve them into concrete secondary entry points, enable the `resolveGlob` property:
-
-```typescript
-shared: share({
-      "package-a": {
-        singleton: true,
-        strictVersion: true,
-        requiredVersion: "auto",
-        includeSecondaries: {resolveGlob: true}
-      },
-    [...]
-})
-```
-
-Resolving globs can create a bundle for every valid exported file it finds, **so it is recommended to keep the `ignoreUnusedDeps` feature enabled** (it is on by default) to drop the ones you don't use. If you want to specifically skip certain parts of the glob export, you can also use the wildcard in the skip section:
-
-```typescript
-shared: share({
-      "package-a/themes/xyz": {
-        singleton: true,
-        strictVersion: true,
-        requiredVersion: "auto",
-        includeSecondaries: {skip: "package-a/themes/xyz/*", resolveGlob: true}
-      },
-    [...]
-})
-```
-
-Finally, it's also possible to exempt the secondary entry points of a specific external from the `ignoreUnusedDeps` feature, for example when sharing a whole suite of interconnected external dependencies like @angular/core. This can be handy when you want to avoid the chance of cross-version secondary entrypoints being used by the different micro frontends. E.g. mfe1 uses @angular/core v20.1.0 and mfe2 uses @angular/core/rxjs-interop v20.0.8, then you might want consistent use of v20.1.0 so rxjs-interop should be exported by mfe1. The `keepAll` prop allows you to enforce this:
-
-```typescript
-shared: share({
-      "@angular/core": {
-        singleton: true,
-        strictVersion: true,
-        requiredVersion: "auto",
-        includeSecondaries: {keepAll: true}
-      },
-    [...]
-})
-```
-
-`keepAll` is read per **package family**, not per entry point: every entry point of @angular/core is published as long as _something_ still reaches @angular/core, but a package nothing imports at all is pruned anyway. That is what keeps the feature meaningful when `keepAll` is applied to every package at once — it exempts the secondaries from reachability, not the package itself. For a package with no secondary entry points the family is the package itself, so the flag changes nothing there. Use `ignoreUnusedDeps: false` to publish everything unconditionally — except wildcard `sharedMappings`, which still need `resolveGlob: true` (see [Keeping mappings that nothing imports](#keeping-mappings-that-nothing-imports)).
-
-Note that mapped paths read the same flag differently: there, `keepAll` opts the mapping out of reachability entirely (see [Keeping mappings that nothing imports](#keeping-mappings-that-nothing-imports)).
-
-The API for configuring and using Native Federation is very similar to the one provided by our Module Federation plugin [@angular-architects/module-federation](https://www.npmjs.com/package/@angular-architects/module-federation). Hence, most of the articles on it are also valid for Native Federation.
-
-### Sharing
-
-The `shareAll`-helper used here shares all dependencies found in your `package.json`. Hence, they only need to be loaded once (instead of once per remote and host). If you don't want to share all of them, you can opt-out of sharing by using the `skip` option:
-
-```typescript
-export default withNativeFederation({
-  [...]
-
-  // Don't share my-lib
-  skip: [
-    'my-lib'
-  ]
-
-  [...]
-})
-```
-
-### Sharing Mapped Paths (Monorepo-internal Libraries)
-
-Paths mapped in your `tsconfig.json` are shared by default too. While they are part of your (mono) repository, they are treated like libraries:
-
-```json
-{
-  "compilerOptions": {
-    [...]
-    "paths": {
-      "shared-lib": [
-        "libs/shared-lib/index.ts"
-      ]
-    }
-  }
-}
-```
-
-If you don't want to share (all of) them, put their names into the skip array (see above).
-
-### Determining which internal libraries are shared
-
-In Nx/monorepo setups, Native Federation shares all libraries from your `tsconfig` path mappings by default.
-
-If you only want to share selected mapped paths, you can use `sharedMappings` in your `federation.config.js`:
-
-```js
-module.exports = withNativeFederation({
-  shared: {
-    ...shareAll({
-      singleton: true,
-      strictVersion: true,
-      requiredVersion: 'auto',
-    }),
-  },
-  sharedMappings: ['@my-org/auth-lib', '@my-org/ui/*'],
-});
-```
-
-Notes:
-
-- `sharedMappings` is optional. If you omit it, all mapped paths are shared.
-- Entries are matched as patterns, so `'@my-org/*'` selects every mapped path under that scope.
-- You can use wildcard suffixes (for example, `@my-org/ui/*`) to include multiple mapped paths.
-- `skip` still applies and can be used to exclude mapped paths even if they were selected via `sharedMappings`. For wildcard mappings it is matched against each resolved import (`@my-org/ui/button`), not the pattern.
-- Mapped paths are read from the workspace root tsconfig file: `tsconfig.base.json` if present, otherwise `tsconfig.json`.
-- The workspace root is detected by searching upward from the current working directory until a `package.json` is found.
-
-#### Configuring shared mappings
-
-A mapped path can carry the same kind of metadata as a shared npm package. Pair a list of patterns with a config object:
-
-```js
-module.exports = withNativeFederation({
-  sharedMappings: ['@my-org/auth-lib', [['@my-org/ui/*'], { singleton: false }]],
-});
-```
-
-Plain strings and annotated pairs can be mixed freely. When several entries match the same mapped path, **the first one wins**, so put the specific entries before the general ones.
-
-The honoured properties are `singleton`, `strictVersion`, `requiredVersion`, `version`, `shareScope`, `pool` and `includeSecondaries`. Anything omitted keeps its current default: `singleton: true`, `strictVersion` following the `mappingVersion` flag, and the version read from the mapped library's nearest `package.json`. Setting `version` explicitly also drives `requiredVersion` unless you set that too.
-
-`requiredVersion` takes [the same object form as a shared package](#choosing-the-emitted-range), so a mapping can follow its library's version and still pick the range:
-
-```js
-module.exports = withNativeFederation({
-  sharedMappings: [[['@my-org/ui/*'], { requiredVersion: { range: '^' } }]],
-});
-```
-
-A mapped path defaults to `~<version>`: an in-workspace library is versioned in lockstep with nothing, so `~` is the safest bet. That default holds for an object that names no `range`, which is the one place mappings differ from a shared package.
-
-`build`, `platform`, `chunks` and `packageInfo` are **not** honoured for mapped paths — every mapping is built into the same bundle, so there is nothing for them to select.
-
-For anything beyond a couple of entries, `mappingsFromWorkspace` is easier to read. It produces exactly the array form above:
-
-```js
-import { withNativeFederation, mappingsFromWorkspace } from '@softarc/native-federation/config';
-
-module.exports = withNativeFederation({
-  sharedMappings: mappingsFromWorkspace({ singleton: true, strictVersion: true })
-    .filter(['@my-org/ui/*', '@my-org/auth-lib'])
-    .patch(['@my-org/ui/*'], { singleton: false })
-    .get(),
-});
-```
-
-- Omit `.filter()` to select every mapped path — the same default as omitting `sharedMappings`.
-- `.patch()` annotates a subset; it never widens the selection, so patching a pattern that `.filter()` excluded is ignored with a warning.
-- `.get()` is optional: `sharedMappings` also accepts the builder itself.
-
-#### Keeping mappings that nothing imports
-
-With the `ignoreUnusedDeps` feature on (the default), mapped paths are pruned to those actually reachable from your entry points. A host that exposes little of its own but is expected to supply libraries to its remotes can opt out per mapping, the same way `shared` packages do:
-
-```js
-module.exports = withNativeFederation({
-  sharedMappings: mappingsFromWorkspace({
-    includeSecondaries: { keepAll: true, resolveGlob: true },
-  }).get(),
-});
-```
-
-- `keepAll` keeps the mapping even when nothing imports it, and on a mapping a bare `includeSecondaries: true` means the same thing — a mapping has no secondary entry points, so the flag can only mean "exempt from reachability". A shared package reads it differently: `true` is the default there and only means "share the secondaries", so `{ keepAll: true }` is the only spelling that affects pruning — and even then the package itself still has to be reached.
-- `resolveGlob` is additionally required for **wildcard** mappings. A wildcard is a pattern rather than an entry point, and normally only the reachability scan turns it into concrete files; `resolveGlob` expands it against the filesystem instead. Without it, a wildcard mapping is dropped with a warning. That includes `ignoreUnusedDeps: false`: with no reachability scan running, `resolveGlob` is the only thing that can expand a wildcard, so turning pruning off without it drops every wildcard mapping.
-
-An expanded wildcard is named by the same rule the reachability scan uses, so `libs/ui/*` matching `libs/ui/button/index.ts` is shared as `@my-org/ui/button`.
-
-Expansion only accepts **entry points**. A glob cannot tell a library's public surface from its internals, so a match whose specifier still contains a dot in its last segment — `@my-org/ui/button/button.component`, `.spec`, `.d` — is skipped rather than shared.
-
-That restriction is not cosmetic: **only barrel imports can be shared as a mapped path.** A mapped path is advertised under its import specifier and marked external, so the specifier has to be one a browser import map can resolve, and a dot in the last segment does not resolve (see [vitejs/vite#21036](https://github.com/vitejs/vite/issues/21036)).
-
-So the rule is simply _would this end up in `remoteEntry.json`?_ If it would, a non-barrel specifier fails the build:
-
-```
-Invalid 'shared mappings' config. Only barrel imports can be shared as a sharedMapping:
-'@my-org/ui/button/button.component'.
-```
-
-If it would not, nothing is reported — there is no reason to fail a build over a path that was never going to be published:
-
-- **pruned away** by `ignoreUnusedDeps` — nothing imports it, so it is already gone.
-- **skipped by a wildcard expansion** — `resolveGlob` is a guess about your public surface, so it drops non-barrel matches rather than inventing a build error out of `*.service.ts` files nobody imports.
-
-What is left is the case worth stopping for: something genuinely imports `@my-org/ui/button/button.component`, so it is about to be published and would break at runtime. Import the barrel (`@my-org/ui/button`) and re-export from it. Note that with `ignoreUnusedDeps: false` nothing is pruned, so every mapped path is published and therefore checked — wildcard mappings included, as long as they set `resolveGlob`.
-
-Note that a host providing libraries its remotes depend on couples the two: the remote can no longer run standalone. Letting each application share the entry points it imports and leaving the orchestrator to deduplicate at runtime is usually the better default.
-
-The `mappingVersion` feature flag controls whether mapped paths get a version. It is **enabled by default**: Native Federation reads the version from the mapped library's nearest `package.json` and shares it with strict versioning, just like a published library.
-
-If your mapped paths point at plain internal source that isn't distributed as a versioned, buildable library, you can disable it. The mapped paths are then shared without a version constraint.
-
-```js
-module.exports = withNativeFederation({
-  shared: {
-    ...shareAll({
-      singleton: true,
-      strictVersion: true,
-      requiredVersion: 'auto',
-    }),
-  },
-  sharedMappings: ['@my-org/auth-lib', '@my-org/ui/*'],
-  features: {
-    mappingVersion: false,
-  },
-});
-```
-
-### Code-Splitting for Shared Dependencies
-
-By default, Native Federation enables code-splitting (chunking) for shared dependencies. This means large libraries can be split into smaller chunks which reduces the overall size, improving initial load times.
-
-You can configure code-splitting at two levels:
-
-#### Global Setting
-
-Use the `chunks` option in your `federation.config.js` to control the default behavior for all shared dependencies:
-
-```js
-module.exports = withNativeFederation({
-  // Disable code-splitting globally
-  chunks: false,
-
-  shared: {
-    ...shareAll({
-      singleton: true,
-      strictVersion: true,
-      requiredVersion: 'auto',
-    }),
-  },
-});
-```
-
-When `chunks` is set to `false` at the config level, all shared dependencies, shared mappings and exposed modules will be bundled as single files without code-splitting.
-
-#### Per-Package Setting
-
-You can also override the code-splitting behavior for individual packages in the `shared` configuration:
-
-```js
-module.exports = withNativeFederation({
-  shared: {
-    ...shareAll(
-      {
-        singleton: true,
-        strictVersion: true,
-        requiredVersion: 'auto',
-      },
-      {
-        overrides: {
-          // Disable code-splitting for a specific package
-          'large-lib': {
-            singleton: true,
-            strictVersion: true,
-            requiredVersion: 'auto',
-            chunks: false,
-            build: 'package', // necessary for isolated bundles
-          },
-        },
-      }
-    ),
-  },
-});
-```
-
-> **Note:** When setting `chunks` on individual packages, consider also setting `build: 'package'` to avoid your explicit chunk settings being ignored since all 'default' bundles are bundled in a single build step.
-
-#### Dense Chunking
-
-The `denseChunking` feature flag optimizes the `remoteEntry.json` file structure for better performance:
-
-```js
-module.exports = withNativeFederation({
-  shared: {
-    ...shareAll({
-      singleton: true,
-      strictVersion: true,
-      requiredVersion: 'auto',
-    }),
-  },
-  features: {
-    denseChunking: true,
-  },
-});
-```
-
-When enabled, instead of listing each chunk as a separate shared dependency, chunks are grouped by bundle name in a dedicated `chunks` object. Each shared dependency gets a `bundle` property linking it to its chunk bundle. This results in a smaller `remoteEntry.json` and allows chunks to be skipped if the dependency is not used in the final import map.
-
-#### Dense Externals
-
-The `denseExternals` feature flag reshapes the `shared` array in `remoteEntry.json` so that all entrypoints of a shared external (its primary import plus every secondary and shared mapping) are grouped under a single object:
-
-```js
-module.exports = withNativeFederation({
-  shared: {
-    ...shareAll({
-      singleton: true,
-      strictVersion: true,
-      requiredVersion: 'auto',
-    }),
-  },
-  features: {
-    denseExternals: true,
-  },
-});
-```
-
-When enabled, instead of one flat entry per entrypoint, each package becomes one object whose `entries` map keys the full import name to its output file (e.g. `{ "@angular/common": "...", "@angular/common/http": "..." }`). Entrypoints whose sharing metadata (`singleton`, `strictVersion`, `requiredVersion`, `version`, `shareScope`) diverges are split into separate groups. Bundler chunks stay flat, and `importmap.json` is unaffected. The flag is opt-in and fully backward compatible: the runtime auto-detects each entry by shape, so old and new `remoteEntry.json` both load.
-
-### Configuring Remotes
-
-When configuring a remote, you can expose files that can be loaded into the shell at runtime:
-
-```javascript
-import { withNativeFederation, shareAll } from '@softarc/native-federation/config';
 
 export default withNativeFederation({
   name: 'mfe1',
-
   exposes: {
     './component': './mfe1/component',
   },
+  shared: fromPackageJson({
+    singleton: true,
+    strictVersion: true,
+    requiredVersion: 'auto',
+  }),
+});
+```
 
-  shared: {
-    ...shareAll({
-      singleton: true,
-      strictVersion: true,
-      requiredVersion: 'auto',
-      includeSecondaries: false,
-    }),
+Then wrap your own build with the three `federationBuilder` calls:
+
+```js
+import * as esbuild from 'esbuild';
+import { federationBuilder } from '@softarc/native-federation';
+import { esBuildAdapter } from '@softarc/native-federation-esbuild';
+
+await federationBuilder.init({
+  options: {
+    workspaceRoot: process.cwd(),
+    outputPath: 'dist/mfe1',
+    tsConfig: 'tsconfig.json',
+    federationConfig: 'mfe1/federation.config.js',
   },
-});
-```
-
-### Loading Remotes at Runtime
-
-This core library covers the **build side** of Native Federation. The generated `remoteEntry.json` files are consumed at runtime by a separate, framework-agnostic package: **[`@softarc/native-federation-orchestrator`](https://github.com/native-federation/orchestrator)**. It loads micro frontends built with Native Federation into any web page — SPAs as well as server-rendered hosts (PHP, Java, Rails, …) that reload on navigation.
-
-#### Quickstart (drop-in script)
-
-For a zero-build integration, declare your remotes in a manifest and include the quickstart bundle:
-
-```html
-<!-- Optional: enable shim mode for older browsers -->
-<script type="esms-options">
-  { "shimMode": true }
-</script>
-
-<!-- Define your micro frontends -->
-<script type="application/json" id="mfe-manifest">
-  {
-    "team/mfe1": "http://localhost:3000/remoteEntry.json",
-    "team/mfe2": "http://localhost:4000/remoteEntry.json"
-  }
-</script>
-
-<!-- Load modules once the orchestrator is ready -->
-<script>
-  window.addEventListener(
-    'mfe-loader-available',
-    e => {
-      e.detail.loadRemoteModule('team/mfe1', './Button');
-      e.detail.loadRemoteModule('team/mfe2', './Header');
-    },
-    { once: true }
-  );
-</script>
-
-<!-- Include the orchestrator -->
-<script src="https://unpkg.com/@softarc/native-federation-orchestrator@4.6.0/quickstart.mjs"></script>
-```
-
-The `mfe-loader-available` event signals that the orchestrator has fetched the
-remote metadata, resolved dependencies and set up the import map, so
-`loadRemoteModule` is ready to use.
-
-#### Programmatic API
-
-For full control, install the package and initialize federation yourself:
-
-```
-npm i @softarc/native-federation-orchestrator
-```
-
-```typescript
-import { initFederation } from '@softarc/native-federation-orchestrator';
-import { consoleLogger, localStorageEntry } from '@softarc/native-federation-orchestrator/options';
-
-const manifest = {
-  'team/mfe1': 'http://localhost:3000/remoteEntry.json',
-  'team/mfe2': 'http://localhost:4000/remoteEntry.json',
-};
-
-const { loadRemoteModule, load } = await initFederation(manifest, {
-  logLevel: 'error',
-  logger: consoleLogger,
-  storage: localStorageEntry,
+  adapter: esBuildAdapter,
 });
 
-const ButtonComponent = await load('team/mfe1', './Button');
-const HeaderComponent = await loadRemoteModule('team/mfe2', './Header');
+// Run your bundler, keeping the shared dependencies external
+await esbuild.build({ /* ... */ external: federationBuilder.externals });
+
+// Bundle shared + exposed modules and write remoteEntry.json
+await federationBuilder.build();
 ```
 
-The manifest maps logical remote names to their `remoteEntry.json` URLs (the
-files generated by the build steps above). Entries can also be objects carrying
-an `integrity` hash for Subresource Integrity. Manifests let you adjust your
-application to different environments without recompilation.
+The resulting `remoteEntry.json` is loaded at runtime by the [orchestrator](https://native-federation.com/docs/v4/orchestrator/).
 
-#### Import maps & polyfills
+For the full walkthrough, see [Getting Started](https://native-federation.com/docs/v4/core/getting-started/) or the end-to-end [tutorial](https://native-federation.com/docs/v4/tutorial/).
 
-The orchestrator uses **native browser import maps by default**, so no polyfill
-is required for modern browsers. To support older browsers that lack import-map
-support, add the [`es-module-shims`](https://github.com/guybedford/es-module-shims)
-polyfill and opt into shim mode:
+## Documentation
 
-```typescript
-import 'es-module-shims';
-import { initFederation } from '@softarc/native-federation-orchestrator';
-import { useShimImportMap } from '@softarc/native-federation-orchestrator/options';
+- [Mental model](https://native-federation.com/docs/v4/mental-model/) — hosts, remotes and shared dependencies
+- [Configuration](https://native-federation.com/docs/v4/core/configuration/) — every option on `withNativeFederation`
+- [Sharing dependencies](https://native-federation.com/docs/v4/core/sharing/) — `fromPackageJson`, `share`, `shareAll`, secondary entry points
+- [Build process](https://native-federation.com/docs/v4/core/build-process/) — the builder lifecycle and watch mode
+- [Build artifacts](https://native-federation.com/docs/v4/core/artifacts/) — what ends up in `remoteEntry.json`
+- [API reference](https://native-federation.com/docs/v4/core/api-reference/)
+- [FAQ](https://native-federation.com/docs/v4/faq/)
 
-const { loadRemoteModule } = await initFederation(manifest, {
-  ...useShimImportMap({ shimMode: true }),
-});
-```
+Using an AI coding assistant? Point it at [`llms.txt`](https://native-federation.com/llms.txt).
 
-> For server-side rendering, the event registry, version-conflict resolution and
-> security / Trusted Types, see the
-> [orchestrator documentation](https://github.com/native-federation/orchestrator#readme).
+## Contributing
 
-## React and Other CommonJS Libs
+Issues and pull requests are welcome — see [CONTRIBUTING.md](https://github.com/native-federation/native-federation-core/blob/main/CONTRIBUTING.md).
 
-Native Federation uses Web Standards like EcmaScript Modules. Most libs and frameworks support them meanwhile. Unfortunately, React still uses CommonJS (and UMD). We do our best to convert these libs to EcmaScript Modules. In the case of React there are some challenges due to the dynamic way the React bundles use the `exports` object.
+## Credits
 
-As the community is moving to EcmaScript Modules, we expect that these issues will vanish over time. In between, we provide some solutions for dealing with CommonJS-based libraries using `exports` in a dynamic way.
+Big thanks to [Zack Jackson](https://twitter.com/ScriptedAlchemy) for originally coming up with Module Federation and its mental model, and to [Florian Rappl](https://twitter.com/FlorianRappl) and the [Angular Architects team](https://www.angulararchitects.io/en/) for their feedback and contributions. Find the current team behind native-federation on our [documentation website](https://native-federation.com/team/).
 
-One of them is `fileReplacements`:
+## License
 
-```javascript
-import { reactReplacements } from '@softarc/native-federation-esbuild/src/lib/react-replacements';
-import { createEsBuildAdapter } from '@softarc/native-federation-esbuild';
-
-[...]
-
-createEsBuildAdapter({
-  plugins: [],
-  fileReplacements: reactReplacements.prod
-})
-```
-
-Please note that the adapter comes with `fileReplacements` settings for React for both, `dev` mode and `prod` mode. For similar libraries you can add your own replacements. Also, using the `compensateExports` property, you can activate some additional logic for such libraries to make sure the exports are not lost
-
-```javascript
-createEsBuildAdapter({
-  plugins: [],
-  fileReplacements: reactReplacements.prod,
-  compensateExports: [new RegExp('/my-lib/')],
-});
-```
-
-The default value for `compensateExports` is `[new RegExp('/react/')]`.
-
-## More: Blog Articles
-
-Find out more about our work including Micro Frontends and Module Federation but also about alternatives to these approaches in our [blog](https://www.angulararchitects.io/en/aktuelles/the-microfrontend-revolution-part-2-module-federation-with-angular/).
-
-## More: Angular Architecture Workshop (100% online, interactive)
-
-In our [Angular Architecture Workshop](https://www.angulararchitects.io/en/angular-workshops/advanced-angular-enterprise-architecture-incl-ivy/), we cover all these topics and far more. We provide different options and alternatives and show up their consequences.
-
-[Details: Angular Architecture Workshop](https://www.angulararchitects.io/en/angular-workshops/advanced-angular-enterprise-architecture-incl-ivy/)
+[MIT](https://github.com/native-federation/native-federation-core/blob/main/LICENSE.md)
