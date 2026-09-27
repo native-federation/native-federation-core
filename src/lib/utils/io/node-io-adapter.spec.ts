@@ -65,6 +65,36 @@ describe('nodeIo', () => {
 
   // Pins the glob semantics expand-mappings and resolve-wildcard-keys rely on, and that
   // createMemoryIo mimics; the glob library was swapped once already (angular-adapter#140).
+  describe('rename', () => {
+    it('moves a file over an existing one', () => {
+      const from = path.join(root, 'from.js');
+      const to = path.join(root, 'to.js');
+      fs.writeFileSync(from, 'new');
+      fs.writeFileSync(to, 'old');
+
+      nodeIo.rename(from, to);
+
+      expect(fs.existsSync(from)).toBe(false);
+      expect(fs.readFileSync(to, 'utf-8')).toBe('new');
+    });
+  });
+
+  describe('removeDir', () => {
+    it('removes a directory with nested content', () => {
+      const dir = path.join(root, 'staging');
+      fs.mkdirSync(path.join(dir, 'nested'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'nested', 'a.js'), '');
+
+      nodeIo.removeDir(dir);
+
+      expect(fs.existsSync(dir)).toBe(false);
+    });
+
+    it('does not throw when the directory does not exist', () => {
+      expect(() => nodeIo.removeDir(path.join(root, 'missing'))).not.toThrow();
+    });
+  });
+
   describe('globFiles', () => {
     const touch = (rel: string) => {
       const file = path.join(root, rel);

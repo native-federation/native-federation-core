@@ -756,6 +756,36 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       expect(mem.files().filter(file => file.includes('.staging-'))).toEqual([]);
     });
 
+    it('removes the staging directory when the build fails', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      let outdir = '';
+      const adapter: NFBuildAdapter = {
+        async setup(_name, opts) {
+          outdir = opts.outdir;
+        },
+        async build() {
+          mem.writeText(path.join(outdir, 'half-written.js'), 'export {};\n');
+          throw new Error('esbuild failed');
+        },
+        async dispose() {},
+      };
+
+      await expect(
+        bundleSharedCore(
+          { io: mem, repo: repoAtVersion('2.0.0'), adapter },
+          fooWith(),
+          makeConfig(),
+          makeFedOptions(),
+          [],
+          BUILD_OPTIONS
+        )
+      ).rejects.toThrow('esbuild failed');
+
+      expect(outdir).toBe('/cache.staging-shared');
+      expect(mem.files().filter(file => file.includes('.staging-'))).toEqual([]);
+      expect(mem.isDirectory(outdir)).toBe(false);
+    });
+
     it('keeps map sources relative to the cache after staging', async () => {
       const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
       const adapter: FakeBuildAdapter = createFakeBuildAdapter({

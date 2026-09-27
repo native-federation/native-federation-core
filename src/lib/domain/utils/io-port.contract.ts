@@ -33,6 +33,8 @@ export interface FileWriterPort {
   mkdirp(path: string): void;
   copyFile(from: string, to: string): void;
   remove(path: string): void;
+  /** Moves a file, replacing `to` if it exists. Both paths must be on the same filesystem. */
+  rename(from: string, to: string): void;
   /** Removes a directory with everything in it; a missing one is not an error. */
   removeDir(path: string): void;
 }

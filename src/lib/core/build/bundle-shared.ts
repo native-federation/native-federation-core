@@ -212,11 +212,10 @@ export async function bundleSharedCore(
   // at the same depth, because the `sources` in the emitted maps are relative to it.
   const cachePath = fedOptions.federationCache.cachePath;
   const stagingPath = `${cachePath}.staging-${buildOptions.bundleName}${fedOptions.dev ? '-dev' : ''}`;
+  deps.io.removeDir(stagingPath);
+  deps.io.mkdirp(stagingPath);
 
   try {
-    deps.io.removeDir(stagingPath);
-    deps.io.mkdirp(stagingPath);
-
     await deps.adapter.setup(buildOptions.bundleName, {
       entryPoints,
       tsConfigPath: fedOptions.tsConfig,
@@ -278,7 +277,7 @@ export async function bundleSharedCore(
     logger.verbose(e);
     throw e;
   } finally {
-    deps.io.removeDir(stagingPath);
+    removeStaging(deps.io, stagingPath);
   }
 
   const outFileNames = entryPoints.map(ep => path.join(fullOutputPath, ep.outName));
@@ -380,21 +379,23 @@ function moveInto(
 ): void {
   for (const br of bundleResult) {
     const target = path.join(to, path.basename(br.fileName));
-    if (br.fileName.endsWith('.map')) moveMap(io, br.fileName, target, from, to);
-    else io.copyFile(br.fileName, target);
+    const rebased = br.fileName.endsWith('.map') ? rebaseMap(io, br.fileName, from, to) : undefined;
+    if (rebased === undefined) io.rename(br.fileName, target);
+    else io.writeText(target, rebased);
     br.fileName = target;
   }
 }
 
 // A map's sources are relative to the folder it lies in. Both folders sit at the same depth, so
-// only a source inside the cache itself, such as a synthesized CommonJS entry, is spelled apart.
-function moveMap(io: IoPort, file: string, target: string, from: string, to: string): void {
+// only a source inside the cache itself, such as a synthesized CommonJS entry, is spelled apart,
+// and it is spelled through the cache's own name. Returns the rewritten map, or undefined when
+// the file can move as it is.
+function rebaseMap(io: IoPort, file: string, from: string, to: string): string | undefined {
   const text = io.readText(file);
+  if (!text.includes(`../${path.basename(to)}/`)) return undefined;
+
   const map = parseMap(text);
-  if (!map || map.sourceRoot || !Array.isArray(map.sources)) {
-    io.writeText(target, text);
-    return;
-  }
+  if (!map || map.sourceRoot || !Array.isArray(map.sources)) return undefined;
 
   let moved = false;
   map.sources = map.sources.map(source => {
@@ -404,7 +405,18 @@ function moveMap(io: IoPort, file: string, target: string, from: string, to: str
     moved ||= rebased !== source;
     return rebased;
   });
-  io.writeText(target, moved ? JSON.stringify(map) : text);
+  return moved ? JSON.stringify(map) : undefined;
+}
+
+// Best effort: the bundle is complete by now, or the error that matters is already on its way.
+function removeStaging(io: IoPort, dir: string): void {
+  try {
+    io.removeDir(dir);
+  } catch (e) {
+    logger.warn(
+      `Could not remove the staging directory '${dir}': ${e instanceof Error ? e.message : e}`
+    );
+  }
 }
 
 function parseMap(text: string): { sources?: unknown[]; sourceRoot?: string } | undefined {

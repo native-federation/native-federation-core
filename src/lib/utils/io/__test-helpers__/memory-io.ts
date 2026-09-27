@@ -179,6 +179,14 @@ export function createMemoryIo(): MemoryIo {
     remove(p) {
       files.delete(toKey(p));
     },
+    rename(from, to) {
+      const bytes = files.get(toKey(from));
+      if (!bytes) throw new Error(`ENOENT: ${from}`);
+      files.delete(toKey(from));
+      const key = toKey(to);
+      files.set(key, bytes);
+      registerDirs(key);
+    },
     removeDir(p) {
       const key = toKey(p);
       const inside = (entry: string) => entry === key || entry.startsWith(key + '/');
