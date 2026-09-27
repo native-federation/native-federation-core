@@ -33,6 +33,8 @@ export interface FileWriterPort {
   mkdirp(path: string): void;
   copyFile(from: string, to: string): void;
   remove(path: string): void;
+  /** Removes a directory with everything in it; a missing one is not an error. */
+  removeDir(path: string): void;
 }
 
 export interface GlobPort {

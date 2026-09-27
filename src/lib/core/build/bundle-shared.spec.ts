@@ -694,6 +694,101 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       expect(same.chunks!['shared']).toEqual(again.chunks!['shared']);
       expect(same.chunks!['shared']).not.toEqual(other.chunks!['shared']);
     });
+
+    // Separate bundles build in parallel into one cache. Two packages that import the same module
+    // lazily each emit that chunk under the same name, and neither may delete it under the other.
+    it('lets bundles built side by side emit the same chunk', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      let written = 0;
+      let bothWritten!: () => void;
+      const barrier = new Promise<void>(resolve => (bothWritten = resolve));
+
+      const adapter = (): NFBuildAdapter => {
+        let outdir = '';
+        let outName = '';
+        return {
+          async setup(_name, opts) {
+            outdir = opts.outdir;
+            outName = opts.entryPoints[0]!.outName;
+          },
+          async build() {
+            const entry = path.join(outdir, outName);
+            const chunk = path.join(outdir, 'graphql-AAAAAAAA.js');
+            mem.writeText(entry, `export const load = () => import('./graphql-AAAAAAAA.js');\n`);
+            mem.writeText(chunk, 'export const version = 16;\n');
+            if (++written === 2) bothWritten();
+            await barrier;
+            return [{ fileName: entry }, { fileName: chunk }];
+          },
+          async dispose() {},
+        };
+      };
+
+      const build = (name: string) =>
+        bundleSharedCore(
+          { io: mem, repo: emptyRepo, adapter: adapter() },
+          {
+            [name]: {
+              singleton: true,
+              strictVersion: false,
+              requiredVersion: '^1.0.0',
+              version: '1.0.0',
+              chunks: true,
+              platform: 'browser',
+              build: 'separate',
+              packageInfo: { entryPoint: `${name}/index.js`, version: '1.0.0', esm: true },
+            },
+          },
+          makeConfig(),
+          makeFedOptions(),
+          [],
+          { ...BUILD_OPTIONS, bundleName: `browser-${name}`, chunks: true }
+        );
+
+      const [a, b] = await Promise.all([build('a'), build('b')]);
+
+      const chunkOf = (result: Awaited<ReturnType<typeof build>>) =>
+        result.externals.find(e => e.packageName.startsWith('@nf-internal/'))!.outFileName;
+      expect(chunkOf(a)).toMatch(/^graphql-[A-Z2-7]{8}\.js$/);
+      expect(chunkOf(b)).toBe(chunkOf(a));
+      expect(mem.isFile(path.join('/cache', chunkOf(a)))).toBe(true);
+      expect(mem.isFile(path.join('/ws/dist', chunkOf(a)))).toBe(true);
+      expect(mem.files().filter(file => file.includes('.staging-'))).toEqual([]);
+    });
+
+    it('keeps map sources relative to the cache after staging', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const adapter: FakeBuildAdapter = createFakeBuildAdapter({
+        results: name => {
+          const setup = [...adapter.calls.setup].reverse().find(s => s.name === name)!;
+          const entry = path.join(setup.options.outdir, setup.options.entryPoints[0]!.outName);
+          const map = JSON.stringify({
+            version: 3,
+            sources: ['../n/foo/index.js', '../cache/.nf-cjs-entries/foo.js', 'angular:polyfills'],
+            mappings: '',
+          });
+          mem.setFile(entry, 'export const a = 1;\n');
+          mem.setFile(`${entry}.map`, map);
+          return [{ fileName: entry }, { fileName: `${entry}.map` }];
+        },
+      });
+
+      await bundleSharedCore(
+        { io: mem, repo: repoAtVersion('2.0.0'), adapter },
+        fooWith(),
+        makeConfig(),
+        makeFedOptions(),
+        [],
+        BUILD_OPTIONS
+      );
+
+      const [map] = mem.files().filter(file => file.startsWith('/cache/') && file.endsWith('.map'));
+      expect(JSON.parse(mem.readText(map!)).sources).toEqual([
+        '../n/foo/index.js',
+        '.nf-cjs-entries/foo.js',
+        'angular:polyfills',
+      ]);
+    });
   });
 
   // copyFiles runs on the fresh-build path too, so every name in the persisted metadata must

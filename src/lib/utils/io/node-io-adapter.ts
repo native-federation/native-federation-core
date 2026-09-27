@@ -77,6 +77,9 @@ export const nodeIo: IoPort = {
   remove(path) {
     fs.unlinkSync(path);
   },
+  removeDir(path) {
+    fs.rmSync(path, { recursive: true, force: true });
+  },
   globFiles(pattern, opts) {
     // Sorted because the result becomes esbuild's entry-point order, which decides how shared
     // code is split into chunks; walk order differs per glob library and filesystem.

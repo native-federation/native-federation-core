@@ -39,6 +39,7 @@ import type {
 import { getBuildAdapter } from './build-adapter.js';
 import { synthesizeCjsNamedExportsEntry, type ModuleEvaluator } from './synthesize-cjs-exports.js';
 import { createRequire } from 'module';
+import { toPosix } from '../../utils/path-patterns.js';
 
 export async function bundleShared(
   sharedBundles: Record<string, NormalizedExternalConfig>,
@@ -204,12 +205,23 @@ export async function bundleSharedCore(
 
   let bundleResult: NFBuildAdapterResult[];
 
+  // Separate bundles are built in parallel into one cache, and a chunk that two packages split out
+  // alike comes out of both builds under the same name: renaming it by content in one bundle
+  // deleted the file the other one was about to read. Each bundle is therefore built and renamed
+  // in a folder of its own and moved into the cache afterwards. The folder sits next to the cache,
+  // at the same depth, because the `sources` in the emitted maps are relative to it.
+  const cachePath = fedOptions.federationCache.cachePath;
+  const stagingPath = `${cachePath}.staging-${buildOptions.bundleName}${fedOptions.dev ? '-dev' : ''}`;
+
   try {
+    deps.io.removeDir(stagingPath);
+    deps.io.mkdirp(stagingPath);
+
     await deps.adapter.setup(buildOptions.bundleName, {
       entryPoints,
       tsConfigPath: fedOptions.tsConfig,
       external: [...additionalExternals, ...externals],
-      outdir: fedOptions.federationCache.cachePath,
+      outdir: stagingPath,
       mappedPaths: config.sharedMappings,
       dev: fedOptions.dev,
       isMappingOrExposed: false,
@@ -233,11 +245,12 @@ export async function bundleSharedCore(
     const renamed = rewriteImports(
       deps.io,
       cachedFiles,
-      fedOptions.federationCache.cachePath,
+      stagingPath,
       new Set(entryPoints.map(ep => ep.outName)),
       hashEntries
     );
     applyRenames(bundleResult, entryPoints, renamed);
+    moveInto(deps.io, bundleResult, stagingPath, cachePath);
   } catch (e) {
     logger.error('Error bundling shared npm package ');
     if (e instanceof Error) {
@@ -264,6 +277,8 @@ export async function bundleSharedCore(
 
     logger.verbose(e);
     throw e;
+  } finally {
+    deps.io.removeDir(stagingPath);
   }
 
   const outFileNames = entryPoints.map(ep => path.join(fullOutputPath, ep.outName));
@@ -355,6 +370,49 @@ function rewriteImports(
   }
 
   return renamed;
+}
+
+function moveInto(
+  io: IoPort,
+  bundleResult: NFBuildAdapterResult[],
+  from: string,
+  to: string
+): void {
+  for (const br of bundleResult) {
+    const target = path.join(to, path.basename(br.fileName));
+    if (br.fileName.endsWith('.map')) moveMap(io, br.fileName, target, from, to);
+    else io.copyFile(br.fileName, target);
+    br.fileName = target;
+  }
+}
+
+// A map's sources are relative to the folder it lies in. Both folders sit at the same depth, so
+// only a source inside the cache itself, such as a synthesized CommonJS entry, is spelled apart.
+function moveMap(io: IoPort, file: string, target: string, from: string, to: string): void {
+  const text = io.readText(file);
+  const map = parseMap(text);
+  if (!map || map.sourceRoot || !Array.isArray(map.sources)) {
+    io.writeText(target, text);
+    return;
+  }
+
+  let moved = false;
+  map.sources = map.sources.map(source => {
+    if (typeof source !== 'string' || path.isAbsolute(source) || /^[a-z][\w+.-]*:/i.test(source))
+      return source;
+    const rebased = toPosix(path.relative(to, path.resolve(from, source)));
+    moved ||= rebased !== source;
+    return rebased;
+  });
+  io.writeText(target, moved ? JSON.stringify(map) : text);
+}
+
+function parseMap(text: string): { sources?: unknown[]; sourceRoot?: string } | undefined {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
 }
 
 function applyRenames(
