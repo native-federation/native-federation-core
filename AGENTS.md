@@ -87,11 +87,22 @@ The core library is build-tool agnostic. It expects a `NFBuildAdapter` that impl
 
 `outputPath` is resolved against `workspaceRoot` (`resolveOutputPath`) and may be absolute. Every
 writer goes through that helper, and the adapter receives the resolved `outdir`, so all output
-lands in one directory whatever `process.cwd()` is (core#156). The same holds for inputs:
-`normalizeFederationOptions` sets the config context (`useWorkspace`/`usePackageJson`) before
-loading the config, so `share()`/`shareAll()` find `package.json` from the workspace for adapters
-that skip `federationBuilder.init`, and the `ignoreUnusedDeps` scan roots sheriff at
-`workspaceRoot`. One exception remains: `findRootTsConfigJson` still searches from cwd.
+lands in one directory whatever `process.cwd()` is (core#156). Inputs follow the same rule:
+
+- Exposed entry points reach the adapter resolved against `workspaceRoot`; `config.exposes` itself
+  keeps what the user wrote.
+- `normalizeFederationOptions` sets the config context (`useWorkspace`/`usePackageJson`) for the
+  config load, so `share()`/`shareAll()` find `package.json` from the workspace. Loads are queued
+  (`loadWithConfigContext`), because the context is global and a config only reads it once it
+  evaluates, after an await: two remotes normalized in parallel would otherwise both see the
+  second one's context.
+- The `ignoreUnusedDeps` scan roots sheriff at `workspaceRoot`.
+- `findRootTsConfigJson` still searches from cwd first, so a resolution that works today does not
+  move, and falls back to the workspace root only when that search finds nothing. Searching from
+  `workspaceRoot` first would pick a subproject's own `tsconfig.json` over the repo root's
+  `tsconfig.base.json`, and its `paths` are read without following `extends`.
+- `tsConfigPath` is passed through as given and is the adapter's to resolve: the Angular adapter
+  joins it onto `workspaceRoot`, which an absolute path would break.
 
 ## Configuration
 
