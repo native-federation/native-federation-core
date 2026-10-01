@@ -2,7 +2,7 @@ import { getProjectData as sheriffGetProjectData, type ProjectData } from '@soft
 import { cwd } from 'process';
 import { sharedPackageJsonRepository, tryGetPackageInfo } from '../utils/package/package-info.js';
 import { type PackageJsonRepository } from '../domain/utils/package-json.contract.js';
-import { getBareSpecifiersCore, getExternalImportsCore } from './get-external-imports.js';
+import { getExternalImportsCore } from './get-external-imports.js';
 import { nodeIo } from '../utils/io/node-io-adapter.js';
 import { type FileReaderPort } from '../domain/utils/io-port.contract.js';
 import { type PathToImport } from '../domain/utils/mapped-path.contract.js';
@@ -12,11 +12,12 @@ import { isSharedMapping, matchMapping } from './match-mapping.js';
 import { isNonBarrelImport } from './validate-mappings.js';
 import { logger } from '../utils/logger.js';
 import * as path from 'path';
+import * as ts from 'typescript';
 
 type GetProjectData = (
   entryPoint: string,
   cwd: string,
-  options: { includeExternalLibraries: boolean }
+  options: { includeExternalLibraries: boolean; includeRawImports: boolean }
 ) => ProjectData;
 
 export interface UsedDependenciesDeps {
@@ -64,6 +65,7 @@ export function getUsedDependenciesFactoryCore(
         ...acc,
         ...deps.getProjectData(entryPoint, cwd(), {
           includeExternalLibraries: true,
+          includeRawImports: true,
         }),
       }),
       {} as ProjectData
@@ -138,28 +140,48 @@ function resolveUsedMappings(
     const fileInfo = fileInfos[fileName];
     if (!fileInfo) continue;
 
-    // Inside a mapping, relative imports are the lib's own bundled code; only a barrel imported by
-    // specifier is another entry point that must be published (core#135).
-    let bySpecifier: Set<string> | null = null;
-    if (isSharedMapping(fullFileName, sharedMappings)) {
-      const specifiers = getBareSpecifiersCore(io, fullFileName);
-      for (const s of specifiers)
+    const inMapping = isSharedMapping(fullFileName, sharedMappings);
+    if (inMapping) {
+      for (const s of bareSpecifiers(fileInfo, fullFileName, io))
         if (!specifiersInMappings.has(s)) specifiersInMappings.set(s, fileName);
-      bySpecifier = new Set(specifiers.filter(s => !isNonBarrelImport(s)));
     }
 
     for (const imp of fileInfo.imports ?? []) {
       const fullImport = path.join(workspaceRoot, imp);
       const match = matchMapping(fullImport, sharedMappings);
       if (match) {
-        if (!bySpecifier || bySpecifier.has(match)) usedMappings[fullImport] = match;
-      } else if (!bySpecifier && matchesIgnoringCase(fullImport)) caseOnlyMisses.add(fullImport);
+        // Inside a mapping, relative imports are the lib's own bundled code; only a barrel
+        // imported by specifier is another entry point that must be published (core#135).
+        const bySpecifier =
+          !isNonBarrelImport(match) && !!fileInfo.rawImports?.[imp]?.includes(match);
+        if (!inMapping || bySpecifier) usedMappings[fullImport] = match;
+      } else if (!inMapping && matchesIgnoringCase(fullImport)) caseOnlyMisses.add(fullImport);
     }
   }
 
   warnOnCaseOnlyMisses(caseOnlyMisses);
 
   return { internal: usedMappings, mappingImports: specifiersInMappings };
+}
+
+function bareSpecifiers(
+  fileInfo: ProjectData[string],
+  filePath: string,
+  io: FileReaderPort
+): string[] {
+  // sheriff drops specifiers ending in its ignoreFileExtensions (json, css, svg, ...) before
+  // recording them, so a subpath like '@org/ui/config.json' only shows up in the source itself.
+  const scanned = io.isFile(filePath)
+    ? ts.preProcessFile(io.readText(filePath)).importedFiles.map(f => f.fileName)
+    : [];
+  return [
+    ...new Set([
+      ...Object.values(fileInfo.rawImports ?? {}).flat(),
+      ...scanned,
+      ...(fileInfo.externalLibraries ?? []),
+      ...(fileInfo.unresolvedImports ?? []),
+    ]),
+  ].filter(s => !s.startsWith('.') && !path.isAbsolute(s));
 }
 
 /**

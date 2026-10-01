@@ -103,43 +103,38 @@ describe('getUsedDependenciesFactoryCore', () => {
 
     // The issue's fixture: the host imports @internal/kit, whose barrel republishes
     // @internal/kit/sub through its own alias. Nothing in app code names the sub entry point.
-    function kitFixture(
-      kitBarrel: string,
-      kitImports = ['libs/internal/src/kit/kit.module.ts', 'libs/internal/src/kit/sub/index.ts']
-    ) {
-      return makeDeps(
-        {
-          'src/main.ts': {
-            imports: ['libs/internal/src/kit/index.ts'],
-            externalLibraries: [],
-            unresolvedImports: [],
-          },
-          'libs/internal/src/kit/index.ts': {
-            imports: kitImports,
-            externalLibraries: [],
-            unresolvedImports: [],
-          },
-          'libs/internal/src/kit/kit.module.ts': {
-            imports: [],
-            externalLibraries: [],
-            unresolvedImports: [],
-          },
-          'libs/internal/src/kit/sub/index.ts': {
-            imports: ['libs/internal/src/kit/sub/widget.component.ts'],
-            externalLibraries: [],
-            unresolvedImports: [],
-          },
-          'libs/internal/src/kit/sub/widget.component.ts': {
-            imports: [],
-            externalLibraries: [],
-            unresolvedImports: [],
-          },
-        } as unknown as ProjectData,
-        {
-          '/ws/libs/internal/src/kit/index.ts': kitBarrel,
-          '/ws/libs/internal/src/kit/sub/index.ts': "export * from './widget.component';",
-        }
-      );
+    // `kitRawImports` is sheriff's `rawImports` for the kit barrel: resolved file -> specifiers.
+    function kitFixture(kitRawImports: Record<string, string[]>, kitExternals: string[] = []) {
+      return makeDeps({
+        'src/main.ts': {
+          imports: ['libs/internal/src/kit/index.ts'],
+          rawImports: { 'libs/internal/src/kit/index.ts': ['@internal/kit'] },
+          externalLibraries: [],
+          unresolvedImports: [],
+        },
+        'libs/internal/src/kit/index.ts': {
+          imports: Object.keys(kitRawImports),
+          rawImports: kitRawImports,
+          externalLibraries: kitExternals,
+          unresolvedImports: [],
+        },
+        'libs/internal/src/kit/kit.module.ts': {
+          imports: [],
+          externalLibraries: [],
+          unresolvedImports: [],
+        },
+        'libs/internal/src/kit/sub/index.ts': {
+          imports: ['libs/internal/src/kit/sub/widget.component.ts'],
+          rawImports: { 'libs/internal/src/kit/sub/widget.component.ts': ['./widget.component'] },
+          externalLibraries: [],
+          unresolvedImports: [],
+        },
+        'libs/internal/src/kit/sub/widget.component.ts': {
+          imports: [],
+          externalLibraries: [],
+          unresolvedImports: [],
+        },
+      } as unknown as ProjectData);
     }
 
     const run = (deps: UsedDependenciesDeps) =>
@@ -147,7 +142,10 @@ describe('getUsedDependenciesFactoryCore', () => {
 
     it('keeps a mapping that only another mapping imports by specifier', () => {
       const used = run(
-        kitFixture("export * from './kit.module';\nexport * from '@internal/kit/sub';")
+        kitFixture({
+          'libs/internal/src/kit/kit.module.ts': ['./kit.module'],
+          'libs/internal/src/kit/sub/index.ts': ['@internal/kit/sub'],
+        })
       );
 
       expect(used.internal).toEqual({
@@ -156,8 +154,11 @@ describe('getUsedDependenciesFactoryCore', () => {
       });
     });
 
-    it('counts a dynamic import by specifier too', () => {
-      const used = run(kitFixture("export const load = () => import('@internal/kit/sub');"));
+    // sheriff lists every spelling a file was imported with; one by specifier is enough.
+    it('keeps a mapping imported both relatively and by specifier', () => {
+      const used = run(
+        kitFixture({ 'libs/internal/src/kit/sub/index.ts': ['./sub', '@internal/kit/sub'] })
+      );
 
       expect(used.internal['/ws/libs/internal/src/kit/sub/index.ts']).toBe('@internal/kit/sub');
     });
@@ -166,7 +167,12 @@ describe('getUsedDependenciesFactoryCore', () => {
     // would publish every internal file of a wildcard lib, including non-barrel specifiers such
     // as '@internal/kit/kit.module' that assertBarrelMappings rejects.
     it('does not publish files a mapping reaches through relative imports', () => {
-      const used = run(kitFixture("export * from './kit.module';\nexport * from './sub';"));
+      const used = run(
+        kitFixture({
+          'libs/internal/src/kit/kit.module.ts': ['./kit.module'],
+          'libs/internal/src/kit/sub/index.ts': ['./sub'],
+        })
+      );
 
       expect(used.internal).toEqual({ '/ws/libs/internal/src/kit/index.ts': '@internal/kit' });
     });
@@ -176,9 +182,9 @@ describe('getUsedDependenciesFactoryCore', () => {
     // it knows which mappings are published.
     it('does not publish a non-barrel specifier a mapping imports, but reports it', () => {
       const used = run(
-        kitFixture("export * from '@internal/kit/sub/widget.component';", [
-          'libs/internal/src/kit/sub/widget.component.ts',
-        ])
+        kitFixture({
+          'libs/internal/src/kit/sub/widget.component.ts': ['@internal/kit/sub/widget.component'],
+        })
       );
 
       expect(used.internal).toEqual({ '/ws/libs/internal/src/kit/index.ts': '@internal/kit' });
@@ -187,10 +193,76 @@ describe('getUsedDependenciesFactoryCore', () => {
       );
     });
 
+    it('reports external and unresolved specifiers a mapping imports', () => {
+      const used = run(kitFixture({}, ['rxjs']));
+
+      expect(used.mappingImports).toEqual(new Map([['rxjs', 'libs/internal/src/kit/index.ts']]));
+    });
+
+    // sheriff's default ignoreFileExtensions drop '*.json' before it records anything, so this
+    // specifier reaches neither rawImports nor externalLibraries; only the source has it.
+    it('reports a specifier sheriff skips for its file extension', () => {
+      const deps = makeDeps(
+        {
+          'src/main.ts': {
+            imports: ['libs/internal/src/kit/index.ts'],
+            rawImports: { 'libs/internal/src/kit/index.ts': ['@internal/kit'] },
+            externalLibraries: [],
+            unresolvedImports: [],
+          },
+          'libs/internal/src/kit/index.ts': {
+            imports: [],
+            rawImports: {},
+            externalLibraries: [],
+            unresolvedImports: [],
+          },
+        } as unknown as ProjectData,
+        {
+          '/ws/libs/internal/src/kit/index.ts':
+            "import config from '@internal/kit/sub/config.json';\nexport { config };\n",
+        }
+      );
+
+      expect(run(deps).mappingImports).toEqual(
+        new Map([['@internal/kit/sub/config.json', 'libs/internal/src/kit/index.ts']])
+      );
+    });
+
     it('does not report imports from outside a mapping', () => {
-      const used = run(kitFixture("export * from './kit.module';"));
+      const used = run(kitFixture({ 'libs/internal/src/kit/kit.module.ts': ['./kit.module'] }));
 
       expect(used.mappingImports).toEqual(new Map());
+    });
+
+    // Decided per import, not per file: the barrel naming '@org/ui' must not also publish a
+    // nested index it reaches relatively, which an exact mapping matches under the same name.
+    it('does not publish a relatively imported file under a specifier the file uses elsewhere', () => {
+      const deps = makeDeps({
+        'src/main.ts': {
+          imports: ['libs/feature/index.ts'],
+          rawImports: { 'libs/feature/index.ts': ['@org/feature'] },
+          externalLibraries: [],
+          unresolvedImports: [],
+        },
+        'libs/feature/index.ts': {
+          imports: ['libs/ui/index.ts', 'libs/ui/deep/index.ts'],
+          rawImports: {
+            'libs/ui/index.ts': ['@org/ui'],
+            'libs/ui/deep/index.ts': ['../ui/deep'],
+          },
+          externalLibraries: [],
+          unresolvedImports: [],
+        },
+      } as unknown as ProjectData);
+
+      const used = getUsedDependenciesFactoryCore(deps, '/ws', ['src/main.ts'])({
+        sharedMappings: { '/ws/libs/feature': '@org/feature', '/ws/libs/ui': '@org/ui' },
+      });
+
+      expect(used.internal).toEqual({
+        '/ws/libs/feature/index.ts': '@org/feature',
+        '/ws/libs/ui/index.ts': '@org/ui',
+      });
     });
   });
 

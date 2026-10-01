@@ -19,6 +19,10 @@
 - **Built with raw esbuild** (`esbuild.config.mjs`) for JS, plus `tsc` for `.d.ts` declarations
 - Single package published from the repository root; managed with pnpm
 - Testing with Vitest (currently not wired into CI)
+- `typescript` is a runtime **dependency** (not a peer) ranged `>=5.0.0 <7`: a peer range would
+  fail npm installs in workspaces on a different TypeScript. 5.0 is the floor because
+  `mapping-imports.ts` uses `moduleResolution: Bundler`; TypeScript 7 ships without the JS API.
+  CI runs the suite a second time on the floor (`TS_FLOOR=1 pnpm test`).
 
 ## Repository Structure
 
