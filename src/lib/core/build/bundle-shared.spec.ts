@@ -11,7 +11,10 @@ import {
 import { prepareSkipList } from '../../config/default-skip-list.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
 import type { IoPort } from '../../domain/utils/io-port.contract.js';
-import type { NFBuildAdapter } from '../../domain/core/build-adapter.contract.js';
+import type {
+  ExternalsCacheKey,
+  NFBuildAdapter,
+} from '../../domain/core/build-adapter.contract.js';
 import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
@@ -518,9 +521,10 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
   const cachedBuild = async (
     mem: ReturnType<typeof createMemoryIo>,
     version: string,
-    sharedBundles: Record<string, NormalizedExternalConfig> = fooWith()
+    sharedBundles: Record<string, NormalizedExternalConfig> = fooWith(),
+    externalsCacheKey?: ExternalsCacheKey
   ) => {
-    const adapter = createFakeBuildAdapter({ io: mem });
+    const adapter = { ...createFakeBuildAdapter({ io: mem }), externalsCacheKey };
     const result = await bundleSharedCore(
       { io: mem, repo: repoAtVersion(version), adapter },
       sharedBundles,
@@ -560,6 +564,31 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
 
       expect(adapter.calls.setup).toHaveLength(1);
       expect(result.externals[0]).toMatchObject({ packageName: 'foo', version: '2.0.1' });
+    });
+  });
+
+  describe('adapter cache key invalidation', () => {
+    const key = (sourcemap: boolean): ExternalsCacheKey => ({
+      adapter: 'fake@1.0.0',
+      options: { sourcemap },
+    });
+
+    it('re-uses the cached externals when the adapter key is unchanged', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+
+      await cachedBuild(mem, '2.0.0', fooWith(), key(true));
+      const { adapter } = await cachedBuild(mem, '2.0.0', fooWith(), key(true));
+
+      expect(adapter.calls.setup).toHaveLength(0);
+    });
+
+    it('rebuilds when an adapter option changed under an unchanged config', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+
+      await cachedBuild(mem, '2.0.0', fooWith(), key(true));
+      const { adapter } = await cachedBuild(mem, '2.0.0', fooWith(), key(false));
+
+      expect(adapter.calls.setup).toHaveLength(1);
     });
   });
 

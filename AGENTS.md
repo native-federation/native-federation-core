@@ -297,8 +297,8 @@ Native Federation uses an intelligent caching system to speed up builds:
   artifacts in a folder of the same name, `<bundle>[-dev]/`. Content-named chunks collide across
   bundles, so a shared folder would let one bundle's chunk rename or `clear()` delete a file
   another bundle still lists (core#154). `clear()` therefore removes the whole bundle folder.
-- Keyed by a checksum over the external names, their installed versions, the builder version and
-  the relevant feature flags (`getChecksum`)
+- Keyed by a checksum over the external names, their installed versions, the builder version,
+  the relevant feature flags and the adapter's `externalsCacheKey` (`getChecksum`)
 - Stored in `node_modules/.cache/native-federation` by default (`getDefaultCachePath`)
 - On a checksum match the cached artifacts are copied straight into the output path
 
@@ -311,6 +311,11 @@ Native Federation uses an intelligent caching system to speed up builds:
 - Based on the installed versions of shared packages, not their declared ranges
   (`installedVersions`)
 - Based on configuration changes and on the builder version
+- Based on the adapter's `externalsCacheKey` (core#152): `builderVersion` is core's own version,
+  but the adapter produces the bytes, so it declares its identity and every option that changes
+  shared externals. Core reads it before `setup()`, sorts the option keys and JSON-encodes each
+  value; lists are joined by the adapter, which alone knows whether order matters. Optional for
+  now, so an adapter without one keeps the old checksum; it becomes required in the next major.
 - `.nf-cache.json` in the project cache folder records the layout version and the builder version
   that created the folder; it is only written after a purge, so a patch upgrade leaves the older
   patch version in place. `buildForFederation` checks it before any bundle runs (`prepareCache`),

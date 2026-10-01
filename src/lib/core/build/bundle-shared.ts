@@ -126,7 +126,8 @@ export async function bundleSharedCore(
     builderVersion,
     config.features,
     contentSignals,
-    resolvedVersions
+    resolvedVersions,
+    deps.adapter.externalsCacheKey
   );
 
   const bundleCache = cacheEntryCore(
