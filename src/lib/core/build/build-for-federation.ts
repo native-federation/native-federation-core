@@ -22,8 +22,7 @@ export async function buildForFederation(
   logger.info('Building federation artifacts');
   logger.notice("Skip packages you don't want to share in your federation config");
   hintUnwatchedLinkedDeps(config, fedOptions);
-  // Before any plan runs: the separate plans build in parallel, and the adapter writes its own
-  // files into this folder during setup.
+  // Before any plan: the separate plans build in parallel.
   prepareCache(fedOptions.federationCache.cachePath);
 
   // 2. Externals

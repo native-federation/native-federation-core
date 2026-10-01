@@ -22,8 +22,7 @@ const getCacheKey = (title: string, dev?: boolean) => `${title}${dev ? '-dev' : 
 
 export const getFilename = (title: string, dev?: boolean) => `${getCacheKey(title, dev)}.meta.json`;
 
-// Each bundle owns a folder of its own: content-named chunks collide across bundles, and a
-// bundle renaming or clearing its copy must not take another bundle's with it (core#154).
+// Content-named chunks collide across bundles, so each bundle gets its own folder (core#154).
 const getBundleDir = (cachePath: string, title: string, dev?: boolean) =>
   path.join(cachePath, getCacheKey(title, dev));
 
@@ -170,9 +169,7 @@ const readStamp = (io: CachePort, file: string): CacheStamp | undefined => {
   }
 };
 
-// Patch releases already miss per bundle through the checksum; a minor may change the layout,
-// which a checksum cannot see, so the whole project cache goes. A cache without a stamp
-// predates per-bundle folders and is purged the same way.
+// Patch releases already miss per bundle through the checksum; see AGENTS.md "Caching System".
 export const prepareCacheCore = (io: CachePort, cachePath: string, builderVersion: string) => {
   const stampFile = path.join(cachePath, STAMP_FILE);
   const stamp = readStamp(io, stampFile);

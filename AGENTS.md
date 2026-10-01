@@ -292,10 +292,11 @@ Native Federation uses an intelligent caching system to speed up builds:
 - Based on the installed versions of shared packages, not their declared ranges
   (`installedVersions`)
 - Based on configuration changes and on the builder version
-- `.nf-cache.json` in the project cache folder stamps the layout version and the builder version.
-  `buildForFederation` checks it before any bundle runs (`prepareCache`), and deletes the whole
-  project cache folder when the stamp is missing, unreadable, or differs in layout or `major.minor`.
-  Patch releases already miss per bundle through the checksum. Two processes building one project
+- `.nf-cache.json` in the project cache folder records the layout version and the builder version
+  that created the folder; it is only written after a purge, so a patch upgrade leaves the older
+  patch version in place. `buildForFederation` checks it before any bundle runs (`prepareCache`),
+  and deletes the whole project cache folder when the stamp is missing, unreadable, or differs in
+  layout or `major.minor`. Patch releases already miss per bundle through the checksum. Two processes building one project
   on different minors (a `serve` and a `build` mid-upgrade) can purge each other's cache.
 - For symlinked (npm-linked) deps, additionally on a content signal (max mtime of the package dir)
 - Can be cleared by deleting the cache folder
