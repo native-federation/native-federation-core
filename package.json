@@ -24,7 +24,7 @@
     "es-module-lexer": "^2.3.2",
     "esbuild": "^0.28.0",
     "tinyglobby": "^0.2.17",
-    "typescript": "~6.0.0"
+    "typescript": ">=5.0.0 <7"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -39,6 +39,7 @@
     "prettier": "^3.9.6",
     "tslib": "^2.3.0",
     "typescript-eslint": "^8.68.0",
+    "typescript-floor": "npm:typescript@5.0.4",
     "vite": "^8.3.0",
     "vitest": "^4.0.0"
   },

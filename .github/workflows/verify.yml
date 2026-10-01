@@ -35,6 +35,11 @@ jobs:
       - name: Test OK
         run: pnpm test
 
+      - name: Test OK on the lowest supported TypeScript
+        run: pnpm test
+        env:
+          TS_FLOOR: 1
+
       - name: Audit OK
         run: pnpm audit --audit-level moderate
         env:

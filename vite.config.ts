@@ -3,6 +3,8 @@ import { defineConfig } from 'vite';
 export default defineConfig(() => ({
   root: __dirname,
   cacheDir: 'node_modules/.vite',
+  // TS_FLOOR=1 runs the suite against the lowest typescript the dependency range admits.
+  resolve: process.env['TS_FLOOR'] ? { alias: { typescript: 'typescript-floor' } } : {},
   test: {
     name: 'core',
     watch: false,
