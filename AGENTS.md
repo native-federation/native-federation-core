@@ -87,7 +87,11 @@ The core library is build-tool agnostic. It expects a `NFBuildAdapter` that impl
 
 `outputPath` is resolved against `workspaceRoot` (`resolveOutputPath`) and may be absolute. Every
 writer goes through that helper, and the adapter receives the resolved `outdir`, so all output
-lands in one directory whatever `process.cwd()` is (core#156).
+lands in one directory whatever `process.cwd()` is (core#156). The same holds for inputs:
+`normalizeFederationOptions` sets the config context (`useWorkspace`/`usePackageJson`) before
+loading the config, so `share()`/`shareAll()` find `package.json` from the workspace for adapters
+that skip `federationBuilder.init`, and the `ignoreUnusedDeps` scan roots sheriff at
+`workspaceRoot`. One exception remains: `findRootTsConfigJson` still searches from cwd.
 
 ## Configuration
 

@@ -9,6 +9,10 @@ import type { FederationOptions } from '../domain/core/federation-options.contra
 import type { FederationCache } from '../domain/core/federation-cache.contract.js';
 import type { SharedInfo } from '../domain/core/federation-info.contract.js';
 import { addExternalsToCache } from './cache/federation-cache.js';
+import {
+  getConfigContext,
+  type ConfigurationContext,
+} from '../config/configuration-context.js';
 
 const CONFIG_PATH = path.join('/ws', 'federation.config.js');
 
@@ -182,6 +186,25 @@ describe('normalizeFederationOptionsCore', () => {
     await normalizeFederationOptionsCore({ io, loadConfig }, baseOptions, cache);
 
     expect(loadConfig).toHaveBeenCalledWith(CONFIG_PATH);
+  });
+
+  // Adapters that call normalizeFederationOptions directly (the esbuild adapter) never went
+  // through federationBuilder.init, so shareAll() in the config resolved package.json from cwd.
+  it('sets the workspace context before the config is loaded', async () => {
+    const io = createMemoryIo().setFile(CONFIG_PATH, '');
+    let seen: ConfigurationContext | undefined;
+    const loadConfig = vi.fn(async () => {
+      seen = { ...getConfigContext() };
+      return makeConfig();
+    });
+
+    await normalizeFederationOptionsCore(
+      { io, loadConfig },
+      { ...baseOptions, packageJson: '/ws/package.json' },
+      cache
+    );
+
+    expect(seen).toEqual({ workspaceRoot: '/ws', packageJson: '/ws/package.json' });
   });
 
   it('prunes unused shared deps via the injected factory when ignoreUnusedDeps is on', async () => {

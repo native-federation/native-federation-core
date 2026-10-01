@@ -17,6 +17,7 @@ import { getUsedDependenciesFactory } from '../config/get-used-dependencies.js';
 import { logger } from '../utils/logger.js';
 import { normalizePackageName } from '../utils/normalize.js';
 import { toDiskCase } from '../utils/disk-case.js';
+import { usePackageJson, useWorkspace } from '../config/configuration-context.js';
 
 type ConfigLoader = (fullConfigPath: string) => Promise<NormalizedFederationConfig>;
 
@@ -67,6 +68,11 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
 
   const workspaceRoot = toDiskCase(deps.io, options.workspaceRoot);
   const packageJson = options.packageJson && toDiskCase(deps.io, options.packageJson);
+
+  // The config file's share()/shareAll() locate package.json through this context and fall back
+  // to cwd without it, so it must be set before the config is loaded.
+  useWorkspace(workspaceRoot, deps.io);
+  usePackageJson(packageJson);
 
   const fullConfigPath = path.join(workspaceRoot, options.federationConfig);
 
