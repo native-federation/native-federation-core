@@ -10,7 +10,19 @@ export function findRootTsConfigJson(): string {
 }
 
 export function findRootTsConfigJsonCore(io: FileReaderPort): string {
-  const packageJson = findPackageJson(io, toDiskCase(io, cwd()));
+  const from = toDiskCase(io, cwd());
+  try {
+    return findTsConfigNextToPackageJson(io, from);
+  } catch (err) {
+    // cwd stays first so an existing resolution doesn't move (core#156).
+    const { workspaceRoot } = getConfigContext();
+    if (!workspaceRoot || path.resolve(workspaceRoot) === from) throw err;
+    return findTsConfigNextToPackageJson(io, path.resolve(workspaceRoot));
+  }
+}
+
+function findTsConfigNextToPackageJson(io: FileReaderPort, folder: string): string {
+  const packageJson = findPackageJson(io, folder);
   const projectRoot = path.dirname(packageJson);
   const tsConfigBaseJson = path.join(projectRoot, 'tsconfig.base.json');
   const tsConfigJson = path.join(projectRoot, 'tsconfig.json');

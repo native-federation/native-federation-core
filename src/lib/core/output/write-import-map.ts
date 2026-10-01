@@ -8,6 +8,7 @@ import type { FileWriterPort } from '../../domain/utils/io-port.contract.js';
 import type { FederationOptions } from '../../domain/core/federation-options.contract.js';
 import { toChunkImport } from '../../domain/core/chunk.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
+import { resolveOutputPath } from '../../utils/output-path.js';
 
 export function writeImportMapCore(
   io: FileWriterPort,
@@ -46,7 +47,7 @@ export function writeImportMapCore(
     }
   }
 
-  const importMapPath = path.join(fedOption.workspaceRoot, fedOption.outputPath, 'importmap.json');
+  const importMapPath = path.join(resolveOutputPath(fedOption), 'importmap.json');
   io.writeText(importMapPath, JSON.stringify(importMap, null, 2));
 }
 

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
 import { normalizeFederationOptionsCore } from './normalize-options.js';
 import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
@@ -9,6 +9,12 @@ import type { FederationOptions } from '../domain/core/federation-options.contra
 import type { FederationCache } from '../domain/core/federation-cache.contract.js';
 import type { SharedInfo } from '../domain/core/federation-info.contract.js';
 import { addExternalsToCache } from './cache/federation-cache.js';
+import {
+  getConfigContext,
+  usePackageJson,
+  useWorkspace,
+  type ConfigurationContext,
+} from '../config/configuration-context.js';
 
 const CONFIG_PATH = path.join('/ws', 'federation.config.js');
 
@@ -52,6 +58,12 @@ function makeConfig(
 const loaderFor = (config: NormalizedFederationConfig) => async () => config;
 
 describe('normalizeFederationOptionsCore', () => {
+  // normalizeFederationOptionsCore sets the module-level config context; keep it from leaking.
+  afterEach(() => {
+    useWorkspace('');
+    usePackageJson(undefined);
+  });
+
   it('throws when the federation config file does not exist', async () => {
     const io = createMemoryIo();
     await expect(
@@ -182,6 +194,45 @@ describe('normalizeFederationOptionsCore', () => {
     await normalizeFederationOptionsCore({ io, loadConfig }, baseOptions, cache);
 
     expect(loadConfig).toHaveBeenCalledWith(CONFIG_PATH);
+  });
+
+  // Adapters that call normalizeFederationOptions directly (the esbuild adapter) never went
+  // through federationBuilder.init, so shareAll() in the config resolved package.json from cwd.
+  it('sets the workspace context before the config is loaded', async () => {
+    const io = createMemoryIo().setFile(CONFIG_PATH, '');
+    let seen: ConfigurationContext | undefined;
+    const loadConfig = vi.fn(async () => {
+      seen = { ...getConfigContext() };
+      return makeConfig();
+    });
+
+    await normalizeFederationOptionsCore(
+      { io, loadConfig },
+      { ...baseOptions, packageJson: '/ws/package.json' },
+      cache
+    );
+
+    expect(seen).toEqual({ workspaceRoot: '/ws', packageJson: '/ws/package.json' });
+  });
+
+  // Several remotes built in one process: each config must see its own workspace root.
+  it('gives concurrent calls their own workspace context', async () => {
+    const configA = path.join('/a', 'federation.config.js');
+    const configB = path.join('/b', 'federation.config.js');
+    const io = createMemoryIo().setFile(configA, '').setFile(configB, '');
+    const seen: Record<string, string | undefined> = {};
+    const loadConfig = vi.fn(async (fullConfigPath: string) => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      seen[fullConfigPath] = getConfigContext().workspaceRoot;
+      return makeConfig();
+    });
+
+    await Promise.all([
+      normalizeFederationOptionsCore({ io, loadConfig }, { ...baseOptions, workspaceRoot: '/a' }),
+      normalizeFederationOptionsCore({ io, loadConfig }, { ...baseOptions, workspaceRoot: '/b' }),
+    ]);
+
+    expect(seen).toEqual({ [configA]: '/a', [configB]: '/b' });
   });
 
   it('prunes unused shared deps via the injected factory when ignoreUnusedDeps is on', async () => {

@@ -352,6 +352,41 @@ describe('getUsedDependenciesFactoryCore', () => {
     expect(used.external).toContain('rxjs');
   });
 
+  // Sheriff's results are relative to the root it is given, and resolveUsedMappings re-joins them
+  // onto workspaceRoot, so a cwd root resolved mappings against the wrong folder whenever the
+  // build ran from elsewhere.
+  it('roots the sheriff scan at workspaceRoot, not cwd', () => {
+    const deps = makeDeps({} as ProjectData);
+    const getProjectData = vi.fn(() => ({}) as ProjectData);
+    deps.getProjectData = getProjectData;
+
+    getUsedDependenciesFactoryCore(deps, '/ws')({
+      exposes: { './Comp': { file: 'src/comp.ts' } },
+      sharedMappings: {},
+    });
+
+    expect(getProjectData).toHaveBeenCalledWith('src/comp.ts', '/ws', expect.anything());
+  });
+
+  // Sheriff joins the entry onto its root unconditionally, so '/ws/src/comp.ts' would become
+  // '/ws/ws/src/comp.ts'.
+  it('hands sheriff an absolute entry point relative to workspaceRoot', () => {
+    const deps = makeDeps({} as ProjectData);
+    const getProjectData = vi.fn(() => ({}) as ProjectData);
+    deps.getProjectData = getProjectData;
+
+    getUsedDependenciesFactoryCore(deps, '/ws')({
+      exposes: { './Comp': { file: '/ws/src/comp.ts' } },
+      sharedMappings: {},
+    });
+
+    expect(getProjectData).toHaveBeenCalledWith(
+      path.join('src', 'comp.ts'),
+      '/ws',
+      expect.anything()
+    );
+  });
+
   it('throws when neither exposes nor fallback entry points are available', () => {
     const deps = makeDeps({} as ProjectData);
     expect(() => getUsedDependenciesFactoryCore(deps, '/ws')({ sharedMappings: {} })).toThrow(

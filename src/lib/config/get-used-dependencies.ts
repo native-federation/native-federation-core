@@ -1,5 +1,4 @@
 import { getProjectData as sheriffGetProjectData, type ProjectData } from '@softarc/sheriff-core';
-import { cwd } from 'process';
 import { sharedPackageJsonRepository, tryGetPackageInfo } from '../utils/package/package-info.js';
 import { type PackageJsonRepository } from '../domain/utils/package-json.contract.js';
 import { getExternalImportsCore } from './get-external-imports.js';
@@ -45,6 +44,10 @@ export function getUsedDependenciesFactory(
   return getUsedDependenciesFactoryCore(defaultDeps, workspaceRoot, fallbackEntryPoints);
 }
 
+function toRootRelative(root: string, file: string): string {
+  return path.isAbsolute(file) ? path.relative(root, file) : file;
+}
+
 export function getUsedDependenciesFactoryCore(
   deps: UsedDependenciesDeps,
   workspaceRoot: string,
@@ -58,12 +61,11 @@ export function getUsedDependenciesFactoryCore(
       throw new Error(
         '[removeUnusedDeps] native-federation is missing an entryPoint! You can set it using the Federation options or by setting an exposed module in the Federation config file.'
       );
-    // Not disk-cased like the cwd() in project-paths: sheriff relativizes every path it returns
-    // against this root, so its spelling cancels before those paths are re-joined below.
+    // Rooted at workspaceRoot because its root-relative results are re-joined onto it below.
     const fileInfos = Object.values(entryPoints ?? []).reduce(
       (acc, entryPoint) => ({
         ...acc,
-        ...deps.getProjectData(entryPoint, cwd(), {
+        ...deps.getProjectData(toRootRelative(workspaceRoot, entryPoint), workspaceRoot, {
           includeExternalLibraries: true,
           includeRawImports: true,
         }),

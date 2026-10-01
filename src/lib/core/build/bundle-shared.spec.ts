@@ -166,6 +166,44 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     expect(mem.exists(path.join('/cache', 'shared.meta.json'))).toBe(true);
   });
 
+  // core#156: path.join nested an absolute outputPath under workspaceRoot (/ws/out/dist).
+  it('copies to an absolute outputPath on both the fresh and the cached path', async () => {
+    const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+    const sharedBundles: Record<string, NormalizedExternalConfig> = {
+      foo: {
+        singleton: true,
+        strictVersion: false,
+        requiredVersion: '^1.0.0',
+        version: '1.0.0',
+        chunks: false,
+        platform: 'browser',
+        build: 'default',
+        packageInfo: { entryPoint: 'foo/index.js', version: '1.0.0', esm: true },
+      },
+    };
+    const fedOptions = makeFedOptions({ outputPath: '/out/dist', cacheExternalArtifacts: true });
+    const run = (adapter: FakeBuildAdapter) =>
+      bundleSharedCore(
+        { io: mem, repo: emptyRepo, adapter },
+        sharedBundles,
+        makeConfig(),
+        fedOptions,
+        [],
+        BUILD_OPTIONS
+      );
+
+    const fresh = await run(createFakeBuildAdapter({ io: mem }));
+    const outFile = path.join('/out/dist', fresh.externals[0]!.outFileName);
+    expect(mem.isFile(outFile)).toBe(true);
+
+    mem.remove(outFile);
+    const cachedAdapter = createFakeBuildAdapter({ io: mem });
+    await run(cachedAdapter);
+    expect(cachedAdapter.calls.setup).toHaveLength(0);
+    expect(mem.isFile(outFile)).toBe(true);
+    expect(mem.exists('/ws/out')).toBe(false);
+  });
+
   it('carries a configured pool through to the shared external', async () => {
     const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
     const adapter = createFakeBuildAdapter({ io: mem });

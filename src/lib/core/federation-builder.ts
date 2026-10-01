@@ -1,5 +1,4 @@
 import type { FederationInfo } from '../domain/core/federation-info.contract.js';
-import { getConfigContext, usePackageJson, useWorkspace } from '../config/configuration-context.js';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
 import { getBuildAdapter, setBuildAdapter } from './build/build-adapter.js';
 import { buildForFederation } from './build/build-for-federation.js';
@@ -24,9 +23,6 @@ let fedInfo: FederationInfo;
 
 async function init(params: BuildHelperParams): Promise<void> {
   setBuildAdapter(params.adapter);
-  useWorkspace(params.options.workspaceRoot);
-  usePackageJson(params.options.packageJson);
-  params.options.workspaceRoot = getConfigContext().workspaceRoot ?? params.options.workspaceRoot;
 
   const normalized = await normalizeFederationOptions(params.options);
 

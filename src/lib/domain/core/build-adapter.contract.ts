@@ -31,6 +31,7 @@ export interface EntryPoint {
 
 export interface NFBuildAdapterOptions<TBundlerCache = unknown> {
   entryPoints: EntryPoint[];
+  // Unresolved; a relative path is workspace-relative, not cwd-relative.
   tsConfigPath?: string;
   external: string[];
   outdir: string;
