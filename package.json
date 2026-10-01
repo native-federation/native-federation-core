@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@jridgewell/sourcemap-codec": "^1.6.0",
-    "@softarc/sheriff-core": "^0.19.6",
+    "@softarc/sheriff-core": "^0.20.0",
     "chalk": "^6.0.0",
     "es-module-lexer": "^2.3.2",
     "esbuild": "^0.28.0",

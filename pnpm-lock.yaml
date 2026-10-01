@@ -12,8 +12,8 @@ importers:
         specifier: ^1.6.0
         version: 1.6.0
       '@softarc/sheriff-core':
-        specifier: ^0.19.6
-        version: 0.19.6(typescript@6.0.3)
+        specifier: ^0.20.0
+        version: 0.20.0(typescript@6.0.3)
       chalk:
         specifier: ^6.0.0
         version: 6.0.0
@@ -745,8 +745,8 @@ packages:
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
 
-  '@softarc/sheriff-core@0.19.6':
-    resolution: {integrity: sha512-KACxHG9sS7kNWgnnBODzdr14kMLMrJVlQKc+tViUP03p2fRwNhESOA49bz51Yn7dro1mbtMmmFjICLmZSJDZZA==}
+  '@softarc/sheriff-core@0.20.0':
+    resolution: {integrity: sha512-dTm5dOUMOGTV3ql7ZIuI8rE+gZawIcJLEluqRYX3KDVJ215vfUzpC9LlSL4pTW0lAAeNLelmPZBzY57jLvOPpg==}
     hasBin: true
     peerDependencies:
       typescript: '>=4.8'
@@ -2041,7 +2041,7 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.1': {}
 
-  '@softarc/sheriff-core@0.19.6(typescript@6.0.3)':
+  '@softarc/sheriff-core@0.20.0(typescript@6.0.3)':
     dependencies:
       typescript: 6.0.3
 

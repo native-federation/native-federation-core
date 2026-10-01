@@ -2,7 +2,7 @@ import { getProjectData as sheriffGetProjectData, type ProjectData } from '@soft
 import { cwd } from 'process';
 import { sharedPackageJsonRepository, tryGetPackageInfo } from '../utils/package/package-info.js';
 import { type PackageJsonRepository } from '../domain/utils/package-json.contract.js';
-import { getBareSpecifiersCore, getExternalImportsCore } from './get-external-imports.js';
+import { getExternalImportsCore } from './get-external-imports.js';
 import { nodeIo } from '../utils/io/node-io-adapter.js';
 import { type FileReaderPort } from '../domain/utils/io-port.contract.js';
 import { type PathToImport } from '../domain/utils/mapped-path.contract.js';
@@ -16,7 +16,7 @@ import * as path from 'path';
 type GetProjectData = (
   entryPoint: string,
   cwd: string,
-  options: { includeExternalLibraries: boolean }
+  options: { includeExternalLibraries: boolean; includeRawImports: boolean }
 ) => ProjectData;
 
 export interface UsedDependenciesDeps {
@@ -64,6 +64,7 @@ export function getUsedDependenciesFactoryCore(
         ...acc,
         ...deps.getProjectData(entryPoint, cwd(), {
           includeExternalLibraries: true,
+          includeRawImports: true,
         }),
       }),
       {} as ProjectData
@@ -81,7 +82,7 @@ export function getUsedDependenciesFactoryCore(
 
     return {
       external: addTransientDeps(usedPackageNames, workspaceRoot, deps),
-      ...resolveUsedMappings(fileInfos, workspaceRoot, config.sharedMappings, deps.io),
+      ...resolveUsedMappings(fileInfos, workspaceRoot, config.sharedMappings),
     };
   };
 }
@@ -124,8 +125,7 @@ function addTransientDeps(
 function resolveUsedMappings(
   fileInfos: ProjectData,
   workspaceRoot: string,
-  sharedMappings: PathToImport,
-  io: FileReaderPort
+  sharedMappings: PathToImport
 ): Pick<UsedDependencies, 'internal' | 'mappingImports'> {
   const usedMappings: PathToImport = {};
   const matchesIgnoringCase = createCaseInsensitiveMatcher(sharedMappings);
@@ -138,28 +138,41 @@ function resolveUsedMappings(
     const fileInfo = fileInfos[fileName];
     if (!fileInfo) continue;
 
-    // Inside a mapping, relative imports are the lib's own bundled code; only a barrel imported by
-    // specifier is another entry point that must be published (core#135).
-    let bySpecifier: Set<string> | null = null;
-    if (isSharedMapping(fullFileName, sharedMappings)) {
-      const specifiers = getBareSpecifiersCore(io, fullFileName);
-      for (const s of specifiers)
+    const inMapping = isSharedMapping(fullFileName, sharedMappings);
+    if (inMapping) {
+      for (const s of bareSpecifiers(fileInfo))
         if (!specifiersInMappings.has(s)) specifiersInMappings.set(s, fileName);
-      bySpecifier = new Set(specifiers.filter(s => !isNonBarrelImport(s)));
     }
 
     for (const imp of fileInfo.imports ?? []) {
       const fullImport = path.join(workspaceRoot, imp);
       const match = matchMapping(fullImport, sharedMappings);
       if (match) {
-        if (!bySpecifier || bySpecifier.has(match)) usedMappings[fullImport] = match;
-      } else if (!bySpecifier && matchesIgnoringCase(fullImport)) caseOnlyMisses.add(fullImport);
+        // Inside a mapping, relative imports are the lib's own bundled code; only a barrel
+        // imported by specifier is another entry point that must be published (core#135).
+        const bySpecifier =
+          !isNonBarrelImport(match) && !!fileInfo.rawImports?.[imp]?.includes(match);
+        if (!inMapping || bySpecifier) usedMappings[fullImport] = match;
+      } else if (!inMapping && matchesIgnoringCase(fullImport)) caseOnlyMisses.add(fullImport);
     }
   }
 
   warnOnCaseOnlyMisses(caseOnlyMisses);
 
   return { internal: usedMappings, mappingImports: specifiersInMappings };
+}
+
+function bareSpecifiers(fileInfo: ProjectData[string]): string[] {
+  const resolved = Object.values(fileInfo.rawImports ?? {})
+    .flat()
+    .filter(s => !s.startsWith('.') && !path.isAbsolute(s));
+  return [
+    ...new Set([
+      ...resolved,
+      ...(fileInfo.externalLibraries ?? []),
+      ...(fileInfo.unresolvedImports ?? []),
+    ]),
+  ];
 }
 
 /**
