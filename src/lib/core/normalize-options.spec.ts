@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
 import { normalizeFederationOptionsCore } from './normalize-options.js';
 import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
@@ -9,7 +9,12 @@ import type { FederationOptions } from '../domain/core/federation-options.contra
 import type { FederationCache } from '../domain/core/federation-cache.contract.js';
 import type { SharedInfo } from '../domain/core/federation-info.contract.js';
 import { addExternalsToCache } from './cache/federation-cache.js';
-import { getConfigContext, type ConfigurationContext } from '../config/configuration-context.js';
+import {
+  getConfigContext,
+  usePackageJson,
+  useWorkspace,
+  type ConfigurationContext,
+} from '../config/configuration-context.js';
 
 const CONFIG_PATH = path.join('/ws', 'federation.config.js');
 
@@ -53,6 +58,12 @@ function makeConfig(
 const loaderFor = (config: NormalizedFederationConfig) => async () => config;
 
 describe('normalizeFederationOptionsCore', () => {
+  // normalizeFederationOptionsCore sets the module-level config context; keep it from leaking.
+  afterEach(() => {
+    useWorkspace('');
+    usePackageJson(undefined);
+  });
+
   it('throws when the federation config file does not exist', async () => {
     const io = createMemoryIo();
     await expect(
