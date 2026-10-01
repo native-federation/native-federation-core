@@ -9,7 +9,15 @@ export interface NFBuildAdapterContext<TBundlerContext = unknown> {
   isMappingOrExposed: boolean;
 }
 
+export interface ExternalsCacheKey {
+  adapter: string;
+  options?: Record<string, string | number | boolean>;
+}
+
 export interface NFBuildAdapter {
+  // Read before setup(), so it must be known when the adapter is created (core#152).
+  readonly externalsCacheKey?: ExternalsCacheKey;
+
   setup(name: string, options: NFBuildAdapterOptions): Promise<void>;
 
   build(

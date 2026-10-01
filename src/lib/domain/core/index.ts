@@ -17,6 +17,7 @@ export type {
 } from './federation-options.contract.js';
 export type {
   EntryPoint,
+  ExternalsCacheKey,
   NFBuildAdapterOptions,
   NFBuildAdapter,
   NFBuildAdapterResult,

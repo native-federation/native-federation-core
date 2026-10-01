@@ -2,6 +2,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
+import type { ExternalsCacheKey } from '../../domain/core/build-adapter.contract.js';
 import type {
   ChunkInfo,
   IntegrityMap,
@@ -32,9 +33,19 @@ export const getChecksum = (
   builderVersion = '',
   features: FeatureFlags = {},
   contentSignals: Record<string, string> = {},
-  resolvedVersions: Record<string, string> = {}
+  resolvedVersions: Record<string, string> = {},
+  adapterKey?: ExternalsCacheKey
 ): string =>
-  getChecksumCore(nodeIo, shared, dev, builderVersion, features, contentSignals, resolvedVersions);
+  getChecksumCore(
+    nodeIo,
+    shared,
+    dev,
+    builderVersion,
+    features,
+    contentSignals,
+    resolvedVersions,
+    adapterKey
+  );
 
 export type FeatureFlags = Partial<NormalizedFederationConfig['features']>;
 
@@ -61,6 +72,13 @@ const sharedInfoState = (config: NormalizedExternalConfig): string => {
   return values.every(value => value === null) ? '' : `!${JSON.stringify(values)}`;
 };
 
+// JSON-encoded so `1`, `'1'` and `true` stay distinct and a value cannot forge a delimiter.
+const adapterState = (key: ExternalsCacheKey | undefined): string => {
+  if (!key) return '';
+  const options = Object.entries(key.options ?? {}).sort(([a], [b]) => (a < b ? -1 : 1));
+  return `:adapter=${JSON.stringify([key.adapter, options])}`;
+};
+
 export const getChecksumCore = (
   hash: HashPort,
   shared: Record<string, NormalizedExternalConfig>,
@@ -72,7 +90,8 @@ export const getChecksumCore = (
   // Per-key installed version — the only version that can change the bundled bytes, so it wins
   // outright. An omitted map falls back to the declared range for every key, reproducing the
   // pre-installed-version checksum byte for byte.
-  resolvedVersions: Record<string, string> = {}
+  resolvedVersions: Record<string, string> = {},
+  adapterKey?: ExternalsCacheKey
 ): string => {
   const denseExternals = Object.keys(shared)
     .sort()
@@ -88,7 +107,9 @@ export const getChecksumCore = (
   return hash
     .hash(
       'sha256',
-      denseExternals + `:dev=${dev}:builder=${builderVersion}:features=${featureState(features)}`
+      denseExternals +
+        `:dev=${dev}:builder=${builderVersion}:features=${featureState(features)}` +
+        adapterState(adapterKey)
     )
     .hex();
 };

@@ -175,6 +175,46 @@ describe('getChecksumCore', () => {
     );
   });
 
+  describe('adapter key', () => {
+    const base = { react: ext('18') };
+    const withKey = (key?: Parameters<typeof getChecksumCore>[7]) =>
+      getChecksumCore(io, base, '0', '2.0.0', {}, {}, {}, key);
+
+    // Adapters that do not declare a key must keep hitting caches written before it existed.
+    it('is byte-identical to the pre-adapter-key checksum when omitted', () => {
+      expect(withKey()).toBe(getChecksumCore(io, base, '0', '2.0.0'));
+    });
+
+    it('changes when the adapter identity changes', () => {
+      expect(withKey({ adapter: 'a@1.0.0' })).not.toBe(withKey({ adapter: 'a@1.0.1' }));
+      expect(withKey({ adapter: 'a@1.0.0' })).not.toBe(withKey());
+    });
+
+    it('changes when an option value changes', () => {
+      expect(withKey({ adapter: 'a@1', options: { sourcemap: true } })).not.toBe(
+        withKey({ adapter: 'a@1', options: { sourcemap: false } })
+      );
+    });
+
+    it('is independent of option insertion order', () => {
+      expect(withKey({ adapter: 'a@1', options: { target: 'es2022', sourcemap: true } })).toBe(
+        withKey({ adapter: 'a@1', options: { sourcemap: true, target: 'es2022' } })
+      );
+    });
+
+    // Values are JSON-encoded; plain string concatenation would collapse these.
+    it('distinguishes values of different types with the same text', () => {
+      const keys = [1, '1', true, 'true'].map(v => withKey({ adapter: 'a@1', options: { x: v } }));
+      expect(new Set(keys).size).toBe(4);
+    });
+
+    it('does not let a value forge another option', () => {
+      expect(withKey({ adapter: 'a@1', options: { a: '1","b":"2' } })).not.toBe(
+        withKey({ adapter: 'a@1', options: { a: '1', b: '2' } })
+      );
+    });
+  });
+
   it('changes when a content signal changes but is stable when it does not', () => {
     const base = { '@scope/lib': ext('1.0.0') };
     const a = getChecksumCore(io, base, '0', '', {}, { '@scope/lib': '111' });
