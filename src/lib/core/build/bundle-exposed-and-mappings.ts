@@ -72,7 +72,9 @@ export async function bundleExposedAndMappingsCore(
   const exposes: Array<EntryPoint & { element?: string }> = Object.entries(config.exposes).map(
     ([key, expose]) => {
       const outFilePath = key + '.js';
-      return { fileName: expose.file, outName: outFilePath, key, element: expose.element };
+      // Absolute because adapters resolve a relative entry against cwd, not workspaceRoot.
+      const fileName = path.resolve(fedOptions.workspaceRoot, expose.file);
+      return { fileName, outName: outFilePath, key, element: expose.element };
     }
   );
 
@@ -186,7 +188,7 @@ export async function bundleExposedAndMappingsCore(
       dev: !fedOptions.dev
         ? undefined
         : {
-            entryPoint: normalize(path.join(fedOptions.workspaceRoot, item.fileName!)),
+            entryPoint: normalize(item.fileName),
           },
     });
     exposedFiles.push(distEntryFile);
