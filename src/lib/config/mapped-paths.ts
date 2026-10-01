@@ -1,5 +1,5 @@
 import * as path from 'path';
-import JSON5 from 'json5';
+import * as ts from 'typescript';
 import { nodeIo } from '../utils/io/node-io-adapter.js';
 import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
 import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
@@ -41,7 +41,15 @@ export function getRawMappedPathsCore(
   const shareAll = !configuredSharedMappings;
   const { patterns, configs } = flattenEntries(configuredSharedMappings ?? []);
 
-  const tsConfig = JSON5.parse(io.readText(rootTsConfigPath));
+  const { config: tsConfig, error } = ts.parseConfigFileTextToJson(
+    rootTsConfigPath,
+    io.readText(rootTsConfigPath)
+  );
+  if (error) {
+    throw new Error(
+      `Could not parse ${rootTsConfigPath}: ${ts.flattenDiagnosticMessageText(error.messageText, '\n')}`
+    );
+  }
 
   const mappings = tsConfig?.compilerOptions?.paths;
 

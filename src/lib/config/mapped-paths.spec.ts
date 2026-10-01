@@ -21,7 +21,12 @@ describe('getRawMappedPathsCore', () => {
     expect(getRawMappedPathsCore(writeTsConfig(undefined), TSCONFIG).paths).toEqual({});
   });
 
-  it('parses JSON5 (comments / trailing commas)', () => {
+  it('throws on a tsconfig that is not valid JSONC', () => {
+    const io = createMemoryIo().setFile(TSCONFIG, '{ "compilerOptions": { "paths": ');
+    expect(() => getRawMappedPathsCore(io, TSCONFIG)).toThrow(/Could not parse .*tsconfig\.json/);
+  });
+
+  it('parses JSONC (comments / trailing commas)', () => {
     const io = createMemoryIo().setFile(
       TSCONFIG,
       `{
