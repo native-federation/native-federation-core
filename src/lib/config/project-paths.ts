@@ -14,8 +14,7 @@ export function findRootTsConfigJsonCore(io: FileReaderPort): string {
   try {
     return findTsConfigNextToPackageJson(io, from);
   } catch (err) {
-    // cwd stays first so a build that resolves today keeps its tsconfig; workspaceRoot only
-    // rescues a build run from outside the workspace (core#156).
+    // cwd stays first so an existing resolution doesn't move (core#156).
     const { workspaceRoot } = getConfigContext();
     if (!workspaceRoot || path.resolve(workspaceRoot) === from) throw err;
     return findTsConfigNextToPackageJson(io, path.resolve(workspaceRoot));

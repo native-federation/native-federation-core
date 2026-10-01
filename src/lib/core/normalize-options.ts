@@ -75,8 +75,6 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
     throw new Error('Expected ' + fullConfigPath);
   }
 
-  // The config file's share()/shareAll() locate package.json through this context and fall back
-  // to cwd without it, so it must be set before the config is loaded.
   let config: NormalizedFederationConfig = await loadWithConfigContext(
     { workspaceRoot, packageJson },
     () => deps.loadConfig(fullConfigPath),

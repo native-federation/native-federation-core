@@ -61,9 +61,7 @@ export function getUsedDependenciesFactoryCore(
       throw new Error(
         '[removeUnusedDeps] native-federation is missing an entryPoint! You can set it using the Federation options or by setting an exposed module in the Federation config file.'
       );
-    // Rooted at workspaceRoot because the paths sheriff returns relative to its root are re-joined
-    // onto workspaceRoot below. Sheriff joins the entry onto that root, so an absolute one is made
-    // relative first.
+    // Rooted at workspaceRoot because its root-relative results are re-joined onto it below.
     const fileInfos = Object.values(entryPoints ?? []).reduce(
       (acc, entryPoint) => ({
         ...acc,

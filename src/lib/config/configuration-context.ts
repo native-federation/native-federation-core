@@ -23,8 +23,7 @@ export function getConfigContext(): ConfigurationContext {
 
 let pendingLoad: Promise<unknown> = Promise.resolve();
 
-// The context is global and a config reads it while it evaluates, so concurrent loads (several
-// remotes built in one process) are queued; otherwise each config sees the last caller's context.
+// Queued: the context is global and read mid-evaluation, so parallel loads see the last one's.
 export function loadWithConfigContext<T>(
   context: ConfigurationContext,
   load: () => Promise<T>,
