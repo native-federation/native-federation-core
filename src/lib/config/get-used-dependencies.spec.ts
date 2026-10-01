@@ -199,6 +199,35 @@ describe('getUsedDependenciesFactoryCore', () => {
       expect(used.mappingImports).toEqual(new Map([['rxjs', 'libs/internal/src/kit/index.ts']]));
     });
 
+    // sheriff's default ignoreFileExtensions drop '*.json' before it records anything, so this
+    // specifier reaches neither rawImports nor externalLibraries; only the source has it.
+    it('reports a specifier sheriff skips for its file extension', () => {
+      const deps = makeDeps(
+        {
+          'src/main.ts': {
+            imports: ['libs/internal/src/kit/index.ts'],
+            rawImports: { 'libs/internal/src/kit/index.ts': ['@internal/kit'] },
+            externalLibraries: [],
+            unresolvedImports: [],
+          },
+          'libs/internal/src/kit/index.ts': {
+            imports: [],
+            rawImports: {},
+            externalLibraries: [],
+            unresolvedImports: [],
+          },
+        } as unknown as ProjectData,
+        {
+          '/ws/libs/internal/src/kit/index.ts':
+            "import config from '@internal/kit/sub/config.json';\nexport { config };\n",
+        }
+      );
+
+      expect(run(deps).mappingImports).toEqual(
+        new Map([['@internal/kit/sub/config.json', 'libs/internal/src/kit/index.ts']])
+      );
+    });
+
     it('does not report imports from outside a mapping', () => {
       const used = run(kitFixture({ 'libs/internal/src/kit/kit.module.ts': ['./kit.module'] }));
 

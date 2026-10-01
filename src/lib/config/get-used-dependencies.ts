@@ -12,6 +12,7 @@ import { isSharedMapping, matchMapping } from './match-mapping.js';
 import { isNonBarrelImport } from './validate-mappings.js';
 import { logger } from '../utils/logger.js';
 import * as path from 'path';
+import * as ts from 'typescript';
 
 type GetProjectData = (
   entryPoint: string,
@@ -82,7 +83,7 @@ export function getUsedDependenciesFactoryCore(
 
     return {
       external: addTransientDeps(usedPackageNames, workspaceRoot, deps),
-      ...resolveUsedMappings(fileInfos, workspaceRoot, config.sharedMappings),
+      ...resolveUsedMappings(fileInfos, workspaceRoot, config.sharedMappings, deps.io),
     };
   };
 }
@@ -125,7 +126,8 @@ function addTransientDeps(
 function resolveUsedMappings(
   fileInfos: ProjectData,
   workspaceRoot: string,
-  sharedMappings: PathToImport
+  sharedMappings: PathToImport,
+  io: FileReaderPort
 ): Pick<UsedDependencies, 'internal' | 'mappingImports'> {
   const usedMappings: PathToImport = {};
   const matchesIgnoringCase = createCaseInsensitiveMatcher(sharedMappings);
@@ -140,7 +142,7 @@ function resolveUsedMappings(
 
     const inMapping = isSharedMapping(fullFileName, sharedMappings);
     if (inMapping) {
-      for (const s of bareSpecifiers(fileInfo))
+      for (const s of bareSpecifiers(fileInfo, fullFileName, io))
         if (!specifiersInMappings.has(s)) specifiersInMappings.set(s, fileName);
     }
 
@@ -162,17 +164,24 @@ function resolveUsedMappings(
   return { internal: usedMappings, mappingImports: specifiersInMappings };
 }
 
-function bareSpecifiers(fileInfo: ProjectData[string]): string[] {
-  const resolved = Object.values(fileInfo.rawImports ?? {})
-    .flat()
-    .filter(s => !s.startsWith('.') && !path.isAbsolute(s));
+function bareSpecifiers(
+  fileInfo: ProjectData[string],
+  filePath: string,
+  io: FileReaderPort
+): string[] {
+  // sheriff drops specifiers ending in its ignoreFileExtensions (json, css, svg, ...) before
+  // recording them, so a subpath like '@org/ui/config.json' only shows up in the source itself.
+  const scanned = io.isFile(filePath)
+    ? ts.preProcessFile(io.readText(filePath)).importedFiles.map(f => f.fileName)
+    : [];
   return [
     ...new Set([
-      ...resolved,
+      ...Object.values(fileInfo.rawImports ?? {}).flat(),
+      ...scanned,
       ...(fileInfo.externalLibraries ?? []),
       ...(fileInfo.unresolvedImports ?? []),
     ]),
-  ];
+  ].filter(s => !s.startsWith('.') && !path.isAbsolute(s));
 }
 
 /**
