@@ -20,6 +20,15 @@ describe('writeFederationInfoCore', () => {
     expect(io.isFile('/ws/dist/remoteEntry.json')).toBe(true);
   });
 
+  it('does not nest an absolute outputPath under workspaceRoot', () => {
+    const io = createMemoryIo();
+    writeFederationInfoCore(io, info(), {
+      workspaceRoot: '/ws',
+      outputPath: '/out/dist',
+    } as FederationOptions);
+    expect(io.isFile('/out/dist/remoteEntry.json')).toBe(true);
+  });
+
   it('serialises the federation info as pretty JSON', () => {
     const io = createMemoryIo();
     const federationInfo = info();

@@ -58,4 +58,13 @@ describe('writeImportMapCore', () => {
     writeImportMapCore(io, { externals: [] }, opts());
     expect(io.isFile('/ws/dist/importmap.json')).toBe(true);
   });
+
+  it('does not nest an absolute outputPath under workspaceRoot', () => {
+    const io = createMemoryIo();
+    writeImportMapCore(io, { externals: [] }, {
+      workspaceRoot: '/ws',
+      outputPath: '/out/dist',
+    } as FederationOptions);
+    expect(io.isFile('/out/dist/importmap.json')).toBe(true);
+  });
 });

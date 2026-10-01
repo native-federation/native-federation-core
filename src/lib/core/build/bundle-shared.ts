@@ -35,6 +35,7 @@ import {
 } from '../cache/cache-persistence.js';
 import { linkedContentSignals } from './resolve-shared-dirs.js';
 import { computeIntegrityMapCore } from './compute-integrity.js';
+import { resolveOutputPath } from '../../utils/output-path.js';
 import { fileURLToPath } from 'url';
 import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
 import type {
@@ -139,7 +140,7 @@ export async function bundleSharedCore(
     const cacheMetadata = bundleCache.getMetadata(checksum);
     if (cacheMetadata) {
       logger.info(`Checksum of ${buildOptions.bundleName} matched, re-using cached externals.`);
-      bundleCache.copyFiles(path.join(fedOptions.workspaceRoot, fedOptions.outputPath));
+      bundleCache.copyFiles(resolveOutputPath(fedOptions));
       let integrity = cacheMetadata.integrity;
       if (config.features.integrityHashes && !integrity) {
         integrity = computeIntegrityMapCore(deps.io, cacheMetadata.files, bundleCache.dir);
@@ -189,7 +190,7 @@ export async function bundleSharedCore(
     return { fileName: synthetic ?? pi.entryPoint, outName };
   });
 
-  const fullOutputPath = path.join(fedOptions.workspaceRoot, fedOptions.outputPath);
+  const fullOutputPath = resolveOutputPath(fedOptions);
 
   // If we build for the browser and don't remote unused deps from the shared config,
   // we need to exclude typical node libs to avoid compilation issues
@@ -302,7 +303,7 @@ export async function bundleSharedCore(
     integrity,
   });
 
-  bundleCache.copyFiles(path.join(fedOptions.workspaceRoot, fedOptions.outputPath));
+  bundleCache.copyFiles(resolveOutputPath(fedOptions));
 
   return { externals: result, chunks: exportedChunks, integrity };
 }

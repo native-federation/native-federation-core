@@ -11,6 +11,7 @@ import type { FileReaderPort, IoPort } from '../../domain/utils/io-port.contract
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import { createBuildResultMap, popFromResultMap } from './build-result-map.js';
 import { computeIntegrityMapCore } from './compute-integrity.js';
+import { resolveOutputPath } from '../../utils/output-path.js';
 import { logger } from '../../utils/logger.js';
 import { normalize } from '../../utils/normalize.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
@@ -88,7 +89,7 @@ export async function bundleExposedAndMappingsCore(
       if (!modifiedFiles) {
         await deps.adapter.setup(bundleName, {
           entryPoints,
-          outdir: fedOptions.outputPath,
+          outdir: resolveOutputPath(fedOptions),
           tsConfigPath: fedOptions.tsConfig,
           external: externals,
           dev: !!fedOptions.dev,

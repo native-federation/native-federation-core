@@ -211,6 +211,34 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     expect(adapter.calls.setup.map(c => c.name)).toEqual(['mapping-or-exposed']);
   });
 
+  // core#156: a bare outputPath reached the adapter as-is and was resolved against cwd, so
+  // exposed modules and mappings landed apart from remoteEntry.json.
+  it('hands the adapter an outdir resolved against workspaceRoot', async () => {
+    const config = makeConfig({
+      exposes: { './Comp': { file: './src/comp.ts' } },
+      sharedMappings: { './libs/foo': 'foo' },
+    });
+    const adapter = createFakeBuildAdapter();
+
+    await bundleExposedAndMappingsCore({ adapter }, config, makeFedOptions(), []);
+
+    expect(adapter.calls.setup.map(c => c.options.outdir)).toEqual(['/ws/dist', '/ws/dist']);
+  });
+
+  it('keeps an absolute outputPath as the outdir', async () => {
+    const config = makeConfig({ exposes: { './Comp': { file: './src/comp.ts' } } });
+    const adapter = createFakeBuildAdapter();
+
+    await bundleExposedAndMappingsCore(
+      { adapter },
+      config,
+      makeFedOptions({ outputPath: '/out/dist' }),
+      []
+    );
+
+    expect(adapter.calls.setup[0]!.options.outdir).toBe('/out/dist');
+  });
+
   // mappingVersion is off in makeConfig, so this is the un-annotated baseline: no version
   // is detected and requiredVersion stays empty.
   it('emits the pre-existing defaults for an un-annotated mapping', async () => {

@@ -85,6 +85,10 @@ write into `dist/` with `rootDir: src`, so JS and types land side by side.
 **Build Adapter Pattern**:
 The core library is build-tool agnostic. It expects a `NFBuildAdapter` that implements bundling logic. Reference implementations use esbuild (see `@softarc/native-federation-esbuild` package, separate repo).
 
+`outputPath` is resolved against `workspaceRoot` (`resolveOutputPath`) and may be absolute. Every
+writer goes through that helper, and the adapter receives the resolved `outdir`, so all output
+lands in one directory whatever `process.cwd()` is (core#156).
+
 ## Configuration
 
 ### `federation.config.mjs` Structure
