@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { bundleSharedCore, parseBuilderVersion, readBuilderPackageJson } from './bundle-shared.js';
+import { bundleSharedCore } from './bundle-shared.js';
+import { parseBuilderVersion, readBuilderPackageJson } from '../cache/cache-persistence.js';
 import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
 import {
   createFakeBuildAdapter,
@@ -345,7 +346,9 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     const entryPoint = adapter.calls.setup[0]!.options.entryPoints[0]!;
     // Named after the hashed outName (dayjs.<hash>.js), so packages that normalize to the
     // same identifier can't clobber each other's synthetic entry.
-    expect(path.dirname(entryPoint.fileName)).toBe(path.join('/cache', '.nf-cjs-entries'));
+    expect(path.dirname(entryPoint.fileName)).toBe(
+      path.join('/cache', 'shared', '.nf-cjs-entries')
+    );
     expect(path.basename(entryPoint.fileName)).toMatch(/^dayjs\..+\.js$/);
     const synthetic = mem.readText(entryPoint.fileName);
     expect(synthetic).toContain('import _nfDefault from "/n/dayjs/dayjs.min.js";');
@@ -732,5 +735,67 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     for (const file of persisted.files) {
       expect(mem.isFile(path.join('/ws/dist', file))).toBe(true);
     }
+  });
+
+  // core#154: two separate bundles that split out the same module emit one chunk name. With a
+  // shared outdir, the first bundle's rename-by-content deleted the file the second still had to
+  // read. The barrier holds both builds until each has written its chunk, which forces that order.
+  it('lets bundles built side by side emit the same chunk', async () => {
+    const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+    const chunk = 'graphql-JY3SKLBK.js';
+    let written = 0;
+    let release!: () => void;
+    const barrier = new Promise<void>(resolve => (release = resolve));
+
+    const sharingAdapter = (): NFBuildAdapter => {
+      let outdir = '';
+      let outName = '';
+      return {
+        async setup(_name, opts) {
+          outdir = opts.outdir;
+          outName = opts.entryPoints[0]!.outName;
+        },
+        async build() {
+          mem.writeText(path.join(outdir, chunk), 'export const g = 1;\n');
+          mem.writeText(path.join(outdir, outName), `import('./${chunk}');\n`);
+          if (++written === 2) release();
+          await barrier;
+          return [{ fileName: path.join(outdir, outName) }, { fileName: path.join(outdir, chunk) }];
+        },
+        async dispose() {},
+      };
+    };
+
+    const pkg = (name: string): Record<string, NormalizedExternalConfig> => ({
+      [name]: {
+        singleton: true,
+        strictVersion: false,
+        requiredVersion: '^1.0.0',
+        version: '1.0.0',
+        chunks: true,
+        platform: 'browser',
+        build: 'separate',
+        packageInfo: { entryPoint: `/n/${name}/index.js`, version: '1.0.0', esm: true },
+      },
+    });
+
+    const bundle = (name: string) =>
+      bundleSharedCore(
+        { io: mem, repo: emptyRepo, adapter: sharingAdapter() },
+        pkg(name),
+        makeConfig(),
+        makeFedOptions(),
+        [],
+        { platform: 'browser', bundleName: `browser-${name}`, chunks: true }
+      );
+
+    const [a, b] = await Promise.all([bundle('a'), bundle('b')]);
+
+    const chunkOf = (result: typeof a) =>
+      result.externals.find(e => e.packageName !== 'a' && e.packageName !== 'b')!.outFileName;
+    expect(chunkOf(a)).toBe(chunkOf(b));
+    expect(mem.isFile(path.join('/cache', 'browser-a', chunkOf(a)))).toBe(true);
+    expect(mem.isFile(path.join('/cache', 'browser-b', chunkOf(b)))).toBe(true);
+    expect(mem.isFile(path.join('/ws/dist', chunkOf(a)))).toBe(true);
   });
 });

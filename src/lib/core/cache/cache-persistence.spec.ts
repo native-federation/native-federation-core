@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as crypto from 'crypto';
+import * as path from 'path';
 import {
   cacheEntryCore,
   getChecksumCore,
   getFilename,
+  prepareCacheCore,
   type CacheMetadata,
 } from './cache-persistence.js';
 import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
@@ -184,30 +186,40 @@ describe('getChecksumCore', () => {
 });
 
 describe('cacheEntryCore', () => {
+  it('keeps the metadata in the cache root and the artifacts in a folder per bundle', () => {
+    expect(cacheEntryCore(createMemoryIo(), '/cache', 'browser-shared').dir).toBe(
+      path.join('/cache', 'browser-shared')
+    );
+    expect(cacheEntryCore(createMemoryIo(), '/cache', 'browser-shared', true).dir).toBe(
+      path.join('/cache', 'browser-shared-dev')
+    );
+  });
+
   it('round-trips metadata via persist/getMetadata', () => {
     const io = createMemoryIo();
-    const entry = cacheEntryCore(io, '/cache', 'x.meta.json');
+    const entry = cacheEntryCore(io, '/cache', 'x');
     entry.persist(meta({ checksum: 'sum1', files: ['a.js'] }));
+    expect(io.isFile('/cache/x.meta.json')).toBe(true);
     expect(entry.getMetadata('sum1')).toEqual(meta({ checksum: 'sum1', files: ['a.js'] }));
   });
 
   it('returns undefined when the checksum does not match', () => {
     const io = createMemoryIo();
-    const entry = cacheEntryCore(io, '/cache', 'x.meta.json');
+    const entry = cacheEntryCore(io, '/cache', 'x');
     entry.persist(meta({ checksum: 'sum1' }));
     expect(entry.getMetadata('other')).toBeUndefined();
   });
 
   it('returns undefined when the metadata file is missing', () => {
-    const entry = cacheEntryCore(createMemoryIo(), '/cache', 'x.meta.json');
+    const entry = cacheEntryCore(createMemoryIo(), '/cache', 'x');
     expect(entry.getMetadata('sum1')).toBeUndefined();
   });
 
-  it('copyFiles creates the output dir and copies the recorded files', () => {
+  it('copyFiles creates the output dir and copies the recorded files from the bundle folder', () => {
     const io = createMemoryIo()
-      .setFile('/cache/a.js', 'A')
+      .setFile('/cache/x/a.js', 'A')
       .setFile('/cache/x.meta.json', JSON.stringify(meta({ files: ['a.js'] })));
-    const entry = cacheEntryCore(io, '/cache', 'x.meta.json');
+    const entry = cacheEntryCore(io, '/cache', 'x');
 
     entry.copyFiles('/dist');
 
@@ -218,37 +230,113 @@ describe('cacheEntryCore', () => {
   // A reaped cache used to degrade into a silently incomplete dist.
   it('copyFiles throws when a recorded file is missing from the cache', () => {
     const io = createMemoryIo()
-      .setFile('/cache/a.js', 'A')
+      .setFile('/cache/x/a.js', 'A')
       .setFile('/cache/x.meta.json', JSON.stringify(meta({ files: ['a.js', 'missing.js'] })));
-    const entry = cacheEntryCore(io, '/cache', 'x.meta.json');
+    const entry = cacheEntryCore(io, '/cache', 'x');
 
     expect(() => entry.copyFiles('/dist')).toThrow(/'missing\.js'.*is missing/);
   });
 
   it('copyFiles throws when metadata is missing', () => {
-    const entry = cacheEntryCore(createMemoryIo(), '/cache', 'x.meta.json');
+    const entry = cacheEntryCore(createMemoryIo(), '/cache', 'x');
     expect(() => entry.copyFiles('/dist')).toThrow(/metadata file could not be found/);
   });
 
-  it('clear creates the cache folder when it does not exist', () => {
-    const debug = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+  it('clear creates the bundle folder when it does not exist', () => {
+    vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
     const io = createMemoryIo();
-    cacheEntryCore(io, '/cache', 'x.meta.json').clear();
-    expect(io.isDirectory('/cache')).toBe(true);
-    expect(debug).toHaveBeenCalled();
+    cacheEntryCore(io, '/cache', 'x').clear();
+    expect(io.isDirectory('/cache/x')).toBe(true);
   });
 
-  it('clear removes cached files and the metadata file', () => {
+  it('clear removes the bundle folder, including files the metadata does not list, and the metadata file', () => {
     vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
     const io = createMemoryIo()
-      .setDir('/cache')
-      .setFile('/cache/a.js', 'A')
+      .setFile('/cache/x/a.js', 'A')
+      .setFile('/cache/x/.nf-cjs-entries/e.js', 'E')
       .setFile('/cache/x.meta.json', JSON.stringify(meta({ files: ['a.js'] })));
-    const entry = cacheEntryCore(io, '/cache', 'x.meta.json');
 
-    entry.clear();
+    cacheEntryCore(io, '/cache', 'x').clear();
 
-    expect(io.isFile('/cache/a.js')).toBe(false);
+    expect(io.isFile('/cache/x/a.js')).toBe(false);
+    expect(io.isFile('/cache/x/.nf-cjs-entries/e.js')).toBe(false);
     expect(io.isFile('/cache/x.meta.json')).toBe(false);
+    expect(io.isDirectory('/cache/x')).toBe(true);
+  });
+
+  // Before per-bundle folders, two bundles listing one content-named chunk shared the file, and
+  // clearing one deleted the other's.
+  it("clear leaves another bundle's chunk of the same name alone", () => {
+    vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+    const io = createMemoryIo()
+      .setFile('/cache/a/graphql-MTXZ34YT.js', 'G')
+      .setFile('/cache/a.meta.json', JSON.stringify(meta({ files: ['graphql-MTXZ34YT.js'] })))
+      .setFile('/cache/b/graphql-MTXZ34YT.js', 'G')
+      .setFile('/cache/b.meta.json', JSON.stringify(meta({ files: ['graphql-MTXZ34YT.js'] })));
+
+    cacheEntryCore(io, '/cache', 'a').clear();
+
+    expect(() => cacheEntryCore(io, '/cache', 'b').copyFiles('/dist')).not.toThrow();
+  });
+});
+
+describe('prepareCacheCore', () => {
+  const stamp = (io: ReturnType<typeof createMemoryIo>) =>
+    JSON.parse(io.readText('/cache/.nf-cache.json'));
+
+  it('purges a cache without a stamp, which predates per-bundle folders', () => {
+    const io = createMemoryIo()
+      .setFile('/cache/shared.meta.json', '{}')
+      .setFile('/cache/foo.ABC.js', 'F')
+      .setFile('/cache/tsconfig.federation.json', '{}');
+
+    prepareCacheCore(io, '/cache', '4.8.0');
+
+    expect(io.files().filter(f => f.startsWith(path.resolve('/cache')))).toEqual([
+      path.resolve('/cache/.nf-cache.json').replace(/\\/g, '/'),
+    ]);
+    expect(stamp(io)).toEqual({ layout: 2, version: '4.8.0' });
+  });
+
+  it('keeps the cache when only the patch version changed', () => {
+    const io = createMemoryIo().setFile('/cache/x/a.js', 'A');
+    prepareCacheCore(io, '/cache', '4.8.0');
+    io.setFile('/cache/x/a.js', 'A');
+
+    prepareCacheCore(io, '/cache', '4.8.3');
+
+    expect(io.isFile('/cache/x/a.js')).toBe(true);
+    expect(stamp(io).version).toBe('4.8.0');
+  });
+
+  it('purges the cache when the minor version changed', () => {
+    const io = createMemoryIo();
+    prepareCacheCore(io, '/cache', '4.8.0');
+    io.setFile('/cache/x/a.js', 'A');
+
+    prepareCacheCore(io, '/cache', '4.9.0');
+
+    expect(io.isFile('/cache/x/a.js')).toBe(false);
+    expect(stamp(io).version).toBe('4.9.0');
+  });
+
+  it('purges the cache when the layout changed under the same minor', () => {
+    const io = createMemoryIo()
+      .setFile('/cache/.nf-cache.json', JSON.stringify({ layout: 1, version: '4.8.0' }))
+      .setFile('/cache/x/a.js', 'A');
+
+    prepareCacheCore(io, '/cache', '4.8.0');
+
+    expect(io.isFile('/cache/x/a.js')).toBe(false);
+  });
+
+  it('purges the cache when the stamp cannot be parsed', () => {
+    const io = createMemoryIo()
+      .setFile('/cache/.nf-cache.json', 'not json')
+      .setFile('/cache/x/a.js', 'A');
+
+    prepareCacheCore(io, '/cache', '4.8.0');
+
+    expect(io.isFile('/cache/x/a.js')).toBe(false);
   });
 });

@@ -9,7 +9,7 @@ import type { NormalizedFederationConfig } from '../../domain/config/federation-
 import { planSharedBundles } from './shared-bundle-plan.js';
 import { executeSharedBundlePlans } from './build-for-federation.js';
 import { affectedSharedKeys, resolveSharedPackageDirs } from './resolve-shared-dirs.js';
-import { cacheEntryCore, getFilename } from '../cache/cache-persistence.js';
+import { cacheEntryCore } from '../cache/cache-persistence.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import type { IoPort } from '../../domain/utils/io-port.contract.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
@@ -75,7 +75,7 @@ export async function rebuildAffectedExternals(
   // clearing here covers the cases it can miss (mtime granularity, a deleted file).
   for (const plan of affectedPlans) {
     logger.info(`Detected change in linked shared package(s); re-bundling '${plan.bundleName}'.`);
-    cacheEntryCore(io, federationCache.cachePath, getFilename(plan.bundleName, fedOptions.dev)).clear();
+    cacheEntryCore(io, federationCache.cachePath, plan.bundleName, fedOptions.dev).clear();
   }
 
   federationCache.externals = [];

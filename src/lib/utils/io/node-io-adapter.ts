@@ -77,6 +77,10 @@ export const nodeIo: IoPort = {
   remove(path) {
     fs.unlinkSync(path);
   },
+  removeDir(path) {
+    // Windows refuses to delete a file an indexer or virus scanner has just opened.
+    fs.rmSync(path, { recursive: true, force: true, maxRetries: 3 });
+  },
   globFiles(pattern, opts) {
     // Sorted because the result becomes esbuild's entry-point order, which decides how shared
     // code is split into chunks; walk order differs per glob library and filesystem.
