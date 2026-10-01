@@ -6,7 +6,7 @@ import type {
 } from '../../domain/utils/io-port.contract.js';
 import { CHUNK_PREFIX } from '../../domain/core/chunk.js';
 import { DEFAULT_HASH_LENGTH, hashChunkContent } from '../../utils/hash.js';
-import { isSourceFile } from './rewrite-chunk-imports.js';
+import { isSourceFile, SOURCE_MAP_COMMENT } from './rewrite-chunk-imports.js';
 
 type RenameDeps = FileReaderPort & FileWriterPort & HashPort;
 
@@ -15,7 +15,6 @@ type RenameDeps = FileReaderPort & FileWriterPort & HashPort;
 const HASH_SEGMENT = /-([A-Za-z0-9_$]{8,})$/;
 
 const SOURCE_EXTENSION = /\.(m|c)?js$/;
-const SOURCE_MAP_COMMENT = /\/\/# sourceMappingURL=\S+\s*$/;
 
 // `'./chunk-x.js'` as the bundler wrote it, or `'@nf-internal/chunk-x'` after the import rewrite.
 const CHUNK_REFERENCE = new RegExp(`(['"])(?:\\.\\/([^'"/]+)|${CHUNK_PREFIX}\\/([^'"/]+))\\1`, 'g');

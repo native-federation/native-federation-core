@@ -699,42 +699,83 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     });
   });
 
-  // copyFiles runs on the fresh-build path too, so every name in the persisted metadata must
-  // exist in the cache dir. Sourcemaps are the risky case: rewriteImports renames the entry to a
-  // content hash and deletes the original, while the .map keeps its version-based name.
-  it('copies sourcemaps alongside content-hashed entries without tripping the missing-file guard', async () => {
-    const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
-    const adapter: FakeBuildAdapter = createFakeBuildAdapter({
-      io: mem,
-      results: name => {
-        const setup = [...adapter.calls.setup].reverse().find(s => s.name === name)!;
-        return setup.options.entryPoints.flatMap(ep => [
-          { fileName: path.join(setup.options.outdir, ep.outName) },
-          { fileName: path.join(setup.options.outdir, `${ep.outName}.map`) },
-        ]);
-      },
+  describe('sourcemaps of content-hashed entries', () => {
+    // The adapter writes the entry the way esbuild does with `sourcemap: true`: a trailing
+    // sourceMappingURL comment naming the version-based outName, with the map beside it.
+    const mappedBuild = async (
+      mem: ReturnType<typeof createMemoryIo>,
+      opts: { comment?: boolean; map?: boolean } = {}
+    ) => {
+      const { comment = true, map = true } = opts;
+      const adapter: FakeBuildAdapter = createFakeBuildAdapter({
+        results: name => {
+          const setup = [...adapter.calls.setup].reverse().find(s => s.name === name)!;
+          const { outName } = setup.options.entryPoints[0]!;
+          const entry = path.join(setup.options.outdir, outName);
+          mem.setFile(
+            entry,
+            `export const foo = 1;\n${comment ? `//# sourceMappingURL=${outName}.map\n` : ''}`
+          );
+          if (!map) return [{ fileName: entry }];
+          mem.setFile(`${entry}.map`, '{"version":3,"sources":["foo.ts"],"mappings":""}');
+          return [{ fileName: entry }, { fileName: `${entry}.map` }];
+        },
+      });
+      return bundleSharedCore(
+        { io: mem, repo: repoAtVersion('2.0.0'), adapter },
+        fooWith(),
+        makeConfig(),
+        makeFedOptions({ cacheExternalArtifacts: true }),
+        [],
+        BUILD_OPTIONS
+      );
+    };
+
+    // core#153: the map used to keep its version-based name while the entry was re-hashed.
+    it('renames the map with the entry and points the comment at it', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+
+      const result = await mappedBuild(mem);
+
+      const outFileName = result.externals[0]!.outFileName;
+      expect(mem.isFile(path.join('/ws/dist', `${outFileName}.map`))).toBe(true);
+      expect(mem.readText(path.join('/ws/dist', outFileName))).toContain(
+        `//# sourceMappingURL=${outFileName}.map`
+      );
+      expect(mem.readDir('/ws/dist').filter(f => f.endsWith('.map'))).toEqual([
+        `${outFileName}.map`,
+      ]);
     });
 
-    const result = await bundleSharedCore(
-      { io: mem, repo: repoAtVersion('2.0.0'), adapter },
-      fooWith(),
-      makeConfig(),
-      makeFedOptions({ cacheExternalArtifacts: true }),
-      [],
-      BUILD_OPTIONS
-    );
+    // copyFiles runs on the fresh-build path too, so every name in the persisted metadata must
+    // exist in the cache dir, and the renamed map must be listed under its new name.
+    it('persists the renamed map without tripping the missing-file guard', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
 
-    const outFileName = result.externals[0]!.outFileName;
-    expect(mem.isFile(path.join('/ws/dist', outFileName))).toBe(true);
+      const result = await mappedBuild(mem);
 
-    const persisted: { files: string[] } = JSON.parse(
-      mem.readText(path.join('/cache', 'shared.meta.json'))
-    );
-    expect(persisted.files).toContain(outFileName);
-    expect(persisted.files.filter(f => f.endsWith('.map'))).toHaveLength(1);
-    for (const file of persisted.files) {
-      expect(mem.isFile(path.join('/ws/dist', file))).toBe(true);
-    }
+      const outFileName = result.externals[0]!.outFileName;
+      const persisted: { files: string[] } = JSON.parse(
+        mem.readText(path.join('/cache', 'shared.meta.json'))
+      );
+      expect(persisted.files).toEqual(expect.arrayContaining([outFileName, `${outFileName}.map`]));
+      expect(persisted.files.filter(f => f.endsWith('.map'))).toHaveLength(1);
+      for (const file of persisted.files) {
+        expect(mem.isFile(path.join('/ws/dist', file))).toBe(true);
+      }
+    });
+
+    // The comment is left out of the hash, so emitting a map does not change the entry's name,
+    // and entries built without maps keep the names they had before core#153.
+    it('names the entry the same with or without a sourcemap', async () => {
+      const mapped = await mappedBuild(createMemoryIo().setFile(ROOT_PKG, '{}'));
+      const plain = await mappedBuild(createMemoryIo().setFile(ROOT_PKG, '{}'), {
+        comment: false,
+        map: false,
+      });
+
+      expect(mapped.externals[0]!.outFileName).toBe(plain.externals[0]!.outFileName);
+    });
   });
 
   // core#154: two separate bundles that split out the same module emit one chunk name. With a

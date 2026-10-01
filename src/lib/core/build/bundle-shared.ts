@@ -22,6 +22,7 @@ import {
   collectSpecifierEdits,
   isSourceFile,
   shiftSourceMap,
+  SOURCE_MAP_COMMENT,
 } from './rewrite-chunk-imports.js';
 import { renameChunksByContentCore } from './rename-chunks-by-content.js';
 import { hashBuildMetadata, hashEntryContent } from '../../utils/hash.js';
@@ -342,11 +343,21 @@ function rewriteImports(
   for (const file of sourceFiles.filter(file => hashEntries.has(file))) {
     const filePath = path.join(bundleDir, file);
     const rewritten = io.readText(filePath);
-    const hashedName = `${file.split('.')[0]}.${hashEntryContent(io, rewritten)}.js`;
-    io.writeText(path.join(bundleDir, hashedName), rewritten);
+    // The comment names the map after the entry, so it cannot be part of what names the entry.
+    const body = rewritten.replace(SOURCE_MAP_COMMENT, '');
+    const hashedName = `${file.split('.')[0]}.${hashEntryContent(io, body)}.js`;
+    io.writeText(
+      path.join(bundleDir, hashedName),
+      rewritten.split(`${file}.map`).join(`${hashedName}.map`)
+    );
     // Cache hygiene: drop the version-named intermediate (untracked by metadata, so clear() can't reap it).
     io.remove(filePath);
     renamed.set(file, hashedName);
+    if (io.exists(`${filePath}.map`)) {
+      io.copyFile(`${filePath}.map`, path.join(bundleDir, `${hashedName}.map`));
+      io.remove(`${filePath}.map`);
+      renamed.set(`${file}.map`, `${hashedName}.map`);
+    }
   }
 
   return renamed;

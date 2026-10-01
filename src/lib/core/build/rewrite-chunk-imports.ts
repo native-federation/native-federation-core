@@ -132,6 +132,8 @@ export function rewriteChunkImportsCore(
   shiftSourceMap(io, `${filePath}.map`, sourceCode, edits);
 }
 
+export const SOURCE_MAP_COMMENT = /\/\/# sourceMappingURL=\S+\s*$/;
+
 export function isSourceFile(fileName: string): boolean {
   return !!fileName.match(/.(m|c)?js$/);
 }
