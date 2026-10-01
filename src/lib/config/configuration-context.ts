@@ -20,3 +20,21 @@ export function usePackageJson(packageJson?: string): void {
 export function getConfigContext(): ConfigurationContext {
   return _context;
 }
+
+let pendingLoad: Promise<unknown> = Promise.resolve();
+
+// The context is global and a config reads it while it evaluates, so concurrent loads (several
+// remotes built in one process) are queued; otherwise each config sees the last caller's context.
+export function loadWithConfigContext<T>(
+  context: ConfigurationContext,
+  load: () => Promise<T>,
+  io: FileReaderPort = nodeIo
+): Promise<T> {
+  const run = pendingLoad.then(() => {
+    useWorkspace(context.workspaceRoot ?? '', io);
+    usePackageJson(context.packageJson);
+    return load();
+  });
+  pendingLoad = run.catch(() => undefined);
+  return run;
+}
