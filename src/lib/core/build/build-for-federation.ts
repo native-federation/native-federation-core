@@ -10,6 +10,7 @@ import type { NormalizedFederationConfig } from '../../domain/config/federation-
 import { addExternalsToCache } from '../cache/federation-cache.js';
 import { planSharedBundles, type SharedBundlePlan } from './shared-bundle-plan.js';
 import { hintUnwatchedLinkedDeps } from './resolve-shared-dirs.js';
+import { prepareCache } from '../cache/cache-persistence.js';
 
 export async function buildForFederation(
   config: NormalizedFederationConfig,
@@ -21,6 +22,9 @@ export async function buildForFederation(
   logger.info('Building federation artifacts');
   logger.notice("Skip packages you don't want to share in your federation config");
   hintUnwatchedLinkedDeps(config, fedOptions);
+  // Before any plan runs: the separate plans build in parallel, and the adapter writes its own
+  // files into this folder during setup.
+  prepareCache(fedOptions.federationCache.cachePath);
 
   // 2. Externals
   await executeSharedBundlePlans(planSharedBundles(config, externals), config, fedOptions, signal);

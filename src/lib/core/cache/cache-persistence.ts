@@ -1,4 +1,5 @@
 import path from 'path';
+import { fileURLToPath } from 'url';
 import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type {
@@ -17,10 +18,14 @@ import { logger } from '../../utils/logger.js';
 export const getDefaultCachePath = (workspaceRoot: string) =>
   path.join(workspaceRoot, 'node_modules/.cache/native-federation');
 
-export const getFilename = (title: string, dev?: boolean) => {
-  const devSuffix = dev ? '-dev' : '';
-  return `${title}${devSuffix}.meta.json`;
-};
+const getCacheKey = (title: string, dev?: boolean) => `${title}${dev ? '-dev' : ''}`;
+
+export const getFilename = (title: string, dev?: boolean) => `${getCacheKey(title, dev)}.meta.json`;
+
+// Each bundle owns a folder of its own: content-named chunks collide across bundles, and a
+// bundle renaming or clearing its copy must not take another bundle's with it (core#154).
+const getBundleDir = (cachePath: string, title: string, dev?: boolean) =>
+  path.join(cachePath, getCacheKey(title, dev));
 
 export const getChecksum = (
   shared: Record<string, NormalizedExternalConfig>,
@@ -99,13 +104,20 @@ export type CacheMetadata = {
 
 type CachePort = FileReaderPort & FileWriterPort;
 
-export const cacheEntryCore = (io: CachePort, pathToCache: string, fileName: string) => {
-  const metadataFile = path.join(pathToCache, fileName);
+export const cacheEntryCore = (
+  io: CachePort,
+  pathToCache: string,
+  bundleName: string,
+  dev?: boolean
+) => {
+  const metadataFile = path.join(pathToCache, getFilename(bundleName, dev));
+  const dir = getBundleDir(pathToCache, bundleName, dev);
   const readMetadata = (): CacheMetadata => JSON.parse(io.readText(metadataFile));
 
   return {
+    dir,
     getMetadata: (checksum: string): CacheMetadata | undefined => {
-      if (!io.exists(pathToCache) || !io.exists(metadataFile)) return undefined;
+      if (!io.exists(metadataFile)) return undefined;
 
       const cachedResult = readMetadata();
       if (cachedResult.checksum !== checksum) return undefined;
@@ -122,7 +134,7 @@ export const cacheEntryCore = (io: CachePort, pathToCache: string, fileName: str
       io.mkdirp(fullOutputPath);
 
       cachedResult.files.forEach(file => {
-        const cachedFile = path.join(pathToCache, file);
+        const cachedFile = path.join(dir, file);
         if (!io.exists(cachedFile))
           throw new Error(
             `Cached artifact '${file}' recorded in '${metadataFile}' is missing. ` +
@@ -132,22 +144,73 @@ export const cacheEntryCore = (io: CachePort, pathToCache: string, fileName: str
       });
     },
     clear: () => {
-      if (!io.exists(pathToCache)) {
-        io.mkdirp(pathToCache);
-        logger.debug(`Creating cache folder '${pathToCache}' for '${fileName}'.`);
-        return;
-      }
-      if (!io.exists(metadataFile)) return;
-
-      logger.debug(`Purging cached bundle '${metadataFile}'.`);
-
-      const cachedResult = readMetadata();
-      cachedResult.files.forEach(file => {
-        const cachedFile = path.join(pathToCache, file);
-        if (io.exists(cachedFile)) io.remove(cachedFile);
-      });
-
-      io.remove(metadataFile);
+      logger.debug(`Purging cached bundle '${dir}'.`);
+      // Metadata first: an interrupted clear must not leave metadata listing files that are gone.
+      if (io.exists(metadataFile)) io.remove(metadataFile);
+      io.removeDir(dir);
+      io.mkdirp(dir);
     },
   };
 };
+
+const STAMP_FILE = '.nf-cache.json';
+// Bump when the on-disk layout changes within a minor.
+const CACHE_LAYOUT = 2;
+
+type CacheStamp = { layout: number; version: string };
+
+const minorOf = (version: string) => /^\d+\.\d+/.exec(version)?.[0] ?? version;
+
+const readStamp = (io: CachePort, file: string): CacheStamp | undefined => {
+  if (!io.exists(file)) return undefined;
+  try {
+    return JSON.parse(io.readText(file));
+  } catch {
+    return undefined;
+  }
+};
+
+// Patch releases already miss per bundle through the checksum; a minor may change the layout,
+// which a checksum cannot see, so the whole project cache goes. A cache without a stamp
+// predates per-bundle folders and is purged the same way.
+export const prepareCacheCore = (io: CachePort, cachePath: string, builderVersion: string) => {
+  const stampFile = path.join(cachePath, STAMP_FILE);
+  const stamp = readStamp(io, stampFile);
+  if (stamp?.layout === CACHE_LAYOUT && minorOf(stamp.version) === minorOf(builderVersion)) return;
+
+  if (io.exists(cachePath)) {
+    logger.debug(`Purging cache folder '${cachePath}' written by another builder version.`);
+    io.removeDir(cachePath);
+  }
+  io.mkdirp(cachePath);
+  io.writeText(stampFile, JSON.stringify({ layout: CACHE_LAYOUT, version: builderVersion }));
+};
+
+export const prepareCache = (cachePath: string) =>
+  prepareCacheCore(
+    nodeIo,
+    cachePath,
+    parseBuilderVersion(readBuilderPackageJson(nodeIo, fileURLToPath(import.meta.url)))
+  );
+
+// Walk up to the nearest package.json: the file's depth differs across src/dist/test layouts.
+export function readBuilderPackageJson(io: FileReaderPort, fromFile: string): string {
+  let dir = path.dirname(fromFile);
+  for (;;) {
+    const candidate = path.join(dir, 'package.json');
+    if (io.exists(candidate)) return io.readText(candidate);
+    const parent = path.dirname(dir);
+    // Stop at the package boundary: terminate at the filesystem root, and never ascend past a
+    // node_modules dir into an unrelated (consumer / monorepo-root) package.json.
+    if (parent === dir || path.basename(parent) === 'node_modules') return '{}';
+    dir = parent;
+  }
+}
+
+export function parseBuilderVersion(packageJson: string): string {
+  try {
+    return JSON.parse(packageJson).version ?? '';
+  } catch {
+    return '';
+  }
+}

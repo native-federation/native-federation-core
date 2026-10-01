@@ -11,7 +11,6 @@ vi.mock('./bundle-exposed-and-mappings.js', () => ({
 }));
 vi.mock('../cache/cache-persistence.js', () => ({
   cacheEntryCore: vi.fn(() => ({ clear: vi.fn() })),
-  getFilename: vi.fn((name: string) => `${name}.meta.json`),
 }));
 vi.mock('./resolve-shared-dirs.js', () => ({
   resolveSharedPackageDirs: vi.fn(() => new Map()),

@@ -179,6 +179,12 @@ export function createMemoryIo(): MemoryIo {
     remove(p) {
       files.delete(toKey(p));
     },
+    removeDir(p) {
+      const key = toKey(p);
+      const inside = (entry: string) => entry === key || entry.startsWith(key + '/');
+      for (const entry of [...files.keys()]) if (inside(entry)) files.delete(entry);
+      for (const entry of [...dirs]) if (inside(entry)) dirs.delete(entry);
+    },
     globFiles(pattern, opts) {
       const cwd = toKey(opts.cwd);
       const re = matcher(pattern);

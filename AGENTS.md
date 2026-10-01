@@ -273,7 +273,11 @@ Native Federation uses an intelligent caching system to speed up builds:
 
 **Externals cache** (`src/lib/core/cache/cache-persistence.ts`) — on disk, across builds:
 
-- Caches the bundled shared dependencies of each bundle, alongside a `.meta.json` describing them
+- Caches the bundled shared dependencies of each bundle. Per project
+  (`<cachePath>/<project>/`), each bundle's `<bundle>[-dev].meta.json` sits in the root and its
+  artifacts in a folder of the same name, `<bundle>[-dev]/`. Content-named chunks collide across
+  bundles, so a shared folder would let one bundle's chunk rename or `clear()` delete a file
+  another bundle still lists (core#154). `clear()` therefore removes the whole bundle folder.
 - Keyed by a checksum over the external names, their installed versions, the builder version and
   the relevant feature flags (`getChecksum`)
 - Stored in `node_modules/.cache/native-federation` by default (`getDefaultCachePath`)
@@ -288,6 +292,11 @@ Native Federation uses an intelligent caching system to speed up builds:
 - Based on the installed versions of shared packages, not their declared ranges
   (`installedVersions`)
 - Based on configuration changes and on the builder version
+- `.nf-cache.json` in the project cache folder stamps the layout version and the builder version.
+  `buildForFederation` checks it before any bundle runs (`prepareCache`), and deletes the whole
+  project cache folder when the stamp is missing, unreadable, or differs in layout or `major.minor`.
+  Patch releases already miss per bundle through the checksum. Two processes building one project
+  on different minors (a `serve` and a `build` mid-upgrade) can purge each other's cache.
 - For symlinked (npm-linked) deps, additionally on a content signal (max mtime of the package dir)
 - Can be cleared by deleting the cache folder
 

@@ -26,7 +26,12 @@ import {
 import { renameChunksByContentCore } from './rename-chunks-by-content.js';
 import { hashBuildMetadata, hashEntryContent } from '../../utils/hash.js';
 import { toChunkImport } from '../../domain/core/chunk.js';
-import { cacheEntryCore, getChecksumCore, getFilename } from '../cache/cache-persistence.js';
+import {
+  cacheEntryCore,
+  getChecksumCore,
+  parseBuilderVersion,
+  readBuilderPackageJson,
+} from '../cache/cache-persistence.js';
 import { linkedContentSignals } from './resolve-shared-dirs.js';
 import { computeIntegrityMapCore } from './compute-integrity.js';
 import { fileURLToPath } from 'url';
@@ -91,7 +96,6 @@ export async function bundleSharedCore(
   chunks?: Record<string, string[]>;
   integrity?: IntegrityMap;
 }> {
-  // Walk up to the nearest package.json: the file's depth differs across src/dist/test layouts.
   const builderPackageJson = readBuilderPackageJson(deps.io, fileURLToPath(import.meta.url));
   const builderVersion = parseBuilderVersion(builderPackageJson);
 
@@ -126,7 +130,8 @@ export async function bundleSharedCore(
   const bundleCache = cacheEntryCore(
     deps.io,
     fedOptions.federationCache.cachePath,
-    getFilename(buildOptions.bundleName, fedOptions.dev)
+    buildOptions.bundleName,
+    fedOptions.dev
   );
 
   if (fedOptions?.cacheExternalArtifacts) {
@@ -136,11 +141,7 @@ export async function bundleSharedCore(
       bundleCache.copyFiles(path.join(fedOptions.workspaceRoot, fedOptions.outputPath));
       let integrity = cacheMetadata.integrity;
       if (config.features.integrityHashes && !integrity) {
-        integrity = computeIntegrityMapCore(
-          deps.io,
-          cacheMetadata.files,
-          fedOptions.federationCache.cachePath
-        );
+        integrity = computeIntegrityMapCore(deps.io, cacheMetadata.files, bundleCache.dir);
       }
       return {
         externals: cacheMetadata.externals,
@@ -182,13 +183,7 @@ export async function bundleSharedCore(
     // Re-emit named exports of CommonJS externals as static exports. ESM externals are left untouched.
     const synthetic =
       deps.evaluateModule && config.features.synthesizeCjsExports
-        ? synthesizeCjsNamedExportsEntry(
-            deps.io,
-            deps.evaluateModule,
-            pi,
-            fedOptions.federationCache.cachePath,
-            outName
-          )
+        ? synthesizeCjsNamedExportsEntry(deps.io, deps.evaluateModule, pi, bundleCache.dir, outName)
         : null;
     return { fileName: synthetic ?? pi.entryPoint, outName };
   });
@@ -209,7 +204,7 @@ export async function bundleSharedCore(
       entryPoints,
       tsConfigPath: fedOptions.tsConfig,
       external: [...additionalExternals, ...externals],
-      outdir: fedOptions.federationCache.cachePath,
+      outdir: bundleCache.dir,
       mappedPaths: config.sharedMappings,
       dev: fedOptions.dev,
       isMappingOrExposed: false,
@@ -233,7 +228,7 @@ export async function bundleSharedCore(
     const renamed = rewriteImports(
       deps.io,
       cachedFiles,
-      fedOptions.federationCache.cachePath,
+      bundleCache.dir,
       new Set(entryPoints.map(ep => ep.outName)),
       hashEntries
     );
@@ -295,7 +290,7 @@ export async function bundleSharedCore(
 
   // Must run after rewriteImports so SRI matches the bytes copied to dist.
   const integrity = config.features.integrityHashes
-    ? computeIntegrityMapCore(deps.io, persistedFiles, fedOptions.federationCache.cachePath)
+    ? computeIntegrityMapCore(deps.io, persistedFiles, bundleCache.dir)
     : undefined;
 
   bundleCache.persist({
@@ -314,14 +309,14 @@ export async function bundleSharedCore(
 function rewriteImports(
   io: IoPort,
   cachedFiles: string[],
-  cachePath: string,
+  bundleDir: string,
   entries: Set<string>,
   hashEntries: Set<string>
 ): Map<string, string> {
   const sourceFiles = cachedFiles.filter(isSourceFile);
 
   for (const file of sourceFiles) {
-    const filePath = path.join(cachePath, file);
+    const filePath = path.join(bundleDir, file);
     const sourceCode = io.readText(filePath);
     const edits = collectSpecifierEdits(sourceCode, file);
     io.writeText(filePath, applyEdits(sourceCode, edits));
@@ -334,21 +329,21 @@ function rewriteImports(
   const renamed = new Map<string, string>();
   const chunkRenames = renameChunksByContentCore(
     io,
-    cachePath,
+    bundleDir,
     sourceFiles.filter(file => !entries.has(file)),
     sourceFiles.filter(file => entries.has(file))
   );
   for (const [file, target] of chunkRenames) {
     renamed.set(file, target);
-    if (io.exists(path.join(cachePath, `${target}.map`)))
+    if (io.exists(path.join(bundleDir, `${target}.map`)))
       renamed.set(`${file}.map`, `${target}.map`);
   }
 
   for (const file of sourceFiles.filter(file => hashEntries.has(file))) {
-    const filePath = path.join(cachePath, file);
+    const filePath = path.join(bundleDir, file);
     const rewritten = io.readText(filePath);
     const hashedName = `${file.split('.')[0]}.${hashEntryContent(io, rewritten)}.js`;
-    io.writeText(path.join(cachePath, hashedName), rewritten);
+    io.writeText(path.join(bundleDir, hashedName), rewritten);
     // Cache hygiene: drop the version-named intermediate (untracked by metadata, so clear() can't reap it).
     io.remove(filePath);
     renamed.set(file, hashedName);
@@ -434,26 +429,5 @@ function addChunksToResult(chunks: NFBuildAdapterResult[], result: SharedInfo[])
       packageName: toChunkImport(fileName),
       outFileName: fileName,
     });
-  }
-}
-
-export function readBuilderPackageJson(io: IoPort, fromFile: string): string {
-  let dir = path.dirname(fromFile);
-  for (;;) {
-    const candidate = path.join(dir, 'package.json');
-    if (io.exists(candidate)) return io.readText(candidate);
-    const parent = path.dirname(dir);
-    // Stop at the package boundary: terminate at the filesystem root, and never ascend past a
-    // node_modules dir into an unrelated (consumer / monorepo-root) package.json.
-    if (parent === dir || path.basename(parent) === 'node_modules') return '{}';
-    dir = parent;
-  }
-}
-
-export function parseBuilderVersion(packageJson: string): string {
-  try {
-    return JSON.parse(packageJson).version ?? '';
-  } catch {
-    return '';
   }
 }

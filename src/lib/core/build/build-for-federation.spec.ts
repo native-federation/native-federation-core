@@ -12,6 +12,11 @@ vi.mock('./bundle-exposed-and-mappings.js', () => ({
   bundleExposedAndMappings: vi.fn(async () => ({ mappings: [], exposes: [] })),
 }));
 
+vi.mock('../cache/cache-persistence.js', async importActual => ({
+  ...(await importActual<object>()),
+  prepareCache: vi.fn(),
+}));
+
 vi.mock('./resolve-shared-dirs.js', async importActual => ({
   ...(await importActual<typeof sharedDirs>()),
   hintUnwatchedLinkedDeps: vi.fn(),
