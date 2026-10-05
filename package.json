@@ -40,7 +40,7 @@
     "tslib": "^2.3.0",
     "typescript-eslint": "^8.68.0",
     "typescript-floor": "npm:typescript@5.0.4",
-    "vite": "^8.3.0",
+    "vite": "^8.3.1",
     "vitest": "^4.0.0"
   },
   "exports": {
