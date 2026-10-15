@@ -157,6 +157,7 @@ function makeConfig(
       denseExternals: false,
       integrityHashes: false,
       synthesizeCjsExports: true,
+      strictImports: false,
     },
     ...overrides,
   };
