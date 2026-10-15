@@ -237,7 +237,7 @@ export function shareCore(
           ? applyAutoRequiredOptions(raw, { range: requiredVersionCfg.range })
           : raw;
 
-      // Keep the numeric version for cache/installed-version tracking (strip non-digits).
+      // The declared range's floor, not the installed version: only a fallback where none is installed.
       shareObject.version = raw.replace(/^\D*/, '');
     }
 

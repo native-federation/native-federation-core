@@ -181,7 +181,7 @@ function readConfiguredSecondaries(
           ...shareObject,
           packageInfo: {
             entryPoint: item.value,
-            version: shareObject.version ?? version,
+            version: version || shareObject.version,
             esm,
           },
         };

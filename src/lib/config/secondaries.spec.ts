@@ -69,6 +69,46 @@ describe('getSecondaries', () => {
     ]);
   });
 
+  // core#169: share() stores the declared range's floor in shareObject.version; the bundled code is
+  // the installed copy, so that is the version a glob-expanded secondary must report.
+  it('stamps glob-expanded secondaries with the installed version, not the declared floor', () => {
+    const io = createMemoryIo()
+      .setFile(
+        path.join(LIB, 'package.json'),
+        JSON.stringify({ version: '17.1.1', type: 'module', exports: { './*': './*' } })
+      )
+      .setFile(path.join(LIB, 'feature.js'), '');
+
+    const result = getSecondaries(
+      io,
+      { skip: [], resolveGlob: true },
+      LIB,
+      'mylib',
+      { ...shareObject, requiredVersion: '^17.1.0', version: '17.1.0' },
+      EMPTY_SKIP
+    );
+
+    expect(result!['mylib/feature.js']!.packageInfo!.version).toBe('17.1.1');
+  });
+
+  // Without an installed version there is nothing better than what share() resolved.
+  it('falls back to the configured version when the package.json has none', () => {
+    const io = createMemoryIo()
+      .setFile(path.join(LIB, 'package.json'), JSON.stringify({ exports: { './*': './*' } }))
+      .setFile(path.join(LIB, 'feature.js'), '');
+
+    const result = getSecondaries(
+      io,
+      { skip: [], resolveGlob: true },
+      LIB,
+      'mylib',
+      { ...shareObject, requiredVersion: '^17.1.0', version: '17.1.0' },
+      EMPTY_SKIP
+    );
+
+    expect(result!['mylib/feature.js']!.packageInfo!.version).toBe('17.1.0');
+  });
+
   it('falls back to walking subfolders (readDir) when there is no exports map', () => {
     const io = createMemoryIo()
       .setFile(path.join(LIB, 'sub', 'package.json'), '{}')
