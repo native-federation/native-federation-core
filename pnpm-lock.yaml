@@ -52,7 +52,7 @@ importers:
         specifier: ^2.6.1
         version: 2.7.0
       jsdom:
-        specifier: ^30.1.0
+        specifier: ^30.1.1
         version: 30.1.1
       knip:
         specifier: ^6.34.0
