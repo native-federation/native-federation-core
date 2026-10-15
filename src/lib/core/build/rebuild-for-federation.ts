@@ -3,6 +3,7 @@ import { bundleExposedAndMappings } from './bundle-exposed-and-mappings.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
 import { assembleFederationInfo } from './assemble-federation-info.js';
 import { writeFederationOutputs } from '../output/write-federation-outputs.js';
+import { validateBareImports } from '../output/validate-bare-imports.js';
 import { logger } from '../../utils/logger.js';
 import { AbortedError } from '../../utils/errors.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
@@ -40,6 +41,7 @@ export async function rebuildForFederation(
     throw new AbortedError('[rebuildForFederation] After exposed-and-mappings bundle');
 
   const federationInfo = assembleFederationInfo(config, fedOptions, artifactInfo);
+  validateBareImports(config, fedOptions, federationInfo);
   writeFederationOutputs(federationInfo, fedOptions);
 
   return federationInfo;

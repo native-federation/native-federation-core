@@ -107,6 +107,7 @@ function makeConfig(): NormalizedFederationConfig {
       denseExternals: false,
       integrityHashes: false,
       synthesizeCjsExports: true,
+      strictImports: false,
     },
   };
 }

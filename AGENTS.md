@@ -132,6 +132,8 @@ export default withNativeFederation({
 
   skip: ['some-lib'], // Skip sharing certain libs
 
+  externals: ['host-sdk'], // Left as a bare import but never published; something else provides it
+
   sharedMappings: ['@my-org/*'], // Share monorepo libs matching a pattern (omit to share all)
 
   chunks: true, // Enable code-splitting (default: true)
@@ -140,6 +142,7 @@ export default withNativeFederation({
     denseChunking: true, // Optimize remoteEntry.json structure
     denseExternals: true, // Group all entrypoints of a shared external under one object (opt-in); entries only merge when all metadata but file and dev hint match
     mappingVersion: true, // Use versions for shared mappings, is now opt-out
+    strictImports: false, // Fail the build, instead of warning, on a bare import remoteEntry.json does not declare
   },
 });
 ```
@@ -153,6 +156,19 @@ export default withNativeFederation({
 - **`chunks`**: Can be set globally or per-package to control code-splitting
 - **`sharedMappings`**: Entries are patterns, and may be paired with an `ExternalConfig` as `[['@my-org/ui/*'], { singleton: false }]` (first matching entry wins). `mappingsFromWorkspace()` builds the same array. `includeSecondaries` exempts a mapping from `ignoreUnusedDeps` reachability entirely — either `true` or `{ keepAll: true }` does it here, unlike a shared package where `true` is the default and only `{ keepAll: true }` affects pruning; wildcards additionally need `{ resolveGlob: true }`. Without that exemption, reachability resolves wildcards itself — no `resolveGlob` needed — and also follows imports by specifier from one mapping into another, so an entry point only another mapping's barrel re-exports stays published (core#135); relative imports inside a mapping are its own code and are bundled. Only barrel imports can be shared as a mapped path: a specifier with a dot in its last segment cannot be resolved from an import map ([vite#21036](https://github.com/vitejs/vite/issues/21036)). `assertBarrelMappings` therefore throws on anything that would reach `remoteEntry.json`; paths that are pruned or dropped by wildcard expansion are never published, so they are filtered silently instead. A mapping entry point that imports a subpath of a mapping `remoteEntry.json` publishes (`@my-org/ui/button.js`, `@my-org/ui/index.js`) gets a warning: esbuild keeps every subpath of an external verbatim, and the import map has no key for it. Only files the mapping itself matches are scanned, which for a single-file mapping is just its barrel; a skipped mapping is bundled, so its subpaths never warn. `build` selects a bundle (see the Chunks section); `platform`, `chunks` and `packageInfo` are not honoured for mappings and warn.
 - **`build: 'package'`**: Bundle a shared dependency in isolation (not in the shared bundle)
+- **`externals`**: Opt-out specifiers. They reach the bundler as external, so they stay bare imports,
+  but are never published in `remoteEntry.json`: the host page or another loader provides them.
+
+### Unresolvable bare imports
+
+The bundler keeps every subpath of an external as a bare import, but the import map only has the
+exact keys `remoteEntry.json` declares. A shared package's secondary that `ignoreUnusedDeps` pruned,
+or that is in `skip`, therefore stays an import nothing resolves (core#168). After assembling
+`remoteEntry.json`, `validateBareImports` reads every published file (shared entries, mappings,
+exposed modules, chunks) and reports each bare specifier that is neither declared, a published
+chunk, nor matched by `externals` (with esbuild's own subpath and `*` rules). Node built-ins pass
+only in `platform: 'node'` bundles. It warns by default and throws with `features.strictImports`.
+It reads the output directory rather than the bundler results, so cached bundles are covered too.
 
 ## File Watching & Development
 

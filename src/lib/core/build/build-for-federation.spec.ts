@@ -60,6 +60,7 @@ function makeConfig(denseExternals: boolean): NormalizedFederationConfig {
       denseExternals,
       integrityHashes: false,
       synthesizeCjsExports: true,
+      strictImports: false,
     },
   };
 }
