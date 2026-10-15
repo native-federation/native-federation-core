@@ -21,6 +21,35 @@ describe('getExternalImportsCore', () => {
     expect(getExternalImportsCore(io, f('entry.ts'))).toEqual(['lodash']);
   });
 
+  // provideAnimationsAsync() reaches @angular/animations/browser only this way (core#168).
+  it('detects dynamic import() specifiers', () => {
+    const io = createMemoryIo().setFile(
+      f('entry.ts'),
+      `const load = () => import('@angular/animations/browser');
+       const tpl = () => import(\`lazy-dep\`);`
+    );
+    expect(getExternalImportsCore(io, f('entry.ts')).sort()).toEqual([
+      '@angular/animations/browser',
+      'lazy-dep',
+    ]);
+  });
+
+  it('follows relative dynamic imports', () => {
+    const io = createMemoryIo()
+      .setFile(f('entry.ts'), `const m = () => import('./lazy');`)
+      .setFile(f('lazy.ts'), `import 'lazy-external';`);
+    expect(getExternalImportsCore(io, f('entry.ts'))).toEqual(['lazy-external']);
+  });
+
+  // The target is only known at runtime, so there is nothing to keep.
+  it('ignores dynamic imports with a computed specifier', () => {
+    const io = createMemoryIo().setFile(
+      f('entry.ts'),
+      'const load = (name) => import(name); const t = (n) => import(`pkg/${n}`);'
+    );
+    expect(getExternalImportsCore(io, f('entry.ts'))).toEqual([]);
+  });
+
   it('follows relative imports and does not treat them as external', () => {
     const io = createMemoryIo()
       .setFile(f('entry.ts'), `import './local';`)
