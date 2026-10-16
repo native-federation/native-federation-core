@@ -130,4 +130,83 @@ describe('getRawMappedPathsCore', () => {
     );
     expect(result).toEqual({ [path.join(path.resolve('/other'), 'a/index.ts')]: '@a' });
   });
+
+  // core#149: the compile follows `extends`, so the mapping set has to as well.
+  describe('resolves paths the way TypeScript does', () => {
+    it('follows extends to a parent tsconfig and resolves against the file defining paths', () => {
+      const io = createMemoryIo()
+        .setFile(
+          path.join(ROOT, 'tsconfig.base.json'),
+          JSON.stringify({ compilerOptions: { paths: { '@org/ui': ['libs/ui/index.ts'] } } })
+        )
+        .setFile(
+          path.join(ROOT, 'apps/shell/tsconfig.federation.json'),
+          JSON.stringify({ extends: '../../tsconfig.base.json', include: ['src/**/*.d.ts'] })
+        );
+
+      const { paths: result } = getRawMappedPathsCore(
+        io,
+        path.join(ROOT, 'apps/shell/tsconfig.federation.json')
+      );
+      expect(result).toEqual({ [path.join(ROOT, 'libs/ui/index.ts')]: '@org/ui' });
+    });
+
+    it('lets a child override the paths it inherits', () => {
+      const io = createMemoryIo()
+        .setFile(
+          path.join(ROOT, 'tsconfig.json'),
+          JSON.stringify({ compilerOptions: { paths: { '@org/ui': ['libs/ui/index.ts'] } } })
+        )
+        .setFile(
+          path.join(ROOT, 'apps/shell/tsconfig.app.json'),
+          JSON.stringify({
+            extends: '../../tsconfig.json',
+            compilerOptions: { paths: { '@shell/data': ['src/data/index.ts'] } },
+          })
+        );
+
+      const { paths: result } = getRawMappedPathsCore(
+        io,
+        path.join(ROOT, 'apps/shell/tsconfig.app.json')
+      );
+      expect(result).toEqual({ [path.join(ROOT, 'apps/shell/src/data/index.ts')]: '@shell/data' });
+    });
+
+    it('follows extends into a package', () => {
+      const io = createMemoryIo()
+        .setFile(path.join(ROOT, 'package.json'), '{}')
+        .setFile(
+          path.join(ROOT, 'node_modules/@org/tsconfig/package.json'),
+          JSON.stringify({ name: '@org/tsconfig', version: '1.0.0' })
+        )
+        .setFile(
+          path.join(ROOT, 'node_modules/@org/tsconfig/tsconfig.json'),
+          JSON.stringify({
+            compilerOptions: { baseUrl: '../../..', paths: { '@org/ui': ['libs/ui/index.ts'] } },
+          })
+        )
+        .setFile(TSCONFIG, JSON.stringify({ extends: '@org/tsconfig/tsconfig.json' }));
+
+      const { paths: result } = getRawMappedPathsCore(io, TSCONFIG);
+      expect(result).toEqual({ [path.join(ROOT, 'libs/ui/index.ts')]: '@org/ui' });
+    });
+
+    it('resolves targets against baseUrl', () => {
+      const io = createMemoryIo().setFile(
+        TSCONFIG,
+        JSON.stringify({ compilerOptions: { baseUrl: 'src', paths: { '@a': ['a/index.ts'] } } })
+      );
+      const { paths: result } = getRawMappedPathsCore(io, TSCONFIG);
+      expect(result).toEqual({ [path.join(ROOT, 'src/a/index.ts')]: '@a' });
+    });
+
+    // TS 6 reports a deprecated baseUrl as an error; that is the compile's to raise, not ours.
+    it('does not throw on option diagnostics', () => {
+      const io = createMemoryIo().setFile(
+        TSCONFIG,
+        JSON.stringify({ compilerOptions: { notAnOption: true, paths: { '@a': ['a/index.ts'] } } })
+      );
+      expect(Object.values(getRawMappedPathsCore(io, TSCONFIG).paths)).toEqual(['@a']);
+    });
+  });
 });

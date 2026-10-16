@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import * as path from 'path';
 import { cwd } from 'process';
-import { findRootTsConfigJsonCore } from './project-paths.js';
+import { findMappingsTsConfigCore, findRootTsConfigJsonCore } from './project-paths.js';
 import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
-import { usePackageJson, useWorkspace } from './configuration-context.js';
+import { usePackageJson, useTsConfig, useWorkspace } from './configuration-context.js';
 
 const ROOT = cwd();
 
@@ -67,8 +67,8 @@ describe('findRootTsConfigJsonCore', () => {
       expect(findRootTsConfigJsonCore(io)).toBe(path.join(WS, 'tsconfig.json'));
     });
 
-    // A monorepo root's tsconfig.base.json carries the paths a subproject's tsconfig.json only
-    // inherits through `extends`, which getRawMappedPaths does not follow.
+    // A monorepo root's tsconfig.base.json carries the paths; a subproject's tsconfig.json may
+    // not extend it, so the cwd resolution must not move.
     it('keeps the tsconfig found from cwd', () => {
       const io = withPackageJson()
         .setFile(path.join(ROOT, 'tsconfig.base.json'), '{}')
@@ -89,5 +89,49 @@ describe('findRootTsConfigJsonCore', () => {
 
   it('rethrows the cwd error without a workspace root in the context', () => {
     expect(() => findRootTsConfigJsonCore(createMemoryIo())).toThrow(/no package.json found/);
+  });
+});
+
+// core#149: shared mappings come from the tsconfig the build compiles with.
+describe('findMappingsTsConfigCore', () => {
+  const WS = path.resolve('/ws');
+
+  afterEach(() => {
+    useWorkspace('');
+    usePackageJson(undefined);
+    useTsConfig(undefined);
+  });
+
+  it('resolves the build tsconfig against the workspace root', () => {
+    const io = createMemoryIo().setFile(path.join(WS, 'apps/shell/tsconfig.federation.json'), '{}');
+    useWorkspace(WS, io);
+    useTsConfig('apps/shell/tsconfig.federation.json');
+
+    expect(findMappingsTsConfigCore(io)).toBe(path.join(WS, 'apps/shell/tsconfig.federation.json'));
+  });
+
+  it('keeps an absolute build tsconfig', () => {
+    const abs = path.resolve('/elsewhere/tsconfig.app.json');
+    const io = createMemoryIo().setFile(abs, '{}');
+    useWorkspace(WS, io);
+    useTsConfig(abs);
+
+    expect(findMappingsTsConfigCore(io)).toBe(abs);
+  });
+
+  it('throws when the build tsconfig does not exist', () => {
+    const io = createMemoryIo();
+    useWorkspace(WS, io);
+    useTsConfig('apps/shell/tsconfig.federation.json');
+
+    expect(() => findMappingsTsConfigCore(io)).toThrow(/does not exist/);
+  });
+
+  it('falls back to the root tsconfig without a build tsconfig', () => {
+    const io = createMemoryIo()
+      .setFile(path.join(ROOT, 'package.json'), '{}')
+      .setFile(path.join(ROOT, 'tsconfig.json'), '{}');
+
+    expect(findMappingsTsConfigCore(io)).toBe(path.join(ROOT, 'tsconfig.json'));
   });
 });

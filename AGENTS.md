@@ -97,10 +97,16 @@ lands in one directory whatever `process.cwd()` is (core#156). Inputs follow the
   evaluates, after an await: two remotes normalized in parallel would otherwise both see the
   second one's context.
 - The `ignoreUnusedDeps` scan roots sheriff at `workspaceRoot`.
-- `findRootTsConfigJson` still searches from cwd first, so a resolution that works today does not
-  move, and falls back to the workspace root only when that search finds nothing. Searching from
-  `workspaceRoot` first would pick a subproject's own `tsconfig.json` over the repo root's
-  `tsconfig.base.json`, and its `paths` are read without following `extends`.
+- Shared mappings are read from the tsconfig the build compiles with (core#149):
+  `normalizeFederationOptions` puts `tsConfig` in the config context and `findMappingsTsConfig`
+  resolves it against `workspaceRoot`, the way the Angular adapter does. `paths` is parsed with
+  TypeScript's own API, so `extends` is followed and targets resolve against `baseUrl` or the file
+  that defines `paths`. Only the first target of each key is used.
+- Without a `tsConfig` (a config loaded outside a build), `findRootTsConfigJson` is the fallback.
+  It still searches from cwd first, so a resolution that works today does not move, and falls back
+  to the workspace root only when that search finds nothing. Searching from `workspaceRoot` first
+  would pick a subproject's own `tsconfig.json` over the repo root's `tsconfig.base.json`, which
+  that subproject need not extend.
 - `tsConfigPath` is passed through as given and is the adapter's to resolve: the Angular adapter
   joins it onto `workspaceRoot`, which an absolute path would break.
 
@@ -142,7 +148,7 @@ export default withNativeFederation({
     denseChunking: true, // Optimize remoteEntry.json structure
     denseExternals: true, // Group all entrypoints of a shared external under one object (opt-in); entries only merge when all metadata but file and dev hint match
     mappingVersion: true, // Use versions for shared mappings, is now opt-out
-    strictImports: false, // Fail the build, instead of warning, on a bare import remoteEntry.json does not declare
+    strictImports: false, // Fail the build, instead of warning, on a bare import remoteEntry.json does not declare or a non-npm-style sharedMappings name
   },
 });
 ```
@@ -150,11 +156,11 @@ export default withNativeFederation({
 ### Important Configuration Options
 
 - **`requiredVersion: 'auto'`**: Automatically reads version from nearest `package.json`
-- **`includeSecondaries`**: Can be `true`, `false`, or `{ skip: ['...'], resolveGlob: true, keepAll: true }`. `keepAll` exempts a shared package's *secondaries* from `ignoreUnusedDeps` pruning, read per package family (`inferPackageFromSecondary`): every entry point survives while something still reaches the package, but a family nothing reaches is pruned regardless, and a package with no secondaries is its own family so the flag is a no-op for it. On a `sharedMappings` entry the same flag is stronger and opts out of reachability entirely.
+- **`includeSecondaries`**: Can be `true`, `false`, or `{ skip: ['...'], resolveGlob: true, keepAll: true }`. `keepAll` exempts a shared package's _secondaries_ from `ignoreUnusedDeps` pruning, read per package family (`inferPackageFromSecondary`): every entry point survives while something still reaches the package, but a family nothing reaches is pruned regardless, and a package with no secondaries is its own family so the flag is a no-op for it. On a `sharedMappings` entry the same flag is stronger and opts out of reachability entirely.
 - **`singleton`**: Ensures only one instance of a dependency is loaded
 - **`strictVersion`**: Throws error on version mismatch instead of loading multiple versions
 - **`chunks`**: Can be set globally or per-package to control code-splitting
-- **`sharedMappings`**: Entries are patterns, and may be paired with an `ExternalConfig` as `[['@my-org/ui/*'], { singleton: false }]` (first matching entry wins). `mappingsFromWorkspace()` builds the same array. `includeSecondaries` exempts a mapping from `ignoreUnusedDeps` reachability entirely — either `true` or `{ keepAll: true }` does it here, unlike a shared package where `true` is the default and only `{ keepAll: true }` affects pruning; wildcards additionally need `{ resolveGlob: true }`. Without that exemption, reachability resolves wildcards itself — no `resolveGlob` needed — and also follows imports by specifier from one mapping into another, so an entry point only another mapping's barrel re-exports stays published (core#135); relative imports inside a mapping are its own code and are bundled. Only barrel imports can be shared as a mapped path: a specifier with a dot in its last segment cannot be resolved from an import map ([vite#21036](https://github.com/vitejs/vite/issues/21036)). `assertBarrelMappings` therefore throws on anything that would reach `remoteEntry.json`; paths that are pruned or dropped by wildcard expansion are never published, so they are filtered silently instead. A mapping entry point that imports a subpath of a mapping `remoteEntry.json` publishes (`@my-org/ui/button.js`, `@my-org/ui/index.js`) gets a warning: esbuild keeps every subpath of an external verbatim, and the import map has no key for it. Only files the mapping itself matches are scanned, which for a single-file mapping is just its barrel; a skipped mapping is bundled, so its subpaths never warn. `build` selects a bundle (see the Chunks section); `platform`, `chunks` and `packageInfo` are not honoured for mappings and warn.
+- **`sharedMappings`**: Entries are patterns, and may be paired with an `ExternalConfig` as `[['@my-org/ui/*'], { singleton: false }]` (first matching entry wins). `mappingsFromWorkspace()` builds the same array. `includeSecondaries` exempts a mapping from `ignoreUnusedDeps` reachability entirely — either `true` or `{ keepAll: true }` does it here, unlike a shared package where `true` is the default and only `{ keepAll: true }` affects pruning; wildcards additionally need `{ resolveGlob: true }`. Without that exemption, reachability resolves wildcards itself — no `resolveGlob` needed — and also follows imports by specifier from one mapping into another, so an entry point only another mapping's barrel re-exports stays published (core#135); relative imports inside a mapping are its own code and are bundled. Only barrel imports can be shared as a mapped path: a specifier with a dot in its last segment cannot be resolved from an import map ([vite#21036](https://github.com/vitejs/vite/issues/21036)). `assertBarrelMappings` therefore throws on anything that would reach `remoteEntry.json`; paths that are pruned or dropped by wildcard expansion are never published, so they are filtered silently instead. A mapping entry point that imports a subpath of a mapping `remoteEntry.json` publishes (`@my-org/ui/button.js`, `@my-org/ui/index.js`) gets a warning: esbuild keeps every subpath of an external verbatim, and the import map has no key for it. Only files the mapping itself matches are scanned, which for a single-file mapping is just its barrel; a skipped mapping is bundled, so its subpaths never warn. `build` selects a bundle (see the Chunks section); `platform`, `chunks` and `packageInfo` are not honoured for mappings and warn. A published mapping whose name is not npm-style (`package` or `@company/package`, lowercase, optional subpath) warns once per package, or throws with `features.strictImports` (`warnNonNpmMappingNames`): mappings are grouped by the package their name implies.
 - **`fromPackageJson(...).patch(patterns, cfg)`**: Patterns take a `*` (`'@angular/*'`) and are matched against the `package.json` dependency names before secondaries are expanded, so a secondary inherits its package's patch and cannot be patched on its own. Patches merge field by field in call order; a pattern that matches nothing warns. This differs from `mappingsFromWorkspace().patch()`, which emits first-match-wins entries.
 - **`build: 'package'`**: Bundle a shared dependency in isolation (not in the shared bundle)
 - **`externals`**: Opt-out specifiers. They reach the bundler as external, so they stay bare imports,
@@ -258,7 +264,7 @@ can only collide in mtime within `2g` — and `g` is 1s on the coarsest filesyst
 (gRPC-FUSE, NFS, WSL2 drvfs, HFS+). On ext4 and APFS `g` is nanoseconds, so a real save always
 advances mtime and the window is never reached.
 
-Age is measured from when the event *arrived*, not from when a debounced flush got round to
+Age is measured from when the event _arrived_, not from when a debounced flush got round to
 it, so `debounceMs` is not silently subtracted from the window. Two limits are worth knowing:
 a stall inside the event loop delays the `fs.watch` callback itself, which no local bookkeeping
 can correct; and on a network mount the age is a cross-clock subtraction, since mtime carries
@@ -284,7 +290,7 @@ re-stats the tracked set — deliberately out of scope here, own issue.
 ## Chunks
 
 A chunk is code the bundler split out of one or more entry points. It has no version and no
-package name of its own, and it belongs to a *build*, not to a dependency — so nothing
+package name of its own, and it belongs to a _build_, not to a dependency — so nothing
 downstream can tell whether the external it was split out of asked for `singleton: false` or a
 share scope. Chunks are therefore never shared between applications: `addChunksToResult`
 publishes them with `singleton: false`, and with `denseChunking` the orchestrator maps them into

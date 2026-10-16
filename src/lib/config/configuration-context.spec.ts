@@ -4,6 +4,7 @@ import {
   getConfigContext,
   loadWithConfigContext,
   usePackageJson,
+  useTsConfig,
   useWorkspace,
 } from './configuration-context.js';
 import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
@@ -13,11 +14,13 @@ describe('configuration-context', () => {
   beforeEach(() => {
     useWorkspace('');
     usePackageJson(undefined);
+    useTsConfig(undefined);
   });
 
   afterEach(() => {
     useWorkspace('');
     usePackageJson(undefined);
+    useTsConfig(undefined);
   });
 
   it('stores the workspace root', () => {
@@ -79,6 +82,18 @@ describe('configuration-context', () => {
 
       expect(results).toEqual(['a', 'b']);
       expect(seen).toEqual({ a: '/a', b: '/b' });
+    });
+
+    // core#149: withNativeFederation reads the build tsconfig from here; a load without one
+    // must not inherit the previous load's.
+    it('sets the build tsconfig per load', async () => {
+      const io = createMemoryIo();
+      const read = async () => getConfigContext().tsConfig;
+
+      expect(await loadWithConfigContext({ tsConfig: 'a/tsconfig.json' }, read, io)).toBe(
+        'a/tsconfig.json'
+      );
+      expect(await loadWithConfigContext({}, read, io)).toBeUndefined();
     });
 
     it('does not let a failed load block the next one', async () => {

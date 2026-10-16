@@ -9,6 +9,23 @@ export function findRootTsConfigJson(): string {
   return findRootTsConfigJsonCore(nodeIo);
 }
 
+// The build's own tsconfig when there is one, so sharing and compiling read the same `paths`
+// (core#149). Workspace-relative, as the Angular adapter resolves it.
+export function findMappingsTsConfig(): string {
+  return findMappingsTsConfigCore(nodeIo);
+}
+
+export function findMappingsTsConfigCore(io: FileReaderPort): string {
+  const { tsConfig, workspaceRoot } = getConfigContext();
+  if (!tsConfig) return findRootTsConfigJsonCore(io);
+
+  const resolved = path.resolve(workspaceRoot || toDiskCase(io, cwd()), tsConfig);
+  if (!io.isFile(resolved)) {
+    throw new Error(`The tsconfig "${tsConfig}" does not exist (resolved to ${resolved}).`);
+  }
+  return resolved;
+}
+
 export function findRootTsConfigJsonCore(io: FileReaderPort): string {
   const from = toDiskCase(io, cwd());
   try {

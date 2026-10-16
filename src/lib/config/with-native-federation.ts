@@ -1,6 +1,6 @@
 import { getRawMappedPaths } from './mapped-paths.js';
 import { fromPackageJson } from './share-utils.js';
-import { findRootTsConfigJson } from './project-paths.js';
+import { findMappingsTsConfig } from './project-paths.js';
 import type {
   ExposeEntry,
   FederationConfig,
@@ -26,7 +26,7 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
   const mappingVersion = config.features?.mappingVersion ?? true;
 
   const { paths, configs } = getRawMappedPaths(
-    findRootTsConfigJson(),
+    findMappingsTsConfig(),
     fromBuilder(config.sharedMappings)
   );
 

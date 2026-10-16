@@ -37,28 +37,19 @@ export function getRawMappedPathsCore(
     throw new Error('SharedMappings.register: tsConfigPath needs to be an absolute path!');
   }
 
-  const basePath = rootPath ?? path.normalize(path.dirname(rootTsConfigPath));
   const shareAll = !configuredSharedMappings;
   const { patterns, configs } = flattenEntries(configuredSharedMappings ?? []);
 
-  const { config: tsConfig, error } = ts.parseConfigFileTextToJson(
-    rootTsConfigPath,
-    io.readText(rootTsConfigPath)
-  );
-  if (error) {
-    throw new Error(
-      `Could not parse ${rootTsConfigPath}: ${ts.flattenDiagnosticMessageText(error.messageText, '\n')}`
-    );
-  }
-
-  const mappings = tsConfig?.compilerOptions?.paths;
+  const { paths: mappings, basePath } = readCompilerPaths(io, rootTsConfigPath);
 
   if (!mappings) {
     return { paths: mappedPaths, configs };
   }
 
+  const base = rootPath ?? basePath;
+
   for (const key in mappings) {
-    const libPath = path.normalize(path.join(basePath, mappings[key][0]));
+    const libPath = path.normalize(path.join(base, mappings[key]![0]!));
 
     if (shareAll || patterns.some(pattern => matchesWildcard(key, pattern))) {
       mappedPaths[libPath] = key;
@@ -66,6 +57,49 @@ export function getRawMappedPathsCore(
   }
 
   return { paths: mappedPaths, configs };
+}
+
+// Resolved like the compile resolves them: through `extends`, against `baseUrl` or else the
+// tsconfig that defines `paths` (core#149).
+function readCompilerPaths(
+  io: FileReaderPort,
+  tsConfigPath: string
+): { paths?: ts.MapLike<string[]>; basePath: string } {
+  const { config, error } = ts.readConfigFile(tsConfigPath, file => readOrUndefined(io, file));
+  if (error) {
+    throw new Error(
+      `Could not parse ${tsConfigPath}: ${ts.flattenDiagnosticMessageText(error.messageText, '\n')}`
+    );
+  }
+
+  // Only `options` is read; an empty `readDirectory` keeps TypeScript from walking `include`.
+  // Option diagnostics are the compile's to report, so they are not rethrown here.
+  const host: ts.ParseConfigHost = {
+    useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+    readDirectory: () => [],
+    fileExists: file => io.isFile(file),
+    readFile: file => readOrUndefined(io, file),
+  };
+  const { options } = ts.parseJsonConfigFileContent(
+    config,
+    host,
+    path.dirname(tsConfigPath),
+    undefined,
+    tsConfigPath
+  );
+
+  return {
+    paths: options.paths,
+    basePath: path.normalize(
+      options.baseUrl ??
+        (options['pathsBasePath'] as string | undefined) ??
+        path.dirname(tsConfigPath)
+    ),
+  };
+}
+
+function readOrUndefined(io: FileReaderPort, file: string): string | undefined {
+  return io.isFile(file) ? io.readText(file) : undefined;
 }
 
 function flattenEntries(entries: SharedMappingEntry[]): {

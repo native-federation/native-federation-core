@@ -1,5 +1,6 @@
 import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { logger } from '../utils/logger.js';
+import { inferPackageFromSecondary } from '../utils/normalize.js';
 
 /**
  * A trailing `.js`/`.ts`/... is a file import and resolves; any other dot in the last segment
@@ -45,11 +46,56 @@ export function assertBarrelMappings(paths: PathToImport): void {
   }
 
   // The warnings above already name every offender; keep the thrown message readable.
-  const shown = invalid.slice(0, MAX_LISTED).map(i => `'${i}'`).join(', ');
+  const shown = invalid
+    .slice(0, MAX_LISTED)
+    .map(i => `'${i}'`)
+    .join(', ');
   const rest = invalid.length - MAX_LISTED;
 
   throw new Error(
     `Invalid 'shared mappings' config. Only barrel imports can be shared as a sharedMapping: ` +
       `${shown}${rest > 0 ? ` and ${rest} more` : ''}.`
+  );
+}
+
+// validate-npm-package-name's rules for new packages: lowercase, no leading '.'/'_', no ~'!()*.
+const NPM_NAME = /^(?:@[a-z0-9-][a-z0-9-._]*\/)?[a-z0-9-][a-z0-9-._]*$/;
+
+export function isNpmStylePackage(importName: string): boolean {
+  // A wildcard stands in for a name segment and is not itself the offence.
+  return NPM_NAME.test(inferPackageFromSecondary(importName.replace(/\*/g, 'x')));
+}
+
+// A mapping is published and grouped (`build: 'package'`, pruning, denseExternals) by the package
+// its import name implies, so a name like '@shared' or '~app/utils' has no sound package to
+// group under.
+export function warnNonNpmMappingNames(paths: PathToImport, strict = false): void {
+  const offenders = [
+    ...new Set(
+      Object.values(paths)
+        .filter(importName => !isNpmStylePackage(importName))
+        .map(inferPackageFromSecondary)
+    ),
+  ];
+  if (offenders.length === 0) return;
+
+  for (const packageName of offenders) {
+    logger.warn(
+      `Shared mapping '${packageName}' does not follow npm package naming. Name mappings ` +
+        `'package' or '@company/package' (lowercase, optionally with a subpath).`
+    );
+  }
+
+  if (!strict) return;
+
+  const shown = offenders
+    .slice(0, MAX_LISTED)
+    .map(i => `'${i}'`)
+    .join(', ');
+  const rest = offenders.length - MAX_LISTED;
+
+  throw new Error(
+    `Invalid 'shared mappings' config. Shared mappings must follow npm package naming ` +
+      `('package' or '@company/package'): ${shown}${rest > 0 ? ` and ${rest} more` : ''}.`
   );
 }

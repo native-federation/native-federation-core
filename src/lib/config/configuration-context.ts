@@ -5,6 +5,7 @@ import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
 export interface ConfigurationContext {
   workspaceRoot?: string;
   packageJson?: string;
+  tsConfig?: string;
 }
 
 let _context: ConfigurationContext = {};
@@ -15,6 +16,10 @@ export function useWorkspace(workspaceRoot: string, io: FileReaderPort = nodeIo)
 
 export function usePackageJson(packageJson?: string): void {
   _context = { ..._context, packageJson };
+}
+
+export function useTsConfig(tsConfig?: string): void {
+  _context = { ..._context, tsConfig };
 }
 
 export function getConfigContext(): ConfigurationContext {
@@ -32,6 +37,7 @@ export function loadWithConfigContext<T>(
   const run = pendingLoad.then(() => {
     useWorkspace(context.workspaceRoot ?? '', io);
     usePackageJson(context.packageJson);
+    useTsConfig(context.tsConfig);
     return load();
   });
   pendingLoad = run.catch(() => undefined);
