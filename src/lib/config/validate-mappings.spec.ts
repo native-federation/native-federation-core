@@ -140,7 +140,7 @@ describe('warnNonNpmMappingNames', () => {
         true
       )
     ).toThrow(
-      "Invalid 'shared mappings' config. Shared mappings must follow npm package naming ('package' or '@company/package'): '~app', '@shared'."
+      "Invalid 'shared mappings' config. Shared mappings must follow npm package naming ('package' or '@company/package', subpaths belong to that package): '~app', '@shared'."
     );
   });
 

@@ -82,7 +82,9 @@ export function warnNonNpmMappingNames(paths: PathToImport, strict = false): voi
   for (const packageName of offenders) {
     logger.warn(
       `Shared mapping '${packageName}' does not follow npm package naming. Name mappings ` +
-        `'package' or '@company/package' (lowercase, optionally with a subpath).`
+        `'package' or '@company/package' (lowercase). Subpaths and wildcards ` +
+        `('@company/package/*') are allowed, but belong to that package: ` +
+        `build: 'package' bundles them together.`
     );
   }
 
@@ -96,6 +98,7 @@ export function warnNonNpmMappingNames(paths: PathToImport, strict = false): voi
 
   throw new Error(
     `Invalid 'shared mappings' config. Shared mappings must follow npm package naming ` +
-      `('package' or '@company/package'): ${shown}${rest > 0 ? ` and ${rest} more` : ''}.`
+      `('package' or '@company/package', subpaths belong to that package): ` +
+      `${shown}${rest > 0 ? ` and ${rest} more` : ''}.`
   );
 }
