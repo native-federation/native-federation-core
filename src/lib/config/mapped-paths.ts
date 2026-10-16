@@ -37,28 +37,22 @@ export function getRawMappedPathsCore(
     throw new Error('SharedMappings.register: tsConfigPath needs to be an absolute path!');
   }
 
-  const basePath = rootPath ?? path.normalize(path.dirname(rootTsConfigPath));
   const shareAll = !configuredSharedMappings;
   const { patterns, configs } = flattenEntries(configuredSharedMappings ?? []);
 
-  const { config: tsConfig, error } = ts.parseConfigFileTextToJson(
-    rootTsConfigPath,
-    io.readText(rootTsConfigPath)
-  );
-  if (error) {
-    throw new Error(
-      `Could not parse ${rootTsConfigPath}: ${ts.flattenDiagnosticMessageText(error.messageText, '\n')}`
-    );
-  }
-
-  const mappings = tsConfig?.compilerOptions?.paths;
+  const { paths: mappings, basePath } = readCompilerPaths(io, rootTsConfigPath);
 
   if (!mappings) {
     return { paths: mappedPaths, configs };
   }
 
+  const base = rootPath ?? basePath;
+
   for (const key in mappings) {
-    const libPath = path.normalize(path.join(basePath, mappings[key][0]));
+    // An empty target list is the compile's error to report (TS5066).
+    const target = mappings[key]?.[0];
+    if (!target) continue;
+    const libPath = path.normalize(path.join(base, target));
 
     if (shareAll || patterns.some(pattern => matchesWildcard(key, pattern))) {
       mappedPaths[libPath] = key;
@@ -66,6 +60,70 @@ export function getRawMappedPathsCore(
   }
 
   return { paths: mappedPaths, configs };
+}
+
+// Resolved like the compile resolves them: through `extends`, against `baseUrl` or else the
+// tsconfig that defines `paths` (core#149).
+function readCompilerPaths(
+  io: FileReaderPort,
+  tsConfigPath: string
+): { paths?: ts.MapLike<string[]>; basePath: string } {
+  const { config, error } = ts.readConfigFile(tsConfigPath, file => readOrUndefined(io, file));
+  if (error) {
+    throw new Error(
+      `Could not parse ${tsConfigPath}: ${ts.flattenDiagnosticMessageText(error.messageText, '\n')}`
+    );
+  }
+
+  // Only `options` is read; an empty `readDirectory` keeps TypeScript from walking `include`.
+  // Option diagnostics are the compile's to report, but a broken `extends` chain would silently
+  // drop the inherited `paths`, so those are rethrown.
+  const host: ts.ParseConfigHost = {
+    useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+    readDirectory: () => [],
+    fileExists: file => io.isFile(file),
+    readFile: file => readOrUndefined(io, file),
+  };
+  const { options, errors } = ts.parseJsonConfigFileContent(
+    config,
+    host,
+    path.dirname(tsConfigPath),
+    undefined,
+    tsConfigPath
+  );
+
+  const extendsErrors = errors.filter(e => EXTENDS_DIAGNOSTICS.has(e.code));
+  if (extendsErrors.length) {
+    const messages = extendsErrors.map(e => ts.flattenDiagnosticMessageText(e.messageText, '\n'));
+    throw new Error(
+      `Could not resolve the extends chain of ${tsConfigPath}: ${messages.join('; ')}`
+    );
+  }
+
+  return { paths: options.paths, basePath: path.normalize(pathsBase(options, tsConfigPath)) };
+}
+
+// 5083 "Cannot read file" (relative `extends`), 6053 "File not found" (package `extends`).
+const EXTENDS_DIAGNOSTICS = new Set([5083, 6053]);
+
+function pathsBase(options: ts.CompilerOptions, tsConfigPath: string): string {
+  if (options.baseUrl) return options.baseUrl;
+  if (!options.paths) return path.dirname(tsConfigPath);
+
+  // Internal: the directory of the tsconfig that defines `paths`, set by every TypeScript in the
+  // dependency range. Guessed wrong, every mapping would point at a missing file without a word.
+  const pathsBasePath = options['pathsBasePath'];
+  if (typeof pathsBasePath !== 'string') {
+    throw new Error(
+      `TypeScript ${ts.version} no longer reports where the "paths" of ${tsConfigPath} are ` +
+        'defined; set "baseUrl" next to them to work around it.'
+    );
+  }
+  return pathsBasePath;
+}
+
+function readOrUndefined(io: FileReaderPort, file: string): string | undefined {
+  return io.isFile(file) ? io.readText(file) : undefined;
 }
 
 function flattenEntries(entries: SharedMappingEntry[]): {

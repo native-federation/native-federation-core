@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { assertBarrelMappings, isNonBarrelImport } from './validate-mappings.js';
+import {
+  assertBarrelMappings,
+  isNonBarrelImport,
+  isNpmStylePackage,
+  warnNonNpmMappingNames,
+} from './validate-mappings.js';
 import { logger } from '../utils/logger.js';
 
 describe('isNonBarrelImport', () => {
@@ -75,5 +80,71 @@ describe('assertBarrelMappings', () => {
 
     expect(() => assertBarrelMappings(paths)).toThrow(/and 3 more\.$/);
     expect(warn).toHaveBeenCalledTimes(8);
+  });
+});
+
+describe('isNpmStylePackage', () => {
+  it('accepts plain and scoped package names, with or without a subpath', () => {
+    expect(
+      ['shared', '@org/ui', '@org/ui/button', 'my-lib/feature', '@org/ui.v2', '@org/*'].filter(
+        name => !isNpmStylePackage(name)
+      )
+    ).toEqual([]);
+  });
+
+  it('rejects names npm would not publish', () => {
+    expect(
+      [
+        '@shared',
+        '~app/utils',
+        '#internal',
+        '@Org/ui',
+        'Shared',
+        '_private',
+        '.hidden',
+        '@/utils',
+      ].filter(isNpmStylePackage)
+    ).toEqual([]);
+  });
+});
+
+describe('warnNonNpmMappingNames', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('stays quiet for npm-style names', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    warnNonNpmMappingNames({ '/ws/libs/ui/index.ts': '@org/ui' });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  // Secondaries of one offending package collapse into a single warning.
+  it('warns once per offending package', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    warnNonNpmMappingNames({
+      '/ws/libs/a/index.ts': '~app/a',
+      '/ws/libs/b/index.ts': '~app/b',
+      '/ws/libs/ui/index.ts': '@org/ui',
+    });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("'~app'"));
+  });
+
+  // features.strictImports turns the warning into a build error.
+  it('throws when strict, naming every offending package', () => {
+    vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    expect(() =>
+      warnNonNpmMappingNames(
+        { '/ws/libs/a/index.ts': '~app/a', '/ws/libs/s/index.ts': '@shared' },
+        true
+      )
+    ).toThrow(
+      "Invalid 'shared mappings' config. Shared mappings must follow npm package naming ('package' or '@company/package', subpaths belong to that package): '~app', '@shared'."
+    );
+  });
+
+  it('does not throw when strict and every name is npm-style', () => {
+    expect(() => warnNonNpmMappingNames({ '/ws/libs/ui/index.ts': '@org/ui' }, true)).not.toThrow();
   });
 });

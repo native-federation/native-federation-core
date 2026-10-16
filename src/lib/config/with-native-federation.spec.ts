@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // with-native-federation reaches the filesystem through share/project-paths and
 // mapped-paths; stub those so the normalization logic can be tested in isolation.
 const shareAll = vi.fn();
-const findRootTsConfigJson = vi.fn();
+const findMappingsTsConfig = vi.fn();
 const getRawMappedPaths = vi.fn();
 
 vi.mock('./share-utils.js', () => ({
@@ -11,7 +11,7 @@ vi.mock('./share-utils.js', () => ({
 }));
 
 vi.mock('./project-paths.js', () => ({
-  findRootTsConfigJson: (...args: unknown[]) => findRootTsConfigJson(...args),
+  findMappingsTsConfig: (...args: unknown[]) => findMappingsTsConfig(...args),
 }));
 
 vi.mock('./mapped-paths.js', () => ({
@@ -25,7 +25,7 @@ import type { FederationConfig } from '../domain/config/federation-config.contra
 describe('withNativeFederation', () => {
   beforeEach(() => {
     shareAll.mockReturnValue({});
-    findRootTsConfigJson.mockReturnValue('/ws/tsconfig.json');
+    findMappingsTsConfig.mockReturnValue('/ws/tsconfig.json');
     getRawMappedPaths.mockReturnValue({ paths: {}, configs: {} });
   });
 
@@ -219,7 +219,7 @@ describe('withNativeFederation', () => {
       skip: ['@org/skip'],
     });
 
-    expect(findRootTsConfigJson).toHaveBeenCalled();
+    expect(findMappingsTsConfig).toHaveBeenCalled();
     expect(getRawMappedPaths).toHaveBeenCalledWith('/ws/tsconfig.json', ['@org/ui', '@org/skip']);
     expect(result.sharedMappings).toEqual({ '/ws/libs/ui/index.ts': '@org/ui' });
   });

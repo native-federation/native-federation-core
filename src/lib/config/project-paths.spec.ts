@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { logger } from '../utils/logger.js';
 import * as path from 'path';
 import { cwd } from 'process';
-import { findRootTsConfigJsonCore } from './project-paths.js';
+import { findMappingsTsConfigCore, findRootTsConfigJsonCore } from './project-paths.js';
 import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
-import { usePackageJson, useWorkspace } from './configuration-context.js';
+import { usePackageJson, useTsConfig, useWorkspace } from './configuration-context.js';
 
 const ROOT = cwd();
 
@@ -67,8 +68,8 @@ describe('findRootTsConfigJsonCore', () => {
       expect(findRootTsConfigJsonCore(io)).toBe(path.join(WS, 'tsconfig.json'));
     });
 
-    // A monorepo root's tsconfig.base.json carries the paths a subproject's tsconfig.json only
-    // inherits through `extends`, which getRawMappedPaths does not follow.
+    // A monorepo root's tsconfig.base.json carries the paths; a subproject's tsconfig.json may
+    // not extend it, so the cwd resolution must not move.
     it('keeps the tsconfig found from cwd', () => {
       const io = withPackageJson()
         .setFile(path.join(ROOT, 'tsconfig.base.json'), '{}')
@@ -89,5 +90,78 @@ describe('findRootTsConfigJsonCore', () => {
 
   it('rethrows the cwd error without a workspace root in the context', () => {
     expect(() => findRootTsConfigJsonCore(createMemoryIo())).toThrow(/no package.json found/);
+  });
+});
+
+// core#149: shared mappings come from the tsconfig the build compiles with.
+describe('findMappingsTsConfigCore', () => {
+  const WS = path.resolve('/ws');
+
+  afterEach(() => {
+    useWorkspace('');
+    usePackageJson(undefined);
+    useTsConfig(undefined);
+  });
+
+  it('resolves the build tsconfig against the workspace root', () => {
+    const io = createMemoryIo().setFile(path.join(WS, 'apps/shell/tsconfig.federation.json'), '{}');
+    useWorkspace(WS, io);
+    useTsConfig('apps/shell/tsconfig.federation.json');
+
+    expect(findMappingsTsConfigCore(io)).toBe(path.join(WS, 'apps/shell/tsconfig.federation.json'));
+  });
+
+  it('keeps an absolute build tsconfig', () => {
+    const abs = path.resolve('/elsewhere/tsconfig.app.json');
+    const io = createMemoryIo().setFile(abs, '{}');
+    useWorkspace(WS, io);
+    useTsConfig(abs);
+
+    expect(findMappingsTsConfigCore(io)).toBe(abs);
+  });
+
+  // tsConfigPath is the adapter's to resolve; one that resolves it against cwd still works.
+  it('falls back to resolving the build tsconfig against cwd', () => {
+    const io = createMemoryIo().setFile(path.join(ROOT, 'tsconfig.app.json'), '{}');
+    useWorkspace(WS, io);
+    useTsConfig('tsconfig.app.json');
+
+    expect(findMappingsTsConfigCore(io)).toBe(path.join(ROOT, 'tsconfig.app.json'));
+  });
+
+  // Before core#149 the build tsconfig was never read, so a stale or wrong one must not start
+  // failing builds: warn and read the root tsconfig, as before.
+  it('warns and falls back to the root tsconfig when the build tsconfig does not exist', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const io = createMemoryIo()
+      .setFile(path.join(ROOT, 'package.json'), '{}')
+      .setFile(path.join(ROOT, 'tsconfig.json'), '{}');
+    useWorkspace(WS, io);
+    useTsConfig('apps/shell/tsconfig.federation.json');
+
+    expect(findMappingsTsConfigCore(io)).toBe(path.join(ROOT, 'tsconfig.json'));
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn.mock.calls[0]![0]).toMatch(/tsconfig\.federation\.json" does not exist/);
+    warn.mockRestore();
+  });
+
+  // pathsBasePath, and with it every mapping path, descends from this path, so it has to carry
+  // the disk spelling the reachability scan compares against.
+  it('returns the on-disk spelling of the build tsconfig', () => {
+    const asked = path.join(WS, 'Apps/Shell/tsconfig.app.json');
+    const disk = path.join(WS, 'apps/shell/tsconfig.app.json');
+    const io = createMemoryIo().setFile(asked, '{}').setDiskCase(asked, disk);
+    useWorkspace(WS, io);
+    useTsConfig('Apps/Shell/tsconfig.app.json');
+
+    expect(findMappingsTsConfigCore(io)).toBe(disk);
+  });
+
+  it('falls back to the root tsconfig without a build tsconfig', () => {
+    const io = createMemoryIo()
+      .setFile(path.join(ROOT, 'package.json'), '{}')
+      .setFile(path.join(ROOT, 'tsconfig.json'), '{}');
+
+    expect(findMappingsTsConfigCore(io)).toBe(path.join(ROOT, 'tsconfig.json'));
   });
 });

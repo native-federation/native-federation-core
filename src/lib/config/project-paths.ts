@@ -4,9 +4,35 @@ import { getConfigContext } from './configuration-context.js';
 import { nodeIo } from '../utils/io/node-io-adapter.js';
 import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
 import { toDiskCase } from '../utils/disk-case.js';
+import { logger } from '../utils/logger.js';
 
 export function findRootTsConfigJson(): string {
   return findRootTsConfigJsonCore(nodeIo);
+}
+
+// The build's own tsconfig when there is one, so sharing and compiling read the same `paths`
+// (core#149). Workspace-relative, as the Angular adapter resolves it.
+export function findMappingsTsConfig(): string {
+  return findMappingsTsConfigCore(nodeIo);
+}
+
+export function findMappingsTsConfigCore(io: FileReaderPort): string {
+  const { tsConfig, workspaceRoot } = getConfigContext();
+  if (!tsConfig) return findRootTsConfigJsonCore(io);
+
+  // `tsConfigPath` is the adapter's to resolve, so cwd is tried too before giving up.
+  const candidates = [
+    ...new Set([workspaceRoot, toDiskCase(io, cwd())].filter(Boolean) as string[]),
+  ].map(base => path.resolve(base, tsConfig));
+  const found = candidates.find(file => io.isFile(file));
+  if (found) return toDiskCase(io, found);
+
+  const fallback = findRootTsConfigJsonCore(io);
+  logger.warn(
+    `The tsconfig "${tsConfig}" does not exist (tried ${candidates.join(', ')}); ` +
+      `reading shared mappings from ${fallback} instead.`
+  );
+  return fallback;
 }
 
 export function findRootTsConfigJsonCore(io: FileReaderPort): string {

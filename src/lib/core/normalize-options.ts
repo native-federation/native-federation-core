@@ -9,7 +9,7 @@ import { nodeIo } from '../utils/io/node-io-adapter.js';
 import type { FileReaderPort, GlobPort } from '../domain/utils/io-port.contract.js';
 import { removeUnusedDeps } from '../config/remove-unused-deps.js';
 import { expandOrDropWildcards } from '../config/expand-mappings.js';
-import { assertBarrelMappings } from '../config/validate-mappings.js';
+import { assertBarrelMappings, warnNonNpmMappingNames } from '../config/validate-mappings.js';
 import { type FederationCache } from '../../domain.js';
 import { createFederationCache } from './cache/federation-cache.js';
 import { getDefaultCachePath } from './cache/cache-persistence.js';
@@ -76,7 +76,7 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
   }
 
   let config: NormalizedFederationConfig = await loadWithConfigContext(
-    { workspaceRoot, packageJson },
+    { workspaceRoot, packageJson, tsConfig: options.tsConfig },
     () => deps.loadConfig(fullConfigPath),
     deps.io
   );
@@ -88,9 +88,7 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
 
   const suppliedCache =
     cache ??
-    (createFederationCache(
-      getDefaultCachePath(workspaceRoot)
-    ) as FederationCache<TBundlerCache>);
+    (createFederationCache(getDefaultCachePath(workspaceRoot)) as FederationCache<TBundlerCache>);
 
   const federationCache: FederationCache<TBundlerCache> = {
     ...suppliedCache,
@@ -140,6 +138,7 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
 
   // Whatever survived either branch is what remoteEntry.json will advertise.
   assertBarrelMappings(config.sharedMappings);
+  warnNonNpmMappingNames(config.sharedMappings, config.features.strictImports);
 
   return { config, options: normalizedOptions };
 }
