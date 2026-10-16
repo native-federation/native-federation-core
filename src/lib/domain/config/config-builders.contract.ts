@@ -16,7 +16,7 @@ export interface PackageJsonExternalsBuilder extends ConfigBuilder<ResolvedShare
   filter(patterns: string[]): PackageJsonExternalsBuilder;
   skip(externals: SkipList): PackageJsonExternalsBuilder;
   override(externals: ShareExternalsOptions): PackageJsonExternalsBuilder;
-  patch(externals: string[], cfg: Partial<ExternalConfig>): PackageJsonExternalsBuilder;
+  patch(patterns: string[], cfg: Partial<ExternalConfig>): PackageJsonExternalsBuilder;
 }
 
 export interface WorkspaceMappingsBuilder extends ConfigBuilder<SharedMappingEntry[]> {
