@@ -4,6 +4,7 @@ import { getConfigContext } from './configuration-context.js';
 import { nodeIo } from '../utils/io/node-io-adapter.js';
 import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
 import { toDiskCase } from '../utils/disk-case.js';
+import { logger } from '../utils/logger.js';
 
 export function findRootTsConfigJson(): string {
   return findRootTsConfigJsonCore(nodeIo);
@@ -19,11 +20,19 @@ export function findMappingsTsConfigCore(io: FileReaderPort): string {
   const { tsConfig, workspaceRoot } = getConfigContext();
   if (!tsConfig) return findRootTsConfigJsonCore(io);
 
-  const resolved = path.resolve(workspaceRoot || toDiskCase(io, cwd()), tsConfig);
-  if (!io.isFile(resolved)) {
-    throw new Error(`The tsconfig "${tsConfig}" does not exist (resolved to ${resolved}).`);
-  }
-  return resolved;
+  // `tsConfigPath` is the adapter's to resolve, so cwd is tried too before giving up.
+  const candidates = [
+    ...new Set([workspaceRoot, toDiskCase(io, cwd())].filter(Boolean) as string[]),
+  ].map(base => path.resolve(base, tsConfig));
+  const found = candidates.find(file => io.isFile(file));
+  if (found) return toDiskCase(io, found);
+
+  const fallback = findRootTsConfigJsonCore(io);
+  logger.warn(
+    `The tsconfig "${tsConfig}" does not exist (tried ${candidates.join(', ')}); ` +
+      `reading shared mappings from ${fallback} instead.`
+  );
+  return fallback;
 }
 
 export function findRootTsConfigJsonCore(io: FileReaderPort): string {

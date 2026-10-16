@@ -34,11 +34,17 @@ export function loadWithConfigContext<T>(
   load: () => Promise<T>,
   io: FileReaderPort = nodeIo
 ): Promise<T> {
-  const run = pendingLoad.then(() => {
+  const run = pendingLoad.then(async () => {
+    // Restored afterwards, so a config evaluated outside a build never sees this build's context.
+    const previous = _context;
     useWorkspace(context.workspaceRoot ?? '', io);
     usePackageJson(context.packageJson);
     useTsConfig(context.tsConfig);
-    return load();
+    try {
+      return await load();
+    } finally {
+      _context = previous;
+    }
   });
   pendingLoad = run.catch(() => undefined);
   return run;

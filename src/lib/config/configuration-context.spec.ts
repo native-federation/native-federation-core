@@ -96,6 +96,31 @@ describe('configuration-context', () => {
       expect(await loadWithConfigContext({}, read, io)).toBeUndefined();
     });
 
+    // A config evaluated outside a build, later in the same process, must not read the last
+    // build's tsconfig or workspace root.
+    it('restores the previous context once a load settles', async () => {
+      const io = createMemoryIo();
+      useWorkspace('/manual', io);
+
+      await loadWithConfigContext(
+        { workspaceRoot: '/a', tsConfig: 'a/tsconfig.json' },
+        async () => undefined,
+        io
+      );
+      expect(getConfigContext()).toEqual({ workspaceRoot: '/manual' });
+
+      await expect(
+        loadWithConfigContext(
+          { workspaceRoot: '/b', tsConfig: 'b/tsconfig.json' },
+          async () => {
+            throw new Error('broken config');
+          },
+          io
+        )
+      ).rejects.toThrow('broken config');
+      expect(getConfigContext()).toEqual({ workspaceRoot: '/manual' });
+    });
+
     it('does not let a failed load block the next one', async () => {
       const io = createMemoryIo();
       const failed = loadWithConfigContext(

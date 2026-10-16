@@ -200,6 +200,33 @@ describe('getRawMappedPathsCore', () => {
       expect(result).toEqual({ [path.join(ROOT, 'src/a/index.ts')]: '@a' });
     });
 
+    // A missing extends target is only a diagnostic to TypeScript; swallowed, the inherited
+    // paths would vanish and every remote would bundle its own copy of the workspace libs.
+    it('throws when a relative extends target does not exist', () => {
+      const io = createMemoryIo().setFile(
+        TSCONFIG,
+        JSON.stringify({ extends: './tsconfig.bse.json', compilerOptions: {} })
+      );
+      expect(() => getRawMappedPathsCore(io, TSCONFIG)).toThrow(
+        /Could not resolve the extends chain of .*tsconfig\.json.*tsconfig\.bse\.json/
+      );
+    });
+
+    it('throws when an extended package is not installed', () => {
+      const io = createMemoryIo()
+        .setFile(path.join(ROOT, 'package.json'), '{}')
+        .setFile(TSCONFIG, JSON.stringify({ extends: '@org/tsconfig/tsconfig.json' }));
+      expect(() => getRawMappedPathsCore(io, TSCONFIG)).toThrow(
+        /Could not resolve the extends chain.*@org\/tsconfig\/tsconfig\.json/
+      );
+    });
+
+    // TypeScript accepts this when parsing and reports TS5066 at compile time.
+    it('skips a key with an empty target list', () => {
+      const io = writeTsConfig({ '@empty': [], '@a': ['a/index.ts'] });
+      expect(Object.values(getRawMappedPathsCore(io, TSCONFIG).paths)).toEqual(['@a']);
+    });
+
     // TS 6 reports a deprecated baseUrl as an error; that is the compile's to raise, not ours.
     it('does not throw on option diagnostics', () => {
       const io = createMemoryIo().setFile(

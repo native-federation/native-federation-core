@@ -95,13 +95,19 @@ lands in one directory whatever `process.cwd()` is (core#156). Inputs follow the
   config load, so `share()`/`shareAll()` find `package.json` from the workspace. Loads are queued
   (`loadWithConfigContext`), because the context is global and a config only reads it once it
   evaluates, after an await: two remotes normalized in parallel would otherwise both see the
-  second one's context.
+  second one's context. Each load restores the previous context once it settles, so a config
+  evaluated outside a build later in the process never reads the last build's `tsConfig`.
 - The `ignoreUnusedDeps` scan roots sheriff at `workspaceRoot`.
 - Shared mappings are read from the tsconfig the build compiles with (core#149):
   `normalizeFederationOptions` puts `tsConfig` in the config context and `findMappingsTsConfig`
-  resolves it against `workspaceRoot`, the way the Angular adapter does. `paths` is parsed with
-  TypeScript's own API, so `extends` is followed and targets resolve against `baseUrl` or the file
-  that defines `paths`. Only the first target of each key is used.
+  resolves it against `workspaceRoot`, the way the Angular adapter does, then against cwd, and
+  returns the on-disk spelling. If neither exists it warns and falls back to `findRootTsConfigJson`
+  rather than failing a build that worked before core#149. `paths` is parsed with TypeScript's own
+  API, so `extends` is followed and targets resolve against `baseUrl` or the file that defines
+  `paths` (TypeScript's internal `pathsBasePath`; its absence throws rather than guessing). A
+  missing `extends` target throws, since it would otherwise drop the inherited `paths` silently;
+  other tsconfig diagnostics are left to the compile. Only the first target of each key is used,
+  and a key with no targets is skipped.
 - Without a `tsConfig` (a config loaded outside a build), `findRootTsConfigJson` is the fallback.
   It still searches from cwd first, so a resolution that works today does not move, and falls back
   to the workspace root only when that search finds nothing. Searching from `workspaceRoot` first
