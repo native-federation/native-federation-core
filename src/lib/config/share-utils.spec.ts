@@ -285,7 +285,11 @@ describe('shareAllCore (end-to-end via injected repository)', () => {
     const result = shareAllCore(
       io,
       { singleton: true, includeSecondaries: false },
-      { projectPath: PROJECT, filter: ['mylib'], patchList: { other: { singleton: false } } },
+      {
+        projectPath: PROJECT,
+        filter: ['mylib'],
+        patches: [{ patterns: ['other'], cfg: { singleton: false } }],
+      },
       repo
     );
 
@@ -304,7 +308,10 @@ describe('shareAllCore (end-to-end via injected repository)', () => {
     const result = shareAllCore(
       io,
       { singleton: true, includeSecondaries: false },
-      { projectPath: PROJECT, patchList: { mylib: { singleton: false, strictVersion: true } } },
+      {
+        projectPath: PROJECT,
+        patches: [{ patterns: ['mylib'], cfg: { singleton: false, strictVersion: true } }],
+      },
       repo
     );
 
@@ -313,6 +320,71 @@ describe('shareAllCore (end-to-end via injected repository)', () => {
       strictVersion: true,
       requiredVersion: '^1.2.3',
     });
+  });
+
+  it('patches every shared package a wildcard pattern matches', () => {
+    const io = createMemoryIo().setFile(
+      path.join(PROJECT, 'package.json'),
+      JSON.stringify({
+        dependencies: { '@angular/core': '^20.0.0', '@angular/common': '^20.0.0', rxjs: '^7.8.0' },
+      })
+    );
+    const repo = createPackageJsonRepository(io);
+
+    const result = shareAllCore(
+      io,
+      { singleton: true, includeSecondaries: false },
+      { projectPath: PROJECT, patches: [{ patterns: ['@angular/*'], cfg: { pool: 'ng-core' } }] },
+      repo
+    );
+
+    expect(result!['@angular/core']).toMatchObject({ pool: 'ng-core' });
+    expect(result!['@angular/common']).toMatchObject({ pool: 'ng-core' });
+    expect(result!['rxjs']!.pool).toBeUndefined();
+  });
+
+  it('merges overlapping patches in call order', () => {
+    const io = createMemoryIo().setFile(
+      path.join(PROJECT, 'package.json'),
+      JSON.stringify({ dependencies: { '@angular/core': '^20.0.0', '@angular/common': '^20.0.0' } })
+    );
+    const repo = createPackageJsonRepository(io);
+
+    const result = shareAllCore(
+      io,
+      { singleton: true, includeSecondaries: false },
+      {
+        projectPath: PROJECT,
+        patches: [
+          { patterns: ['@angular/*'], cfg: { pool: 'ng-core', strictVersion: true } },
+          { patterns: ['@angular/core'], cfg: { strictVersion: false } },
+        ],
+      },
+      repo
+    );
+
+    // The narrower, later patch overrides one field and keeps the rest of the wildcard patch.
+    expect(result!['@angular/core']).toMatchObject({ pool: 'ng-core', strictVersion: false });
+    expect(result!['@angular/common']).toMatchObject({ pool: 'ng-core', strictVersion: true });
+  });
+
+  it('warns for a wildcard pattern that matches no shared package', () => {
+    const io = createMemoryIo().setFile(
+      path.join(PROJECT, 'package.json'),
+      JSON.stringify({ dependencies: { mylib: '^1.2.3' } })
+    );
+    const repo = createPackageJsonRepository(io);
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+    shareAllCore(
+      io,
+      { singleton: true, includeSecondaries: false },
+      { projectPath: PROJECT, patches: [{ patterns: ['@angular/*'], cfg: { pool: 'ng-core' } }] },
+      repo
+    );
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("'@angular/*'"));
+    warn.mockRestore();
   });
 
   it('ignores a patch for an external that is not shared and warns', () => {
@@ -326,12 +398,15 @@ describe('shareAllCore (end-to-end via injected repository)', () => {
     const result = shareAllCore(
       io,
       { singleton: true, includeSecondaries: false },
-      { projectPath: PROJECT, patchList: { doesnotexist: { singleton: false } } },
+      {
+        projectPath: PROJECT,
+        patches: [{ patterns: ['doesnotexist'], cfg: { singleton: false } }],
+      },
       repo
     );
 
     expect(Object.keys(result!)).toEqual(['mylib']);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('not a shared external'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('matches no shared package'));
     warn.mockRestore();
   });
 
@@ -351,7 +426,7 @@ describe('shareAllCore (end-to-end via injected repository)', () => {
         overrides: {
           overridden: { singleton: false, requiredVersion: '~3.1.0', includeSecondaries: false },
         },
-        patchList: { overridden: { singleton: true } },
+        patches: [{ patterns: ['overridden'], cfg: { singleton: true } }],
       },
       repo
     );

@@ -32,7 +32,7 @@ export const fromPackageJson = (
   const skipList: SkipList = [...DEFAULT_SKIP_LIST];
   const selection: string[] = [];
   let overrides: ShareExternalsOptions = {};
-  const patchList: Record<string, Partial<ExternalConfig>> = {};
+  const patches: SharedPatch[] = [];
 
   const builder: PackageJsonExternalsBuilder = {
     filter(patterns: string[]) {
@@ -47,13 +47,8 @@ export const fromPackageJson = (
       overrides = { ...overrides, ...externals };
       return builder;
     },
-    patch(externals: string[], cfg: Partial<ExternalConfig>) {
-      externals.forEach(external => {
-        patchList[external] = {
-          ...(patchList[external] ?? {}),
-          ...cfg,
-        };
-      });
+    patch(patterns: string[], cfg: Partial<ExternalConfig>) {
+      patches.push({ patterns, cfg });
       return builder;
     },
     get() {
@@ -61,7 +56,7 @@ export const fromPackageJson = (
         skipList,
         projectPath,
         overrides,
-        patchList,
+        patches,
         ...(selection.length > 0 && { filter: [...selection] }),
       });
     },
@@ -88,7 +83,7 @@ export function shareAllCore(
     skipList?: SkipList;
     projectPath?: string;
     overrides?: ShareExternalsOptions;
-    patchList?: Record<string, Partial<ExternalConfig>>;
+    patches?: SharedPatch[];
     filter?: string[];
   } = {},
   repo: PackageJsonRepository = sharedPackageJsonRepository
@@ -138,7 +133,7 @@ export function shareAllCore(
     }
   }
 
-  const finalExternalList = applyPatchList(sharedExternals, opts.patchList, opts.overrides);
+  const finalExternalList = applyPatches(sharedExternals, opts.patches, opts.overrides);
 
   return {
     ...shareCore(io, finalExternalList, opts.projectPath, skipList, repo),
@@ -146,36 +141,47 @@ export function shareAllCore(
   };
 }
 
+interface SharedPatch {
+  patterns: string[];
+  cfg: Partial<ExternalConfig>;
+}
+
 /**
- * Merges `patchList` overrides onto the shared externals. Patches only affect
- * externals that are actually being shared: a patch for an external that isn't
- * in the list (unknown dependency, skipped, filtered out, or shadowed by `overrides`) is
- * ignored with a warning.
+ * Merges patches onto the shared externals in call order. Patterns are matched against the
+ * package.json dependency names, before secondaries are expanded, so a patch reaches a secondary
+ * only through its package. A pattern that matches nothing is ignored with a warning.
  */
-function applyPatchList(
+function applyPatches(
   sharedExternals: ShareExternalsOptions,
-  patchList: Record<string, Partial<ExternalConfig>> | undefined,
+  patches: SharedPatch[] | undefined,
   overrides: ShareExternalsOptions | undefined
 ): ShareExternalsOptions {
-  if (!patchList) {
+  if (!patches) {
     return sharedExternals;
   }
 
   const result = { ...sharedExternals };
 
-  for (const [external, cfg] of Object.entries(patchList)) {
-    if (!result[external]) {
-      const shadowedByOverride =
-        !!overrides && Object.keys(overrides).some(o => external.startsWith(o));
-      logger.warn(
-        shadowedByOverride
-          ? `Ignoring patch for '${external}': it is already configured via 'overrides' ('patch' and 'overrides' are mutually exclusive per external).`
-          : `Ignoring patch for '${external}': it is not a shared external (unknown dependency, skipped, or not selected by filter()).`
-      );
-      continue;
-    }
+  for (const { patterns, cfg } of patches) {
+    for (const pattern of patterns) {
+      const matches = Object.keys(result).filter(key => matchesWildcard(key, pattern));
 
-    result[external] = { ...result[external], ...cfg };
+      if (matches.length === 0) {
+        const shadowedByOverride =
+          !!overrides &&
+          Object.keys(overrides).some(o => pattern.startsWith(o) || matchesWildcard(o, pattern));
+        logger.warn(
+          shadowedByOverride
+            ? `Ignoring patch for '${pattern}': it is already configured via 'overrides' ('patch' and 'overrides' are mutually exclusive per external).`
+            : `Ignoring patch for '${pattern}': it matches no shared package (unknown dependency, skipped, not selected by filter(), or a secondary entry point).`
+        );
+        continue;
+      }
+
+      for (const key of matches) {
+        result[key] = { ...result[key], ...cfg };
+      }
+    }
   }
 
   return result;
