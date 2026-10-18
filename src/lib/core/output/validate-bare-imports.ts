@@ -13,6 +13,7 @@ import { readBareImports } from '../../utils/bare-specifier.js';
 import { matchesExternal } from '../../utils/path-patterns.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import { logger } from '../../utils/logger.js';
+import { formatList } from '../../utils/format-list.js';
 
 interface UnresolvedImport {
   specifier: string;
@@ -46,7 +47,7 @@ export function validateBareImports(
   // An adapter that breaks the outputFiles contract is its bug, not the build's: never fatal.
   if (missing.length > 0) {
     logger.warn(
-      `Reported as written but not in '${outputDir}', so not scanned: ${formatFiles(missing)}. ` +
+      `Reported as written but not in '${outputDir}', so not scanned: ${formatList(missing, 3)}. ` +
         'NFBuildAdapter.build must write its files flat into outdir.'
     );
   }
@@ -58,7 +59,7 @@ export function validateBareImports(
   }
   for (const { specifier, importers, reason } of unresolved) {
     report(
-      `${formatFiles(importers)} import${importers.length === 1 ? 's' : ''} ` +
+      `${formatList(importers, 3)} import${importers.length === 1 ? 's' : ''} ` +
         `'${specifier}', which remoteEntry.json does not declare, so it will not resolve at ` +
         `runtime. ${reason}`
     );
@@ -169,12 +170,4 @@ function explain(
   }
 
   return "Share it, or list it in 'externals' if the host page provides it.";
-}
-
-function formatFiles(files: string[]): string {
-  const shown = files
-    .slice(0, 3)
-    .map(file => `'${file}'`)
-    .join(', ');
-  return files.length > 3 ? `${shown} and ${files.length - 3} more` : shown;
 }

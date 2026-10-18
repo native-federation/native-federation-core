@@ -1,6 +1,7 @@
 import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { logger } from '../utils/logger.js';
 import { inferPackageFromSecondary } from '../utils/normalize.js';
+import { formatList } from '../utils/format-list.js';
 
 /**
  * A trailing `.js`/`.ts`/... is a file import and resolves; any other dot in the last segment
@@ -46,15 +47,9 @@ export function assertBarrelMappings(paths: PathToImport): void {
   }
 
   // The warnings above already name every offender; keep the thrown message readable.
-  const shown = invalid
-    .slice(0, MAX_LISTED)
-    .map(i => `'${i}'`)
-    .join(', ');
-  const rest = invalid.length - MAX_LISTED;
-
   throw new Error(
     `Invalid 'shared mappings' config. Only barrel imports can be shared as a sharedMapping: ` +
-      `${shown}${rest > 0 ? ` and ${rest} more` : ''}.`
+      `${formatList(invalid, MAX_LISTED)}.`
   );
 }
 
@@ -90,15 +85,9 @@ export function warnNonNpmMappingNames(paths: PathToImport, strict = false): voi
 
   if (!strict) return;
 
-  const shown = offenders
-    .slice(0, MAX_LISTED)
-    .map(i => `'${i}'`)
-    .join(', ');
-  const rest = offenders.length - MAX_LISTED;
-
   throw new Error(
     `Invalid 'shared mappings' config. Shared mappings must follow npm package naming ` +
       `('package' or '@company/package', subpaths belong to that package): ` +
-      `${shown}${rest > 0 ? ` and ${rest} more` : ''}.`
+      `${formatList(offenders, MAX_LISTED)}.`
   );
 }
