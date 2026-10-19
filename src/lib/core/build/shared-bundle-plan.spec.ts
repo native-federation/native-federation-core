@@ -51,6 +51,25 @@ describe('planSharedBundles', () => {
     expect(plans[0]!.externals).toEqual(['other']);
   });
 
+  it('keeps a package that only shares a name prefix external', () => {
+    const plans = planSharedBundles(
+      config({ react: ext({ platform: 'browser', build: 'package' }) }),
+      ['react', 'react/jsx-runtime', 'react-dom', 'react-dom/client']
+    );
+
+    expect(plans[0]!.externals).toEqual(['react-dom', 'react-dom/client']);
+  });
+
+  // A wildcard external is not this package's own entry point, so it stays, like 'react-dom'.
+  it('keeps a wildcard external that only starts with the package name', () => {
+    const plans = planSharedBundles(
+      config({ react: ext({ platform: 'browser', build: 'package' }) }),
+      ['react', 'react*']
+    );
+
+    expect(plans[0]!.externals).toEqual(['react*']);
+  });
+
   it('splitShared routes by platform and build type', () => {
     const { sharedBrowser, sharedServer, separateBrowser, separateServer } = splitShared({
       a: ext({ platform: 'browser', build: 'default' }),
