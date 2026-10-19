@@ -253,8 +253,8 @@ misses, so it can stand in for a native watch over the same tree but never the r
 
 ### Replay dedupe
 
-Events whose recorded identity — mtime **and** byte length — is unchanged since the last one
-seen for that path are dropped before they reach either channel (`dedupeReplays`, default
+Events whose recorded identity — mtime, ctime **and** byte length — is unchanged since the last
+one seen for that path are dropped before they reach either channel (`dedupeReplays`, default
 **on**). macOS FSEvents re-delivers 'changed' for recently edited files roughly every 30s;
 with a watch list of a few thousand sources that replay alone keeps a rebuild loop awake
 forever.
@@ -262,6 +262,11 @@ forever.
 Length is paired with mtime so that the common ambiguous case — a second save landing inside
 one mtime tick, on a filesystem with coarse mtime granularity — is settled on data rather
 than on a clock. Only a save that also left byte length untouched reaches the time check.
+ctime covers a replace that keeps size and restores an old mtime (`cp -p`, `rsync -a`, tar), which
+the poll catches by inode. The inode itself is left out of the dedupe: on a mount whose inode
+numbers are not stable (CIFS `noserverino` may hand out new ones) the poll reports unchanged files,
+and the dedupe, seeing the same mtime, ctime and length, is what drops them. ctime cannot replace the
+inode in the poll, since it comes from the same coarse clock as mtime.
 
 That check is `replayGraceMs` (default 2000): an event whose identity matches still passes
 while the mtime is recent. The default is a derived bound, not a tuned constant. A filesystem

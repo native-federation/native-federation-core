@@ -60,7 +60,12 @@ export const nodeIo: IoPort = {
   stat(path): StatInfo | null {
     try {
       const s = fs.lstatSync(path);
-      return { mtimeMs: s.mtimeMs, size: s.size, isSymbolicLink: s.isSymbolicLink() };
+      return {
+        mtimeMs: s.mtimeMs,
+        ctimeMs: s.ctimeMs,
+        size: s.size,
+        isSymbolicLink: s.isSymbolicLink(),
+      };
     } catch {
       return null;
     }
@@ -108,7 +113,7 @@ export const nodeIo: IoPort = {
   },
 };
 
-// mtime-scan fallback: ng-packagr's atomic dist rewrites change the inode and
+// Stat-scan fallback: ng-packagr's atomic dist rewrites change the inode and
 // defeat native fs.watch. Emits changed/added/removed entries relative to `root`.
 function pollWatch(
   root: string,
@@ -116,8 +121,8 @@ function pollWatch(
   intervalMs: number,
   onEvent: (filename: string | null) => void
 ): WatchHandle {
-  const snapshot = (): Map<string, number> => {
-    const out = new Map<string, number>();
+  const snapshot = (): Map<string, string> => {
+    const out = new Map<string, string>();
     const walk = (dir: string) => {
       let entries: fs.Dirent[];
       try {
@@ -134,7 +139,13 @@ function pollWatch(
           if (recursive) walk(full);
         } else {
           try {
-            out.set(path.relative(root, full), fs.statSync(full).mtimeMs);
+            // mtime alone misses a rewrite within one kernel clock tick (a few ms on ext4), which
+            // an atomic replace or a quick second save hits: inode and size settle most of those.
+            // Without bigint a Windows ino can be 0 or lossy, which only falls back to size+mtime. On a
+            // mount whose inode numbers are not stable (CIFS noserverino) this reports unchanged
+            // files; the watcher's replay dedupe drops those.
+            const { ino, size, mtimeMs } = fs.statSync(full);
+            out.set(path.relative(root, full), `${ino}:${size}:${mtimeMs}`);
           } catch {
             /* vanished between readdir and stat */
           }
@@ -148,8 +159,8 @@ function pollWatch(
   let prev = snapshot();
   const timer = setInterval(() => {
     const next = snapshot();
-    for (const [rel, mtime] of next) {
-      if (prev.get(rel) !== mtime) onEvent(rel);
+    for (const [rel, identity] of next) {
+      if (prev.get(rel) !== identity) onEvent(rel);
     }
     for (const rel of prev.keys()) {
       if (!next.has(rel)) onEvent(rel);

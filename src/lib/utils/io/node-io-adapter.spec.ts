@@ -178,6 +178,33 @@ describe('nodeIo', () => {
       expect(seen).toContain('a.js');
     });
 
+    // Only the inode differs here: same size and the old mtime restored (`cp -p`, `rsync -a`).
+    // With mtime alone this is missed every time, not only within one clock tick.
+    it('detects a same-size atomic replace that keeps the old mtime', () => {
+      const file = path.join(root, 'a.js');
+      fs.writeFileSync(file, 'v1');
+      // A whole-second time, so utimes reproduces it exactly: a sub-ms mtime it cannot restore
+      // would make the mtime differ after all.
+      const old = new Date('2020-01-01T00:00:00Z');
+      fs.utimesSync(file, old, old);
+
+      const seen: (string | null)[] = [];
+      const handle = nodeIo.watch(root, { recursive: true, poll: { intervalMs: 100 } }, f =>
+        seen.push(f)
+      );
+
+      const tmp = path.join(root, 'a.js.tmp');
+      fs.writeFileSync(tmp, 'v2');
+      fs.utimesSync(tmp, old, old);
+      fs.renameSync(tmp, file);
+
+      vi.advanceTimersByTime(100);
+      handle.close();
+
+      expect(fs.statSync(file).mtimeMs).toBe(old.getTime());
+      expect(seen).toContain('a.js');
+    });
+
     // `npm link` points at the package root, so the linked lib's own installed deps sit
     // inside the polled dir; walking them every 300ms is what starves the loop.
     it('does not descend into the linked package own node_modules', () => {

@@ -467,6 +467,32 @@ describe('createNfWatcherCore replay dedupe', () => {
     expect([...watcher.get()]).toEqual([posix(file)]);
   });
 
+  // A replace that keeps size and restores an old mtime (cp -p, rsync -a, tar) is what the
+  // poll now reports by inode; ctime is the only part of the identity that still moves.
+  it('passes an aged same-mtime, same-length event whose ctime changed', () => {
+    const io = seeded().setCtime(file, AGED);
+    const watcher = createNfWatcherCore(io, {}, clock);
+
+    watcher.addPaths(file);
+    io.setCtime(file, NOW - 10);
+    emitFile(io, file);
+
+    expect([...watcher.get()]).toEqual([posix(file)]);
+  });
+
+  it('drops the replay of an event whose ctime is unchanged', () => {
+    const io = seeded().setCtime(file, AGED);
+    const watcher = createNfWatcherCore(io, {}, clock);
+
+    watcher.addPaths(file);
+    io.setCtime(file, NOW - 10);
+    emitFile(io, file);
+    watcher.clear();
+    emitFile(io, file);
+
+    expect(watcher.get().size).toBe(0);
+  });
+
   // A network mount whose server clock runs ahead stamps mtimes in the future, so
   // the age goes negative. That has to read as recent (deliver), not as aged: the
   // dedupe going quiet costs a spurious rebuild, dropping the event costs an edit.

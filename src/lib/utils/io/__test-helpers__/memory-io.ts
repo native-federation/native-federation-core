@@ -19,6 +19,8 @@ export interface MemoryIo extends IoPort {
   setDiskCase(path: string, spelling: string): MemoryIo;
   /** Set an entry's mtime (ms) reported by `stat`. */
   setMtime(filePath: string, mtimeMs: number): MemoryIo;
+  /** Set an entry's ctime (ms) reported by `stat`. */
+  setCtime(filePath: string, ctimeMs: number): MemoryIo;
   files(): string[];
   emit(watchedPath: string, filename?: string | null): void;
 }
@@ -31,6 +33,7 @@ export function createMemoryIo(): MemoryIo {
   const watchers = new Map<string, Array<(filename: string | null) => void>>();
   const symlinks = new Map<string, string>();
   const mtimes = new Map<string, number>();
+  const ctimes = new Map<string, number>();
   const diskCase = new Map<string, string>();
 
   const encode = (data: string | Uint8Array): Uint8Array =>
@@ -101,6 +104,10 @@ export function createMemoryIo(): MemoryIo {
       mtimes.set(toKey(filePath), mtimeMs);
       return io;
     },
+    setCtime(filePath, ctimeMs) {
+      ctimes.set(toKey(filePath), ctimeMs);
+      return io;
+    },
     files() {
       return [...files.keys()];
     },
@@ -155,6 +162,7 @@ export function createMemoryIo(): MemoryIo {
       if (!isSymbolicLink && !files.has(key) && !dirs.has(key)) return null;
       return {
         mtimeMs: mtimes.get(key) ?? 0,
+        ctimeMs: ctimes.get(key) ?? 0,
         size: files.get(key)?.byteLength ?? 0,
         isSymbolicLink,
       };
