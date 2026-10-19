@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { buildSync, type BuildFailure } from 'esbuild';
 import {
   captureWildcard,
   isUnderAnyDir,
   isUnderDir,
+  matchesExternal,
   matchesWildcard,
   parseWildcard,
   substituteWildcard,
@@ -104,6 +106,73 @@ describe('matchesWildcard', () => {
     expect(matchesWildcard('a/x/b.ts', 'a/*.js')).toBe(false);
   });
 });
+
+describe('matchesExternal', () => {
+  // Each pattern with what esbuild 0.28 keeps external for it; measured, then pinned below.
+  const table: [string, Record<string, boolean>][] = [
+    [
+      'host-sdk',
+      { 'host-sdk': true, 'host-sdk/events': true, 'host-sdk/a/b': true, 'host-sdkx': false },
+    ],
+    ['@scope/pkg', { '@scope/pkg': true, '@scope/pkg/sub': true, '@scope/pkg-other': false }],
+    ['@icons/*.svg', { '@icons/home.svg': true, '@icons/a/b.svg': true, '@icons/home.png': false }],
+    ['a*b', { ab: true, axb: true, b: false, a: false }],
+    // Prefix and suffix may not overlap: 'a' would need its one character twice.
+    ['a*a', { a: false, aa: true, aba: true }],
+    ['@angular/*', { '@angular/core': true, '@angular/common/http': true, '@angular': false }],
+    ['lodash/', { lodash: false, 'lodash/fp': false }],
+  ];
+
+  it.each(table)('reads %s the way the table says', (pattern, expected) => {
+    for (const [specifier, kept] of Object.entries(expected)) {
+      expect([specifier, matchesExternal(specifier, pattern)]).toEqual([specifier, kept]);
+    }
+  });
+
+  // The validator trusts that the adapter left exactly these imports bare; esbuild is the
+  // reference adapter, so the table must agree with it.
+  it.each(table)('agrees with esbuild on %s', (pattern, expected) => {
+    for (const specifier of Object.keys(expected)) {
+      expect([specifier, keptExternalByEsbuild(specifier, pattern)]).toEqual([
+        specifier,
+        matchesExternal(specifier, pattern),
+      ]);
+    }
+  });
+});
+
+// esbuild rejects a second '*' outright, so a config with one never builds; matchesExternal reads
+// the rest after the first '*' as literal text. Recorded so a change to either is noticed.
+describe('matchesExternal with more than one wildcard', () => {
+  it('is rejected by esbuild', () => {
+    expect(() => keptExternalByEsbuild('abc', 'a*b*c')).toThrow(/more than one "\*" wildcard/);
+  });
+
+  it('treats the second * as literal text', () => {
+    expect(matchesExternal('a-b*c', 'a*b*c')).toBe(true);
+    expect(matchesExternal('abxc', 'a*b*c')).toBe(false);
+  });
+});
+
+// Nothing is installed for these names, so an import esbuild does not keep external fails to
+// resolve; any other build error is a broken test and is rethrown.
+function keptExternalByEsbuild(specifier: string, pattern: string): boolean {
+  try {
+    const { outputFiles } = buildSync({
+      stdin: { contents: `import ${JSON.stringify(specifier)};` },
+      bundle: true,
+      write: false,
+      format: 'esm',
+      external: [pattern],
+      logLevel: 'silent',
+    });
+    return outputFiles[0]!.text.includes(JSON.stringify(specifier));
+  } catch (e) {
+    const { errors } = e as BuildFailure;
+    if (errors?.every(err => err.text.startsWith('Could not resolve'))) return false;
+    throw e;
+  }
+}
 
 describe('captureWildcard', () => {
   it('captures the segment for a suffix pattern (end-anchored, multi-segment)', () => {

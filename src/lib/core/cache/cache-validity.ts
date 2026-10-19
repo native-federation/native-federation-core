@@ -2,7 +2,8 @@ import * as path from 'path';
 import type { FileReaderPort } from '../../domain/utils/io-port.contract.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
 import { getPkgFolder } from '../../utils/io/package-json-repository.js';
-import { matchesExternal, readBareImports } from '../../utils/bare-specifier.js';
+import { readBareImports } from '../../utils/bare-specifier.js';
+import { matchesExternal } from '../../utils/path-patterns.js';
 import { isScript } from '../../utils/script-file.js';
 import type { CacheMetadata } from './cache-persistence.js';
 
@@ -19,7 +20,7 @@ export function externalImportsCore(
   for (const file of files.filter(isScript)) {
     // No catch: rewriteImports parsed these already; skipping one could keep a stale entry.
     for (const specifier of readBareImports(io, path.join(dir, file), file)) {
-      if (matchesExternal(specifier, external)) found.add(specifier);
+      if (external.some(e => matchesExternal(specifier, e))) found.add(specifier);
     }
   }
   return [...found].sort();
@@ -63,7 +64,7 @@ export function staleCacheReason(
     return 'it does not record what it left external';
   }
 
-  const dropped = metadata.externalImports.find(s => !matchesExternal(s, external));
+  const dropped = metadata.externalImports.find(s => !external.some(e => matchesExternal(s, e)));
   if (dropped) return `it imports '${dropped}', which is no longer external`;
 
   const built = new Set(metadata.builtExternals);

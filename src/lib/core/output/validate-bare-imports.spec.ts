@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { buildSync } from 'esbuild';
 import type {
   FederationInfo,
   OutputFile,
@@ -204,6 +205,40 @@ describe('findUnresolvedImportsCore', () => {
 
     expect(result.map(r => r.specifier)).toEqual(['other']);
     expect(result[0]!.reason).toContain("list it in 'externals'");
+  });
+
+  // Hand-written fixtures are spaced and quoted the readable way; minified output is not.
+  it('reads real minified esbuild output, re-exports and dynamic imports included', () => {
+    const [bundle] = buildSync({
+      stdin: {
+        contents: `export * from "@angular/common/http";
+          export { a } from "@angular/common/testing";
+          export const l = () => import("@angular/common/locales/de");
+          import "@angular/common";`,
+        resolveDir: OUT,
+      },
+      bundle: true,
+      minify: true,
+      write: false,
+      format: 'esm',
+      external: ['@angular/common'],
+      logLevel: 'silent',
+    }).outputFiles;
+    const io = createMemoryIo().setFile(out('main.js'), bundle!.text);
+
+    const result = unresolvedImports(
+      io,
+      OUT,
+      browser('main.js'),
+      makeConfig({ shared: { '@angular/common': ext() } }),
+      info({ shared: [shared('@angular/common', 'common.js')] })
+    );
+
+    expect(result.map(r => r.specifier)).toEqual([
+      '@angular/common/http',
+      '@angular/common/locales/de',
+      '@angular/common/testing',
+    ]);
   });
 
   it('accepts dense chunks and chunks published as externals', () => {
