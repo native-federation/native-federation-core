@@ -689,7 +689,8 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     const chunkedBuild = async (
       mem: ReturnType<typeof createMemoryIo>,
       chunkText: string,
-      denseChunking: boolean
+      denseChunking: boolean,
+      opts: { asset?: boolean } = {}
     ) => {
       const adapter: FakeBuildAdapter = createFakeBuildAdapter({
         results: name => {
@@ -699,11 +700,16 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
           mem.setFile(entry, `export * from './chunk-AAAAAAAA.js';\n`);
           mem.setFile(chunk, chunkText);
           mem.setFile(`${chunk}.map`, '{"version":3}');
-          return [{ fileName: entry }, { fileName: chunk }, { fileName: `${chunk}.map` }];
+          const files = [{ fileName: entry }, { fileName: chunk }, { fileName: `${chunk}.map` }];
+          if (!opts.asset) return files;
+          const asset = path.join(setup.options.outdir, 'foo.css');
+          mem.setFile(asset, '.foo{}');
+          return [...files, { fileName: asset }];
         },
       });
       const config = makeConfig();
       config.features.denseChunking = denseChunking;
+      config.features.integrityHashes = true;
       const result = await bundleSharedCore(
         { io: mem, repo: repoAtVersion('2.0.0'), adapter },
         fooWith(),
@@ -745,6 +751,23 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       expect(mem.isFile(path.join('/ws/dist', chunk!))).toBe(true);
       expect(result.externals.some(e => e.packageName.startsWith('@nf-internal/'))).toBe(false);
     });
+
+    // A CSS import or a file-loader asset leaves a non-script output beside the chunks.
+    it.each([false, true])(
+      'never publishes or hashes an emitted asset (denseChunking: %s)',
+      async denseChunking => {
+        const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+
+        const result = await chunkedBuild(mem, 'export const a = 1;\n', denseChunking, {
+          asset: true,
+        });
+
+        expect(mem.readText('/ws/dist/foo.css')).toBe('.foo{}');
+        expect(result.externals.map(e => e.outFileName)).not.toContain('foo.css');
+        expect(Object.values(result.chunks ?? {}).flat()).not.toContain('foo.css');
+        expect(Object.keys(result.integrity!)).not.toContain('foo.css');
+      }
+    );
 
     it('gives two builds the same chunk name exactly when the chunk bytes agree', async () => {
       const same = await chunkedBuild(

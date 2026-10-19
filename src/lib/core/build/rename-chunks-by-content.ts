@@ -6,15 +6,14 @@ import type {
 } from '../../domain/utils/io-port.contract.js';
 import { CHUNK_PREFIX } from '../../domain/core/chunk.js';
 import { DEFAULT_HASH_LENGTH, hashChunkContent } from '../../utils/hash.js';
-import { isSourceFile, SOURCE_MAP_COMMENT } from './rewrite-chunk-imports.js';
+import { SOURCE_MAP_COMMENT } from './rewrite-chunk-imports.js';
+import { isScript, SCRIPT_EXTENSION } from '../../utils/script-file.js';
 
 type RenameDeps = FileReaderPort & FileWriterPort & HashPort;
 
 // The hash segment of a bundler's output name, in esbuild's, Rollup's or a hex alphabet, and at
 // least as long as the 8 characters both bundlers write: a trailing word like `-vendor` is not one.
 const HASH_SEGMENT = /-([A-Za-z0-9_$]{8,})$/;
-
-const SOURCE_EXTENSION = /\.(m|c)?js$/;
 
 // `'./chunk-x.js'` as the bundler wrote it, or `'@nf-internal/chunk-x'` after the import rewrite.
 const CHUNK_REFERENCE = new RegExp(`(['"])(?:\\.\\/([^'"/]+)|${CHUNK_PREFIX}\\/([^'"/]+))\\1`, 'g');
@@ -35,7 +34,7 @@ export function renameChunksByContentCore(
   chunks: string[],
   referrers: string[]
 ): Map<string, string> {
-  const scripts = chunks.filter(isSourceFile);
+  const scripts = chunks.filter(isScript);
   const chunkSet = new Set(scripts);
   const byStem = new Map(scripts.map(file => [stemOf(file), file]));
   const renamed = new Map<string, string>();
@@ -184,11 +183,11 @@ function compare(a: string, b: string): number {
 }
 
 function stemOf(file: string): string {
-  return file.replace(SOURCE_EXTENSION, '');
+  return file.replace(SCRIPT_EXTENSION, '');
 }
 
 function hashedName(io: HashPort, file: string, identity: string): string {
-  const extension = file.match(SOURCE_EXTENSION)?.[0] ?? '';
+  const extension = file.match(SCRIPT_EXTENSION)?.[0] ?? '';
   const stem = stemOf(file);
   const segment = stem.match(HASH_SEGMENT);
   const length = segment ? segment[1]!.length : DEFAULT_HASH_LENGTH;

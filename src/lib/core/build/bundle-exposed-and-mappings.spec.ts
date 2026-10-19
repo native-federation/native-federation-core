@@ -499,6 +499,34 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     expect(io.readText('dist/Comp.js')).not.toContain('AAAAAAAA');
   });
 
+  // A CSS import or a file-loader asset leaves a non-script output beside the chunks.
+  it('never publishes or hashes an emitted asset', async () => {
+    const io = createMemoryIo();
+    const adapter = createFakeBuildAdapter({
+      results: () => {
+        io.setFile('dist/Comp.js', "import './Comp.css';\nexport * from './chunk-AAAAAAAA.js';\n");
+        io.setFile('dist/chunk-AAAAAAAA.js', 'export const a = 1;\n');
+        io.setFile('dist/Comp.css', '.a{}');
+        return ['Comp.js', 'chunk-AAAAAAAA.js', 'Comp.css'].map(f => ({ fileName: `dist/${f}` }));
+      },
+    });
+
+    const result = await bundleExposedAndMappingsCore(
+      { adapter, io },
+      makeConfig({
+        exposes: { './Comp': { file: './src/comp.ts' } },
+        chunks: true,
+        features: { ...makeConfig().features, denseChunking: true, integrityHashes: true },
+      }),
+      makeFedOptions(),
+      []
+    );
+
+    expect(Object.values(result.chunks ?? {}).flat()).not.toContain('Comp.css');
+    expect(Object.keys(result.integrity!)).not.toContain('Comp.css');
+    expect(io.readText('dist/Comp.css')).toBe('.a{}');
+  });
+
   it('builds a mapping that asked for its own bundle apart from the rest', async () => {
     const config = makeConfig({
       exposes: { './Comp': { file: './src/comp.ts' } },

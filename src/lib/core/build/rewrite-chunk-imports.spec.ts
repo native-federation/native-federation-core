@@ -1,6 +1,6 @@
 import { decode, encode } from '@jridgewell/sourcemap-codec';
 import { describe, expect, it } from 'vitest';
-import { isSourceFile, rewriteChunkImportsCore } from './rewrite-chunk-imports.js';
+import { rewriteChunkImportsCore } from './rewrite-chunk-imports.js';
 import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
 
 const rewrite = (source: string): string => {
@@ -82,18 +82,5 @@ describe('rewriteChunkImportsCore', () => {
     expect(line2).toEqual([[0, 0, 20, 0]]);
     expect(shifted.sources).toEqual(map.sources);
     expect(shifted.names).toEqual(map.names);
-  });
-});
-
-describe('isSourceFile', () => {
-  it('matches js/mjs/cjs files', () => {
-    expect(isSourceFile('a.js')).toBe(true);
-    expect(isSourceFile('a.mjs')).toBe(true);
-    expect(isSourceFile('a.cjs')).toBe(true);
-  });
-
-  it('rejects other extensions', () => {
-    expect(isSourceFile('a.ts')).toBe(false);
-    expect(isSourceFile('a.css')).toBe(false);
   });
 });

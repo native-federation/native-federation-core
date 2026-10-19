@@ -2,14 +2,11 @@ import * as path from 'path';
 import type { FileReaderPort, HashPort } from '../../domain/utils/io-port.contract.js';
 import type { IntegrityMap } from '../../domain/core/federation-info.contract.js';
 import { integrityForFileCore } from '../../utils/hash.js';
+import { isScript } from '../../utils/script-file.js';
 
 type IntegrityDeps = FileReaderPort & HashPort;
 
-/**
- * Build an SRI map for `files` (resolved against `baseDir`), skipping sourcemaps
- * and files that no longer exist on disk. Keyed by basename. Must run after any
- * post-bundle rewriting so the hashes match the final on-disk bytes.
- */
+// Keyed by basename. Must run after any rewrite, so the hashes match the bytes on disk.
 export function computeIntegrityMapCore(
   io: IntegrityDeps,
   files: string[],
@@ -17,7 +14,7 @@ export function computeIntegrityMapCore(
 ): IntegrityMap {
   const integrity: IntegrityMap = {};
   for (const file of files) {
-    if (file.endsWith('.map')) continue;
+    if (!isScript(file)) continue;
     const fullPath = path.join(baseDir, file);
     if (!io.exists(fullPath)) continue;
     integrity[path.basename(file)] = integrityForFileCore(io, fullPath);
