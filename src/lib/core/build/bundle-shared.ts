@@ -46,6 +46,7 @@ import type {
 import { getBuildAdapter } from './build-adapter.js';
 import { synthesizeCjsNamedExportsEntry, type ModuleEvaluator } from './synthesize-cjs-exports.js';
 import { createRequire } from 'module';
+import { inferPackageFromSecondary } from '../../utils/normalize.js';
 
 export async function bundleShared(
   sharedBundles: Record<string, NormalizedExternalConfig>,
@@ -237,28 +238,27 @@ export async function bundleSharedCore(
     );
     applyRenames(bundleResult, entryPoints, renamed);
   } catch (e) {
-    logger.error('Error bundling shared npm package ');
+    logger.error('Error bundling shared npm package');
     if (e instanceof Error) {
       logger.error(e.message);
     }
 
-    logger.error('For more information, run in verbose mode');
-
-    logger.notice('');
-    logger.notice('');
-
-    logger.notice('** Important Information: ***');
-    logger.notice('The error message above shows an issue with bundling a node_module.');
-    logger.notice('In most cases this is because you (indirectly) shared a Node.js package,');
-    logger.notice('while Native Federation builds for the browser.');
     logger.notice(
-      'You can move such packages into devDependencies or skip them in your federation.config.js.'
+      'Usually a shared Node.js package; Native Federation builds for the browser. ' +
+        "Move it to devDependencies or add it to 'skip'."
     );
-    logger.notice('');
-    logger.notice('More Details: https://bit.ly/nf-issue');
-
-    logger.notice('');
-    logger.notice('');
+    const keepingAll = packagesKeepingAllSecondaries(
+      sharedBundles,
+      config.features.ignoreUnusedDeps
+    );
+    if (keepingAll.length > 0) {
+      logger.notice(
+        `All entry points of ${keepingAll.join(', ')} are published, used or not ` +
+          "(keepAll or 'ignoreUnusedDeps: false'). One of them may import an uninstalled " +
+          "package, e.g. an optional peer. Add it to 'skip'."
+      );
+    }
+    logger.notice('Run in verbose mode for the full error. More details: https://bit.ly/nf-issue');
 
     logger.verbose(e);
     throw e;
@@ -307,6 +307,19 @@ export async function bundleSharedCore(
   bundleCache.copyFiles(resolveOutputPath(fedOptions));
 
   return { externals: result, chunks: exportedChunks, integrity };
+}
+
+// Their secondaries are published whether or not anything imports them, so one that imports an
+// uninstalled optional peer fails the bundle (core#195).
+function packagesKeepingAllSecondaries(
+  sharedBundles: Record<string, NormalizedExternalConfig>,
+  ignoreUnusedDeps: boolean
+): string[] {
+  const roots = Object.entries(sharedBundles)
+    .filter(([key]) => key !== inferPackageFromSecondary(key))
+    .filter(([, cfg]) => cfg.includeSecondaries || !ignoreUnusedDeps)
+    .map(([key]) => `'${inferPackageFromSecondary(key)}'`);
+  return [...new Set(roots)];
 }
 
 function rewriteImports(
