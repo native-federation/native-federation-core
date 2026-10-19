@@ -249,27 +249,21 @@ export async function bundleSharedCore(
     logger.notice('');
 
     logger.notice('** Important Information: ***');
-    logger.notice('The error message above shows an issue with bundling a node_module.');
     const keepingAll = packagesKeepingAllSecondaries(
       sharedBundles,
       config.features.ignoreUnusedDeps
     );
     if (keepingAll.length > 0) {
       logger.notice(
-        'Every entry point of these packages is published (includeSecondaries: { keepAll: true } ' +
-          `or 'ignoreUnusedDeps: false'), including ones this build never imports: ${keepingAll.join(', ')}.`
+        `All entry points of ${keepingAll.join(', ')} are published, used or not ` +
+          "(keepAll or 'ignoreUnusedDeps: false')."
       );
       logger.notice(
-        'If the error comes from one of those, it may import a package that is not installed, ' +
-          'such as an optional peer dependency.'
+        "One may import an uninstalled package, e.g. an optional peer. Add it to 'skip'."
       );
-      logger.notice("Exclude that entry point with 'skip' in your federation.config.js.");
     } else {
-      logger.notice('In most cases this is because you (indirectly) shared a Node.js package,');
-      logger.notice('while Native Federation builds for the browser.');
-      logger.notice(
-        'You can move such packages into devDependencies or skip them in your federation.config.js.'
-      );
+      logger.notice('Usually a shared Node.js package; Native Federation builds for the browser.');
+      logger.notice("Move it to devDependencies or add it to 'skip'.");
     }
     logger.notice('');
     logger.notice('More Details: https://bit.ly/nf-issue');
