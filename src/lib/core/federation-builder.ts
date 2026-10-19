@@ -1,4 +1,4 @@
-import type { FederationInfo } from '../domain/core/federation-info.contract.js';
+import type { FederationInfo, OutputFile } from '../domain/core/federation-info.contract.js';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
 import { getBuildAdapter, setBuildAdapter } from './build/build-adapter.js';
 import { buildForFederation } from './build/build-for-federation.js';
@@ -10,6 +10,7 @@ import { getExternals } from './build/get-externals.js';
 import { normalizeFederationOptions } from './normalize-options.js';
 import type { NFBuildAdapter } from '../domain/core/build-adapter.contract.js';
 import { rebuildForFederation } from './build/rebuild-for-federation.js';
+import { collectOutputFiles } from './cache/federation-cache.js';
 
 export interface BuildHelperParams {
   options: FederationOptions;
@@ -56,6 +57,9 @@ export const federationBuilder = {
   close,
   get federationInfo() {
     return fedInfo;
+  },
+  get outputFiles(): OutputFile[] | undefined {
+    return options && collectOutputFiles(options.federationCache);
   },
   get externals(): string[] {
     return externals;

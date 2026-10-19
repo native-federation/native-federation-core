@@ -2,13 +2,18 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
-import type { DenseSharedInfo, SharedInfo } from '../../domain/core/federation-info.contract.js';
+import type {
+  DenseSharedInfo,
+  OutputFile,
+  SharedInfo,
+} from '../../domain/core/federation-info.contract.js';
 
 vi.mock('../output/write-federation-info.js', () => ({ writeFederationInfo: vi.fn() }));
 vi.mock('../output/write-import-map.js', () => ({ writeImportMap: vi.fn() }));
 vi.mock('./bundle-exposed-and-mappings.js', () => ({
-  bundleExposedAndMappings: vi.fn(async () => ({ mappings: [], exposes: [] })),
+  bundleExposedAndMappings: vi.fn(async () => ({ mappings: [], exposes: [], outputFiles: [] })),
 }));
+vi.mock('../output/validate-bare-imports.js', () => ({ validateBareImports: vi.fn() }));
 vi.mock('../cache/cache-persistence.js', () => ({
   cacheEntryCore: vi.fn(() => ({ clear: vi.fn() })),
 }));
@@ -19,6 +24,10 @@ vi.mock('./resolve-shared-dirs.js', () => ({
 vi.mock('./build-for-federation.js', () => ({
   executeSharedBundlePlans: vi.fn(async (_plans, _config, fedOptions) => {
     fedOptions.federationCache.externals.push({ packageName: 'a', outFileName: 'a.fresh.js' });
+    fedOptions.federationCache.externalFiles = {
+      ...fedOptions.federationCache.externalFiles,
+      'browser-shared': [{ fileName: 'a.fresh.js', platform: 'browser' }],
+    };
   }),
 }));
 
@@ -26,6 +35,8 @@ const { rebuildForFederation } = await import('./rebuild-for-federation.js');
 const { executeSharedBundlePlans } = await import('./build-for-federation.js');
 const { affectedSharedKeys } = await import('./resolve-shared-dirs.js');
 const { bundleExposedAndMappings } = await import('./bundle-exposed-and-mappings.js');
+const { validateBareImports } = await import('../output/validate-bare-imports.js');
+const { collectOutputFiles } = await import('../cache/federation-cache.js');
 
 // Fresh objects per call, like the real implementation, so a shareScope default written in place
 // cannot survive from one rebuild into the next.
@@ -33,6 +44,7 @@ const mappingsPerCall = (mappings: () => SharedInfo[]) =>
   vi.mocked(bundleExposedAndMappings).mockImplementation(async () => ({
     mappings: mappings(),
     exposes: [],
+    outputFiles: [],
   }));
 
 function config(
@@ -106,6 +118,59 @@ describe('rebuildForFederation — affected-external re-bundling', () => {
 
     expect(affectedSharedKeys).not.toHaveBeenCalled();
     expect(executeSharedBundlePlans).not.toHaveBeenCalled();
+  });
+});
+
+describe('rebuildForFederation — output files (core#177)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const browser = (...fileNames: string[]): OutputFile[] =>
+    fileNames.map(fileName => ({ fileName, platform: 'browser' }));
+  const artifactsWrite = (...fileNames: string[]) =>
+    vi.mocked(bundleExposedAndMappings).mockResolvedValueOnce({
+      mappings: [],
+      exposes: [],
+      outputFiles: browser(...fileNames),
+    });
+
+  it('replaces the artifact files on every rebuild', async () => {
+    vi.mocked(affectedSharedKeys).mockReturnValue(new Set());
+    const options = fedOptions([]);
+
+    artifactsWrite('Comp.js', 'chunk-OLD.js');
+    await rebuildForFederation(config(), options, ['a'], ['/ws/src/comp.ts']);
+    artifactsWrite('Comp.js', 'chunk-NEW.js');
+    await rebuildForFederation(config(), options, ['a'], ['/ws/src/comp.ts']);
+
+    expect(collectOutputFiles(options.federationCache)).toEqual(browser('Comp.js', 'chunk-NEW.js'));
+  });
+
+  it('carries the external files over when no shared package was hit', async () => {
+    vi.mocked(affectedSharedKeys).mockReturnValue(new Set());
+    const options = fedOptions([]);
+    options.federationCache.externalFiles = { 'browser-shared': browser('a.cached.js') };
+    artifactsWrite('Comp.js');
+
+    await rebuildForFederation(config(), options, ['a'], ['/ws/src/comp.ts']);
+
+    expect(collectOutputFiles(options.federationCache)).toEqual(browser('a.cached.js', 'Comp.js'));
+    expect(vi.mocked(validateBareImports).mock.calls[0]![3]).toEqual(
+      browser('a.cached.js', 'Comp.js')
+    );
+  });
+
+  it('refreshes the external files when a shared package is re-bundled', async () => {
+    vi.mocked(affectedSharedKeys).mockReturnValue(new Set(['a']));
+    const options = fedOptions([]);
+    options.federationCache.externalFiles = {
+      'browser-shared': browser('a.stale.js'),
+      'browser-gone': browser('gone.js'),
+    };
+    artifactsWrite('Comp.js');
+
+    await rebuildForFederation(config(), options, ['a'], ['/dev/lib/dist/src/a.ts']);
+
+    expect(collectOutputFiles(options.federationCache)).toEqual(browser('a.fresh.js', 'Comp.js'));
   });
 });
 

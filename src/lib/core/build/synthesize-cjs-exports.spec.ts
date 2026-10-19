@@ -59,10 +59,7 @@ describe('synthesizeCjsNamedExportsEntry', () => {
 
   it('falls back to default-only (null) and warns when a CJS require() genuinely fails', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
-    const io = createMemoryIo().setFile(
-      '/n/broken/index.js',
-      '!function(){module.exports={}}()'
-    );
+    const io = createMemoryIo().setFile('/n/broken/index.js', '!function(){module.exports={}}()');
 
     const out = synthesizeCjsNamedExportsEntry(
       io,

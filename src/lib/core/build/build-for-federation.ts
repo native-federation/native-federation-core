@@ -2,13 +2,11 @@ import type { FederationInfo } from '../../domain/core/federation-info.contract.
 import { bundleExposedAndMappings } from './bundle-exposed-and-mappings.js';
 import { bundleShared } from './bundle-shared.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
-import { assembleFederationInfo } from './assemble-federation-info.js';
-import { writeFederationOutputs } from '../output/write-federation-outputs.js';
-import { validateBareImports } from '../output/validate-bare-imports.js';
 import { logger } from '../../utils/logger.js';
 import { AbortedError } from '../../utils/errors.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import { addExternalsToCache } from '../cache/federation-cache.js';
+import { finalizeFederationBuild } from './finalize-federation-build.js';
 import { planSharedBundles, type SharedBundlePlan } from './shared-bundle-plan.js';
 import { hintUnwatchedLinkedDeps } from './resolve-shared-dirs.js';
 import { prepareCache } from '../cache/cache-persistence.js';
@@ -44,11 +42,7 @@ export async function buildForFederation(
   if (signal?.aborted)
     throw new AbortedError('[buildForFederation] After exposed-and-mappings bundle');
 
-  const federationInfo = assembleFederationInfo(config, fedOptions, artifactInfo);
-  validateBareImports(config, fedOptions, federationInfo);
-  writeFederationOutputs(federationInfo, fedOptions);
-
-  return federationInfo;
+  return finalizeFederationBuild(config, fedOptions, artifactInfo);
 }
 
 /**
@@ -73,7 +67,7 @@ export async function executeSharedBundlePlans(
     });
 
     logger.measure(start, `Step 2.1) Bundling '${plan.bundleName}' externals`);
-    addExternalsToCache(fedOptions.federationCache, info);
+    addExternalsToCache(fedOptions.federationCache, plan.bundleName, info);
 
     if (signal?.aborted)
       throw new AbortedError(`[executeSharedBundlePlans] After ${plan.bundleName} bundle`);
@@ -83,16 +77,19 @@ export async function executeSharedBundlePlans(
   if (separatePlans.length > 0) {
     const start = process.hrtime();
     const results = await Promise.all(
-      separatePlans.map(plan =>
-        bundleShared(plan.entries, config, fedOptions, plan.externals, {
+      separatePlans.map(async plan => ({
+        plan,
+        info: await bundleShared(plan.entries, config, fedOptions, plan.externals, {
           platform: plan.platform,
           bundleName: plan.bundleName,
           chunks: plan.chunks,
-        })
-      )
+        }),
+      }))
     );
     logger.measure(start, 'Step 2.2) Bundling all separate external packages');
-    for (const info of results) addExternalsToCache(fedOptions.federationCache, info);
+    for (const { plan, info } of results) {
+      addExternalsToCache(fedOptions.federationCache, plan.bundleName, info);
+    }
 
     if (signal?.aborted) throw new AbortedError('[executeSharedBundlePlans] After separate bundle');
   }

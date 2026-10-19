@@ -160,13 +160,15 @@ describe('normalizeFederationOptionsCore', () => {
 
       expect(result.options.federationCache.externals).not.toBe(supplied.externals);
 
-      addExternalsToCache(result.options.federationCache, {
+      addExternalsToCache(result.options.federationCache, 'browser-shared', {
         externals: [{ packageName: 'a', outFileName: 'a.js' } as SharedInfo],
         chunks: { 'browser-shared': ['chunk-a.js'] },
+        outputFiles: [{ fileName: 'a.js', platform: 'browser' }],
       });
 
       expect(supplied.externals).toEqual([]);
       expect(supplied.chunks).toBeUndefined();
+      expect(supplied.externalFiles).toBeUndefined();
     });
 
     it('keeps the bundler cache identity so callers can still reach into it', async () => {

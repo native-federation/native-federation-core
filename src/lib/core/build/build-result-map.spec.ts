@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  createBuildResultMap,
-  lookupInResultMap,
-  popFromResultMap,
-} from './build-result-map.js';
+import { createBuildResultMap, lookupInResultMap, popFromResultMap } from './build-result-map.js';
 
 const r = (fileName: string) => ({ fileName }) as never;
 
@@ -41,7 +37,9 @@ describe('lookupInResultMap', () => {
   });
 
   it('throws a descriptive error for a missing key', () => {
-    expect(() => lookupInResultMap({}, 'missing.js')).toThrow(/No build result found for 'missing.js'/);
+    expect(() => lookupInResultMap({}, 'missing.js')).toThrow(
+      /No build result found for 'missing.js'/
+    );
   });
 });
 
@@ -53,6 +51,8 @@ describe('popFromResultMap', () => {
   });
 
   it('throws a descriptive error for a missing key', () => {
-    expect(() => popFromResultMap({}, 'missing.js')).toThrow(/No build result found for 'missing.js'/);
+    expect(() => popFromResultMap({}, 'missing.js')).toThrow(
+      /No build result found for 'missing.js'/
+    );
   });
 });

@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import type { FederationInfo, SharedInfo } from '../../domain/core/federation-info.contract.js';
+import type {
+  FederationInfo,
+  OutputFile,
+  SharedInfo,
+} from '../../domain/core/federation-info.contract.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
@@ -67,6 +71,12 @@ function info(overrides: Partial<FederationInfo> = {}): FederationInfo {
   return { name: 'host', shared: [], exposes: [], ...overrides };
 }
 
+// The files the build reported writing; what is scanned no longer depends on remoteEntry.json.
+const browser = (...fileNames: string[]): OutputFile[] =>
+  fileNames.map(fileName => ({ fileName, platform: 'browser' }));
+const node = (...fileNames: string[]): OutputFile[] =>
+  fileNames.map(fileName => ({ fileName, platform: 'node' }));
+
 describe('findUnresolvedImportsCore', () => {
   // core#168 case 1: provideAnimationsAsync() lazily imports a secondary the scan pruned.
   it('reports a lazily imported secondary of a shared package that was not published', () => {
@@ -88,6 +98,11 @@ describe('findUnresolvedImportsCore', () => {
     const result = findUnresolvedImportsCore(
       io,
       OUT,
+      browser(
+        '_angular_animations.js',
+        '_angular_core.js',
+        '_angular_platform_browser_animations_async.js'
+      ),
       config,
       info({
         shared: [
@@ -125,6 +140,7 @@ describe('findUnresolvedImportsCore', () => {
     const [unresolved, ...rest] = findUnresolvedImportsCore(
       io,
       OUT,
+      browser('_angular_platform_browser.js'),
       config,
       info({
         shared: [
@@ -150,6 +166,7 @@ describe('findUnresolvedImportsCore', () => {
     const result = findUnresolvedImportsCore(
       io,
       OUT,
+      browser('a.js'),
       makeConfig(),
       info({
         shared: [
@@ -177,6 +194,7 @@ describe('findUnresolvedImportsCore', () => {
     const result = findUnresolvedImportsCore(
       io,
       OUT,
+      browser('Component.js'),
       makeConfig({ externals: ['host-sdk', '@icons/*.svg'] }),
       info({ exposes: [{ key: './Component', outFileName: 'Component.js' }] })
     );
@@ -194,6 +212,7 @@ describe('findUnresolvedImportsCore', () => {
     const result = findUnresolvedImportsCore(
       io,
       OUT,
+      browser('main.js', 'chunk-A.js', 'chunk-B.js'),
       makeConfig(),
       info({
         shared: [shared('@nf-internal/chunk-B', 'chunk-B.js')],
@@ -215,6 +234,7 @@ describe('findUnresolvedImportsCore', () => {
     const result = findUnresolvedImportsCore(
       io,
       OUT,
+      browser('main.js'),
       makeConfig(),
       info({ exposes: [{ key: './main', outFileName: 'main.js' }] })
     );
@@ -234,6 +254,7 @@ describe('findUnresolvedImportsCore', () => {
     const result = findUnresolvedImportsCore(
       io,
       OUT,
+      [...browser('browser-lib.js'), ...node('node-lib.js', 'node-chunk.js')],
       config,
       info({
         shared: [shared('browser-lib', 'browser-lib.js'), shared('node-lib', 'node-lib.js')],
@@ -248,12 +269,50 @@ describe('findUnresolvedImportsCore', () => {
     expect(result[0]!.reason).toContain('Node.js built-in');
   });
 
+  // core#177: without denseChunking a mapping's chunk is imported relatively, so remoteEntry.json
+  // never names it. It is scanned because the build reported writing it.
+  it('scans a non-dense mapping chunk that remoteEntry.json does not name', () => {
+    const io = createMemoryIo()
+      .setFile(out('_my_org_ui.js'), `export * from "./chunk-UI.js";`)
+      .setFile(out('chunk-UI.js'), `import "@angular/cdk/overlay";`);
+
+    const result = findUnresolvedImportsCore(
+      io,
+      OUT,
+      browser('_my_org_ui.js', 'chunk-UI.js'),
+      makeConfig({ shared: { '@angular/cdk': ext() } }),
+      info({ shared: [shared('@my-org/ui', '_my_org_ui.js'), shared('@angular/cdk', 'cdk.js')] })
+    );
+
+    expect(result).toEqual([
+      expect.objectContaining({ specifier: '@angular/cdk/overlay', importers: ['chunk-UI.js'] }),
+    ]);
+  });
+
+  it('allows a Node built-in by the platform of the file that imports it', () => {
+    const io = createMemoryIo()
+      .setFile(out('chunk-N.js'), `import "crypto";`)
+      .setFile(out('chunk-B.js'), `import "crypto";`);
+
+    const result = findUnresolvedImportsCore(
+      io,
+      OUT,
+      [...node('chunk-N.js'), ...browser('chunk-B.js')],
+      // A node external elsewhere in the build no longer lets every browser chunk through.
+      makeConfig({ shared: { 'node-lib': ext({ platform: 'node' }) } }),
+      info()
+    );
+
+    expect(result.map(r => [r.specifier, r.importers])).toEqual([['crypto', ['chunk-B.js']]]);
+  });
+
   it('points a subpath of a shared mapping at the mapping', () => {
     const io = createMemoryIo().setFile(out('Component.js'), `import "@my-org/ui/button";`);
 
     const [unresolved] = findUnresolvedImportsCore(
       io,
       OUT,
+      browser('Component.js'),
       makeConfig({ sharedMappings: { '/ws/libs/ui/index.ts': '@my-org/ui' } }),
       info({
         shared: [shared('@my-org/ui', '_my_org_ui.js')],
@@ -268,11 +327,13 @@ describe('findUnresolvedImportsCore', () => {
     const io = createMemoryIo()
       .setFile(out('a.js'), `import "missing"; import "missing";`)
       .setFile(out('b.js'), `import "missing";`)
-      .setFile(out('styles.css'), `@import "missing";`);
+      .setFile(out('styles.css'), `@import "missing";`)
+      .setFile(out('a.js.map'), `{"sources":["import 'missing'"]}`);
 
     const result = findUnresolvedImportsCore(
       io,
       OUT,
+      browser('a.js', 'b.js', 'c.js', 'styles.css', 'a.js.map'),
       makeConfig(),
       info({
         shared: [
@@ -301,14 +362,14 @@ describe('validateBareImports', () => {
     config.features.strictImports = strictImports;
     const fedOptions = { workspaceRoot, outputPath: 'dist' } as NormalizedFederationOptions;
     const fedInfo = info({ shared: [shared('@angular/common', 'a.js')] });
-    return { config, fedOptions, fedInfo };
+    return { config, fedOptions, fedInfo, files: browser('a.js') };
   }
 
   it('warns by default', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-    const { config, fedOptions, fedInfo } = setup(false);
+    const { config, fedOptions, fedInfo, files } = setup(false);
 
-    expect(() => validateBareImports(config, fedOptions, fedInfo)).not.toThrow();
+    expect(() => validateBareImports(config, fedOptions, fedInfo, files)).not.toThrow();
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining("'a.js' imports '@angular/common/http'")
     );
@@ -316,9 +377,22 @@ describe('validateBareImports', () => {
 
   it('fails the build with strictImports', () => {
     const error = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
-    const { config, fedOptions, fedInfo } = setup(true);
+    const { config, fedOptions, fedInfo, files } = setup(true);
 
-    expect(() => validateBareImports(config, fedOptions, fedInfo)).toThrow(/strictImports/);
+    expect(() => validateBareImports(config, fedOptions, fedInfo, files)).toThrow(/strictImports/);
     expect(error).toHaveBeenCalledWith(expect.stringContaining('@angular/common/http'));
+  });
+
+  it('fails the build on an import that only a non-dense chunk makes', () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    const { config, fedOptions, files } = setup(true);
+    const dist = path.join(fedOptions.workspaceRoot, 'dist');
+    fs.writeFileSync(path.join(dist, 'a.js'), `export * from "./chunk-X.js";`);
+    fs.writeFileSync(path.join(dist, 'chunk-X.js'), `import "lodash";`);
+    const fedInfo = info({ shared: [shared('@angular/common', 'a.js')] });
+
+    expect(() =>
+      validateBareImports(config, fedOptions, fedInfo, [...files, ...browser('chunk-X.js')])
+    ).toThrow(/1 bare import/);
   });
 });

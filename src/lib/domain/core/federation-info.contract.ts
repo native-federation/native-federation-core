@@ -29,6 +29,13 @@ export type ChunkInfo = Record<string, string[]>;
 
 export type IntegrityMap = Record<string, string>;
 
+// A file the build wrote into the output folder: scripts, their source maps and any other asset.
+// Never published. `fileName` is the base name, since adapters write flat into outdir.
+export interface OutputFile {
+  fileName: string;
+  platform: 'browser' | 'node';
+}
+
 export interface ExposesInfo {
   key: string;
   outFileName: string;
@@ -38,9 +45,18 @@ export interface ExposesInfo {
   };
 }
 
+// Not exported from ./domain: only bundleShared returns it.
+export interface SharedBundleResult {
+  externals: SharedInfo[];
+  chunks?: ChunkInfo;
+  integrity?: IntegrityMap;
+  outputFiles: OutputFile[];
+}
+
 export interface ArtifactInfo {
   mappings: SharedInfo[];
   exposes: ExposesInfo[];
   chunks?: ChunkInfo;
   integrity?: IntegrityMap;
+  outputFiles?: OutputFile[];
 }

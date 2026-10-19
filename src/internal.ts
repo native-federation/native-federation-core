@@ -16,6 +16,7 @@ export { RebuildQueue, type TrackResult } from './lib/core/rebuild-queue.js';
 export { writeImportMap } from './lib/core/output/write-import-map.js';
 
 export { getDefaultCachePath, getChecksum } from './lib/core/cache/cache-persistence.js';
+export { collectOutputFiles } from './lib/core/cache/federation-cache.js';
 export {
   isESMExport,
   type ExportCondition,

@@ -25,6 +25,7 @@ import { resolveMappingConfig } from '../../config/mapping-utils.js';
 import { applyAutoRequiredOptions } from '../../config/version-lookup.js';
 import type { AutoRequiredOptions } from '../../domain/config/external-config.contract.js';
 import { planMappingBundles } from './mapping-bundle-plan.js';
+import { toOutputFiles } from '../output/output-files.js';
 import { isScript } from '../../utils/script-file.js';
 
 // Shared mappings and exposed modules build separately so the bundler cannot factor one chunk out
@@ -127,23 +128,20 @@ export async function bundleExposedAndMappingsCore(
 
   const dense = config.chunks && config.features.denseChunking;
   const exportedChunks: ChunkInfo = {};
-  const chunkPaths: string[] = [];
+  const written: string[] = [];
 
   // Renamed before the next build runs, so the two never hold the bundler's names at once.
-  const takeChunks = (bundleName: string, resultMap: Record<string, string>, entries: string[]) => {
-    if (!dense || entries.length === 0) return;
-    const chunks = chunksOf(resultMap);
-    for (const entryFile of entries) rewriteChunkImportsCore(io, entryFile);
-    const renamed = renameChunks(io, chunks, entries);
-    const paths = chunks.map(chunk =>
-      path.join(path.dirname(chunk), renamed.get(path.basename(chunk)) ?? path.basename(chunk))
-    );
-    exportedChunks[bundleName] = paths.map(chunk => path.basename(chunk));
-    chunkPaths.push(...paths);
+  const takeOutputs = (
+    bundleName: string,
+    resultMap: Record<string, string>,
+    entries: string[]
+  ) => {
+    const { files, chunks } = takeBundleOutputs(io, resultMap, entries, dense);
+    written.push(...files);
+    if (chunks) exportedChunks[bundleName] = chunks;
   };
 
   const sharedResult: Array<SharedInfo> = [];
-  const mappingFiles: string[] = [];
 
   // Pick shared-mappings
   for (const plan of mappingPlans) {
@@ -166,8 +164,7 @@ export async function bundleExposedAndMappingsCore(
       files.push(distEntryFile);
     }
 
-    takeChunks(plan.bundleName, results, files);
-    mappingFiles.push(...files);
+    takeOutputs(plan.bundleName, results, files);
     logger.measure(start, `Bundling '${plan.bundleName}' shared mappings`);
   }
 
@@ -195,12 +192,13 @@ export async function bundleExposedAndMappingsCore(
     exposedFiles.push(distEntryFile);
   }
 
-  takeChunks(EXPOSED_BUNDLE, exposedResults, exposedFiles);
+  takeOutputs(EXPOSED_BUNDLE, exposedResults, exposedFiles);
   if (exposes.length > 0) logger.measure(exposedStart, 'Bundling exposed modules');
 
+  const outputPaths = [...new Set(written)];
   // Must run after rewriteChunkImports so SRI matches the final on-disk bytes.
   const integrity: IntegrityMap | undefined = config.features.integrityHashes
-    ? computeIntegrityMapCore(io, [...mappingFiles, ...exposedFiles, ...chunkPaths], '')
+    ? computeIntegrityMapCore(io, outputPaths, '')
     : undefined;
 
   return {
@@ -208,19 +206,41 @@ export async function bundleExposedAndMappingsCore(
     exposes: exposedResult,
     chunks: Object.keys(exportedChunks).length > 0 ? exportedChunks : undefined,
     integrity,
+    outputFiles: toOutputFiles(outputPaths, 'browser'),
   };
 }
 
-function chunksOf(resultMap: Record<string, string>): string[] {
-  return Object.values(resultMap).filter(file => isScript(file));
+// `resultMap` holds what is left once the entries were popped from it: chunks, maps and assets.
+function takeBundleOutputs(
+  io: IoPort,
+  resultMap: Record<string, string>,
+  entries: string[],
+  dense: boolean
+): { files: string[]; chunks?: string[] } {
+  const outputs = Object.values(resultMap);
+  if (!dense || entries.length === 0) return { files: [...entries, ...outputs] };
+
+  const chunks = outputs.filter(file => isScript(file));
+  for (const entryFile of entries) rewriteChunkImportsCore(io, entryFile);
+  const renamed = renameChunks(io, chunks, entries);
+  return {
+    files: [...entries, ...outputs.map(file => renamedPath(file, renamed))],
+    chunks: chunks.map(chunk => path.basename(renamedPath(chunk, renamed))),
+  };
+}
+
+// A renamed chunk's source map moves with it to `<target>.map`.
+function renamedPath(file: string, renamed: Map<string, string>): string {
+  const name = path.basename(file);
+  const isSourceMap = name.endsWith('.map');
+  const source = isSourceMap ? name.slice(0, -'.map'.length) : name;
+  const target = renamed.get(source);
+  if (!target) return file;
+  return path.join(path.dirname(file), isSourceMap ? `${target}.map` : target);
 }
 
 // Chunks are published by name in the `chunks` map, so the name is made to say what the bytes are.
-function renameChunks(
-  io: IoPort,
-  chunkPaths: string[],
-  entryFiles: string[]
-): Map<string, string> {
+function renameChunks(io: IoPort, chunkPaths: string[], entryFiles: string[]): Map<string, string> {
   if (chunkPaths.length === 0) return new Map();
   const dir = path.dirname(chunkPaths[0]!);
   return renameChunksByContentCore(

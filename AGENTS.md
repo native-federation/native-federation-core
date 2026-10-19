@@ -177,11 +177,39 @@ export default withNativeFederation({
 The bundler keeps every subpath of an external as a bare import, but the import map only has the
 exact keys `remoteEntry.json` declares. A shared package's secondary that `ignoreUnusedDeps` pruned,
 or that is in `skip`, therefore stays an import nothing resolves (core#168). After assembling
-`remoteEntry.json`, `validateBareImports` reads every published file (shared entries, mappings,
-exposed modules, chunks) and reports each bare specifier that is neither declared, a published
-chunk, nor matched by `externals` (with esbuild's own subpath and `*` rules). Node built-ins pass
-only in `platform: 'node'` bundles. It warns by default and throws with `features.strictImports`.
-It reads the output directory rather than the bundler results, so cached bundles are covered too.
+`remoteEntry.json`, `validateBareImports` reads every script in `outputFiles` (see below), so
+non-dense chunks that `remoteEntry.json` never names are covered too, and reports each bare
+specifier that is neither declared, a published chunk, nor matched by `externals` (with esbuild's
+own subpath and `*` rules). Node built-ins pass only in files whose own bundle is
+`platform: 'node'`; a file that a node and a browser bundle both wrote counts as browser. It
+warns by default and throws with `features.strictImports`. It reads the files from the output
+directory, so cached bundles are covered too.
+
+### Output files
+
+Every file a build writes — entries, chunks, source maps and assets such as an extracted `.css` —
+is reported as an `OutputFile` (`{ fileName, platform }`, `fileName` its base name, since adapters
+write flat into the output folder) and listed by `collectOutputFiles(federationCache)`, also exposed as `federationBuilder.outputFiles`
+(core#177).
+Adapters copy from it (the Angular adapter's i18n step) instead of globbing the output folder,
+which also holds the app's own output. It is never published; filter on the extension for scripts.
+
+- Each bundle reports what its adapter returned, so `NFBuildAdapter.build` must return every file
+  it wrote for the bundle, on a rebuild too.
+- Shared bundles keep theirs per bundle in `federationCache.externalFiles`, which survives a
+  rebuild that touches no linked package. The mapping and exposed part (`artifactFiles`) comes
+  fresh from every build, so it is replaced, never merged: stale non-dense chunks stay on disk but
+  drop out. The full list is derived from the two on every read and never stored, so a rebuild
+  that fails between the shared and the mapping/exposed bundles cannot leave it out of step. A
+  rebuild aborted while re-running the shared bundles can still leave `externalFiles` incomplete
+  until the next full build, like `externals` itself.
+- A file the adapter writes into a subfolder is listed under a wrong name: integrity and the bare
+  import check catch a missing script, but nothing notices a missing asset.
+- Exposed and mapping output is always listed as `browser`: built-ins are allowed only in shared
+  bundles built with `platform: 'node'`.
+- Integrity is computed over the same files, so the two cannot drift.
+- `remoteEntry.json` only names what an ESM import can load. A non-script output is never a chunk
+  and gets no integrity hash; it is copied and listed in `outputFiles` only.
 
 ## File Watching & Development
 
@@ -338,7 +366,9 @@ Native Federation uses an intelligent caching system to speed up builds:
 
 **Federation cache** (`src/lib/core/cache/federation-cache.ts`) — in memory, one build:
 
-- Accumulates the externals, chunks and integrity hashes that go into `remoteEntry.json`
+- Accumulates the externals, chunks and integrity hashes that go into `remoteEntry.json`, and the
+  files each shared bundle wrote (`externalFiles`)
+- Holds `artifactFiles`, what the last mapping and exposed bundle wrote
 
 **Cache invalidation**:
 

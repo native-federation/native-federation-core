@@ -6,6 +6,7 @@ export type {
   ArtifactInfo,
   ChunkInfo,
   IntegrityMap,
+  OutputFile,
 } from './federation-info.contract.js';
 export {
   type BuildNotificationOptions,
