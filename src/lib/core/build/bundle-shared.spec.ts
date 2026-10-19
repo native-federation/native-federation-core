@@ -968,7 +968,7 @@ describe('bundleSharedCore error notice', () => {
       true
     );
 
-    expect(output).toContain("'@pkg/browser' publish every entry point");
+    expect(output).toContain("never imports: '@pkg/browser'.");
     expect(output).toContain('optional peer dependency');
     expect(output).not.toContain('rxjs');
     expect(output).not.toContain('Node.js package');
@@ -984,7 +984,7 @@ describe('bundleSharedCore error notice', () => {
       false
     );
 
-    expect(output).toContain("'@pkg/browser' publish every entry point");
+    expect(output).toContain("never imports: '@pkg/browser'.");
   });
 
   it('keeps the Node.js notice when no secondary is kept wholesale', async () => {
@@ -998,6 +998,6 @@ describe('bundleSharedCore error notice', () => {
     );
 
     expect(output).toContain('Node.js package');
-    expect(output).not.toContain('publish every entry point');
+    expect(output).not.toContain('Every entry point');
   });
 });

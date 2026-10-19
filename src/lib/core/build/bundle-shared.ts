@@ -256,9 +256,8 @@ export async function bundleSharedCore(
     );
     if (keepingAll.length > 0) {
       logger.notice(
-        `${keepingAll.join(', ')} publish every entry point they export ` +
-          "(includeSecondaries: { keepAll: true } or 'ignoreUnusedDeps: false'), " +
-          'including ones this build never imports.'
+        'Every entry point of these packages is published (includeSecondaries: { keepAll: true } ' +
+          `or 'ignoreUnusedDeps: false'), including ones this build never imports: ${keepingAll.join(', ')}.`
       );
       logger.notice(
         'If the error comes from one of those, it may import a package that is not installed, ' +
