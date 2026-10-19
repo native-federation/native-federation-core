@@ -204,9 +204,12 @@ the extension for scripts.
   rebuild that touches no linked package. The mapping and exposed part (`artifactFiles`) comes
   fresh from every build, so it is replaced, never merged: stale non-dense chunks stay on disk but
   drop out. The full list is derived from the two on every read and never stored, so a rebuild
-  that fails between the shared and the mapping/exposed bundles cannot leave it out of step. A
-  rebuild aborted while re-running the shared bundles can still leave `externalFiles` incomplete
-  until the next full build, like `externals` itself.
+  that fails between the shared and the mapping/exposed bundles cannot leave it out of step.
+- The shared bundles write into a staged copy of `externals`, `chunks`, `integrity` and
+  `externalFiles`, which replaces the cached fields only once every plan ran
+  (`withStagedExternals`). A failed or aborted run keeps the last complete set and leaves
+  the run marked incomplete, so the next rebuild re-runs every plan even when nothing shared
+  changed: the run that failed may already have cleared a bundle's disk cache.
 - A file the adapter writes into a subfolder is listed under a wrong name, and nothing notices:
   integrity and the bare import check both skip a listed file that is not in the output folder.
 - Exposed and mapping output is always listed as `browser`: built-ins are allowed only in shared

@@ -23,9 +23,9 @@ vi.mock('./resolve-shared-dirs.js', () => ({
 }));
 vi.mock('./build-for-federation.js', () => ({
   executeSharedBundlePlans: vi.fn(async (_plans, _config, fedOptions) => {
-    fedOptions.federationCache.externals.push({ packageName: 'a', outFileName: 'a.fresh.js' });
+    // Like the real one, it replaces the cached externals rather than adding to them.
+    fedOptions.federationCache.externals = [{ packageName: 'a', outFileName: 'a.fresh.js' }];
     fedOptions.federationCache.externalFiles = {
-      ...fedOptions.federationCache.externalFiles,
       'browser-shared': [{ fileName: 'a.fresh.js', platform: 'browser' }],
     };
   }),

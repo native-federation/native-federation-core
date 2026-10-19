@@ -9,6 +9,7 @@ import { executeSharedBundlePlans } from './build-for-federation.js';
 import { finalizeFederationBuild } from './finalize-federation-build.js';
 import { affectedSharedKeys, resolveSharedPackageDirs } from './resolve-shared-dirs.js';
 import { cacheEntryCore } from '../cache/cache-persistence.js';
+import { externalsAreStale } from '../cache/federation-cache.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import type { IoPort } from '../../domain/utils/io-port.contract.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
@@ -55,7 +56,10 @@ export async function rebuildAffectedExternals(
   io: IoPort = nodeIo,
   repo: PackageJsonRepository = sharedPackageJsonRepository
 ): Promise<void> {
-  if (modifiedFiles.length === 0) return;
+  const federationCache = fedOptions.federationCache;
+  // The last run did not complete, so it is re-run whatever changed since.
+  const incomplete = externalsAreStale(federationCache);
+  if (modifiedFiles.length === 0 && !incomplete) return;
 
   const plans = planSharedBundles(config, externals);
   if (plans.length === 0) return;
@@ -63,9 +67,8 @@ export async function rebuildAffectedExternals(
   const dirs = resolveSharedPackageDirs(config, fedOptions, io, repo);
   const affected = affectedSharedKeys(modifiedFiles, dirs, io);
   const affectedPlans = plans.filter(p => p.keys.some(k => affected.has(k)));
-  if (affectedPlans.length === 0) return;
+  if (affectedPlans.length === 0 && !incomplete) return;
 
-  const federationCache = fedOptions.federationCache;
   // Authoritative, modifiedFiles-driven invalidation. bundleShared already misses
   // its cache when the content-signal changes, but that signal is an mtime heuristic;
   // clearing here covers the cases it can miss (mtime granularity, a deleted file).
@@ -73,11 +76,6 @@ export async function rebuildAffectedExternals(
     logger.info(`Detected change in linked shared package(s); re-bundling '${plan.bundleName}'.`);
     cacheEntryCore(io, federationCache.cachePath, plan.bundleName, fedOptions.dev).clear();
   }
-
-  federationCache.externals = [];
-  federationCache.chunks = undefined;
-  federationCache.integrity = undefined;
-  federationCache.externalFiles = undefined;
 
   await executeSharedBundlePlans(plans, config, fedOptions, signal);
 }
