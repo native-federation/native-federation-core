@@ -185,6 +185,12 @@ own subpath and `*` rules). Node built-ins pass only in files whose own bundle i
 warns by default and throws with `features.strictImports`. It reads the files from the output
 directory, so cached bundles are covered too.
 
+It never passes a file it did not read. A script the lexer cannot parse is reported (and fails a
+strict build); a reported file missing from the output folder, usually an adapter writing into a
+subfolder, only warns, since that is the adapter breaking the `outputFiles` contract. Only ESM
+`import`/`export`/`import()` with a literal specifier is checked: a CommonJS `require` of an
+external (esbuild's `__require` shim), `import.meta.resolve` and `new URL()` are not.
+
 ### Output files
 
 Every file a build writes — entries, chunks, source maps and assets such as an extracted `.css` —
