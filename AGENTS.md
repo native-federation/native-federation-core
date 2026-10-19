@@ -340,6 +340,9 @@ Native Federation uses an intelligent caching system to speed up builds:
 - Based on the installed versions of shared packages, not their declared ranges
   (`installedVersions`)
 - Based on configuration changes and on the builder version
+- Based on `config.externals`: a package that became external must not stay inlined in a cached
+  bundle. Only that opt-out list is hashed; a shared key added later can still leave a cached
+  separate bundle that inlined it stale until something else invalidates it
 - Based on the adapter's `externalsCacheKey` (core#152): `builderVersion` is core's own version,
   but the adapter produces the bytes, so it declares its identity and every option that changes
   shared externals. Core reads it before `setup()`, sorts the option keys and JSON-encodes each

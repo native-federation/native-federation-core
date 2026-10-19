@@ -208,6 +208,43 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     expect(mem.exists('/ws/out')).toBe(false);
   });
 
+  // A cached bundle that inlined a package must not be served once that package became external.
+  it('misses the cache once config.externals changes, not when only the shared set does', async () => {
+    const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+    const sharedBundles: Record<string, NormalizedExternalConfig> = {
+      foo: {
+        singleton: true,
+        strictVersion: false,
+        requiredVersion: '^1.0.0',
+        version: '1.0.0',
+        chunks: false,
+        platform: 'browser',
+        build: 'default',
+        packageInfo: { entryPoint: 'foo/index.js', version: '1.0.0', esm: true },
+      },
+    };
+    const fedOptions = makeFedOptions({ cacheExternalArtifacts: true });
+    const run = (adapter: FakeBuildAdapter, planExternals: string[], userExternals: string[]) =>
+      bundleSharedCore(
+        { io: mem, repo: emptyRepo, adapter },
+        sharedBundles,
+        { ...makeConfig(), externals: userExternals },
+        fedOptions,
+        planExternals,
+        BUILD_OPTIONS
+      );
+
+    await run(createFakeBuildAdapter({ io: mem }), ['foo'], []);
+    // A shared key added elsewhere changes the plan's externals: the cached bundle is still used.
+    const sharedGrew = createFakeBuildAdapter({ io: mem });
+    await run(sharedGrew, ['foo', 'bar'], []);
+    const widened = createFakeBuildAdapter({ io: mem });
+    await run(widened, ['foo', 'bar', 'host-sdk'], ['host-sdk']);
+
+    expect(sharedGrew.calls.setup).toHaveLength(0);
+    expect(widened.calls.setup).toHaveLength(1);
+  });
+
   it('carries a configured pool through to the shared external', async () => {
     const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
     const adapter = createFakeBuildAdapter({ io: mem });
