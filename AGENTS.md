@@ -18,7 +18,7 @@
 - Provides build-time helpers for federating apps via a build-tool adapter (e.g. esbuild)
 - **Built with raw esbuild** (`esbuild.config.mjs`) for JS, plus `tsc` for `.d.ts` declarations
 - Single package published from the repository root; managed with pnpm
-- Testing with Vitest (currently not wired into CI)
+- Testing with Vitest, run in CI (`.github/workflows/verify.yml`)
 - `typescript` is a runtime **dependency** (not a peer) ranged `>=5.0.0 <7`: a peer range would
   fail npm installs in workspaces on a different TypeScript. 5.0 is the floor because
   `mapping-imports.ts` uses `moduleResolution: Bundler`; TypeScript 7 ships without the JS API.
@@ -48,7 +48,7 @@ This is a **single-package repository** published as `@softarc/native-federation
   `tsc -p tsconfig.build.json` (emits matching `.d.ts` files only).
 - `pnpm typecheck` → `tsc -p tsconfig.build.json --noEmit`.
 - `pnpm lint` → `eslint src`.
-- `pnpm test` → `vitest` (left as-is; not part of CI).
+- `pnpm test` → `vitest`, run in CI twice: as is and on the TypeScript floor.
 
 esbuild does **not** emit declarations, so `tsc` owns `.d.ts` generation. Both
 write into `dist/` with `rootDir: src`, so JS and types land side by side.
@@ -358,8 +358,8 @@ Native Federation uses an intelligent caching system to speed up builds:
 
 - Unit tests use Vitest and live alongside source files (`.spec.ts`).
 - Run with `pnpm test` (`vitest`).
-- Tests are **not currently part of CI** and the test config has only been
-  de-Nx'd, not fully verified after the build migration.
+- CI runs the suite on pushes to `main` and on pull requests against `main` (a stacked PR is
+  checked once it is retargeted), so a flaky spec blocks merges: fix it rather than retrying it.
 
 ## Common Patterns & Conventions
 
