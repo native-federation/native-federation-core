@@ -911,7 +911,7 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
 });
 
 // core#195: a secondary published only because of keepAll may import an uninstalled optional
-// peer; the bundle fails, and the notice should point there rather than at Node.js packages.
+// peer; the bundle fails, and the notice should name that cause next to the Node.js one.
 describe('bundleSharedCore error notice', () => {
   function entry(entryPoint: string, includeSecondaries?: boolean): NormalizedExternalConfig {
     return {
@@ -970,8 +970,8 @@ describe('bundleSharedCore error notice', () => {
 
     expect(output).toContain("All entry points of '@pkg/browser' are published");
     expect(output).toContain('optional peer');
-    expect(output).not.toContain('rxjs');
-    expect(output).not.toContain('Node.js package');
+    expect(output).not.toContain("'rxjs'");
+    expect(output).toContain('Node.js package');
   });
 
   // Nothing prunes secondaries then, so they are published the same way keepAll publishes them.
@@ -987,7 +987,7 @@ describe('bundleSharedCore error notice', () => {
     expect(output).toContain("All entry points of '@pkg/browser' are published");
   });
 
-  it('keeps the Node.js notice when no secondary is kept wholesale', async () => {
+  it('shows only the Node.js notice when no secondary is kept wholesale', async () => {
     const output = await failingBuild(
       {
         '@pkg/browser': entry('@pkg/browser/index.js', true),

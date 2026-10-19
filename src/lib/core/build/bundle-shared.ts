@@ -249,6 +249,8 @@ export async function bundleSharedCore(
     logger.notice('');
 
     logger.notice('** Important Information: ***');
+    logger.notice('Usually a shared Node.js package; Native Federation builds for the browser.');
+    logger.notice("Move it to devDependencies or add it to 'skip'.");
     const keepingAll = packagesKeepingAllSecondaries(
       sharedBundles,
       config.features.ignoreUnusedDeps
@@ -259,11 +261,8 @@ export async function bundleSharedCore(
           "(keepAll or 'ignoreUnusedDeps: false')."
       );
       logger.notice(
-        "One may import an uninstalled package, e.g. an optional peer. Add it to 'skip'."
+        "One of them may import an uninstalled package, e.g. an optional peer. Add it to 'skip'."
       );
-    } else {
-      logger.notice('Usually a shared Node.js package; Native Federation builds for the browser.');
-      logger.notice("Move it to devDependencies or add it to 'skip'.");
     }
     logger.notice('');
     logger.notice('More Details: https://bit.ly/nf-issue');
