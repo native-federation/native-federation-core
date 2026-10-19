@@ -7,6 +7,8 @@ export interface Digest {
 
 export interface StatInfo {
   mtimeMs: number;
+  // Optional so an injected IoPort written before it existed still type-checks.
+  ctimeMs?: number;
   /** Byte length; 0 for directories. */
   size: number;
   isSymbolicLink: boolean;

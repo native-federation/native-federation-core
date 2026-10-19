@@ -62,7 +62,8 @@ function planSeparate(
     platform,
     chunks: group.chunks,
     entries: group.entries,
-    externals: externals.filter(e => !e.startsWith(packageName)),
+    // The package and its own subpaths are what this bundle builds; 'react-dom' is not 'react's.
+    externals: externals.filter(e => e !== packageName && !e.startsWith(packageName + '/')),
     keys: Object.keys(group.entries),
     kind: 'separate',
   }));

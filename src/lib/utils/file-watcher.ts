@@ -66,7 +66,7 @@ export function createNfWatcherCore(
   const identityOf = (path: string): FileIdentity | null => {
     let stat = io.stat(path);
     if (stat?.isSymbolicLink) stat = io.stat(io.realpath(path));
-    return stat ? { mtimeMs: stat.mtimeMs, size: stat.size } : null;
+    return stat ? { mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs, size: stat.size } : null;
   };
 
   // Identity first, clock only for what identity cannot settle; a negative age
@@ -79,7 +79,12 @@ export function createNfWatcherCore(
     }
     const previous = lastSeen.get(path);
     lastSeen.set(path, current);
-    if (!previous || previous.mtimeMs !== current.mtimeMs || previous.size !== current.size) {
+    if (
+      !previous ||
+      previous.mtimeMs !== current.mtimeMs ||
+      previous.ctimeMs !== current.ctimeMs ||
+      previous.size !== current.size
+    ) {
       return false;
     }
     return at - current.mtimeMs >= replayGraceMs;
@@ -195,8 +200,11 @@ export function createNfWatcherCore(
   };
 }
 
+// ctime catches a replace that keeps size and restores an old mtime, which the poll reports by
+// inode. The inode stays out: where it is unstable, this dedupe is what absorbs the poll's noise.
 interface FileIdentity {
   mtimeMs: number;
+  ctimeMs?: number;
   size: number;
 }
 
