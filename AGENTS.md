@@ -18,7 +18,7 @@
 - Provides build-time helpers for federating apps via a build-tool adapter (e.g. esbuild)
 - **Built with raw esbuild** (`esbuild.config.mjs`) for JS, plus `tsc` for `.d.ts` declarations
 - Single package published from the repository root; managed with pnpm
-- Testing with Vitest (currently not wired into CI)
+- Testing with Vitest, run in CI (`.github/workflows/verify.yml`)
 - `typescript` is a runtime **dependency** (not a peer) ranged `>=5.0.0 <7`: a peer range would
   fail npm installs in workspaces on a different TypeScript. 5.0 is the floor because
   `mapping-imports.ts` uses `moduleResolution: Bundler`; TypeScript 7 ships without the JS API.
@@ -48,7 +48,7 @@ This is a **single-package repository** published as `@softarc/native-federation
   `tsc -p tsconfig.build.json` (emits matching `.d.ts` files only).
 - `pnpm typecheck` → `tsc -p tsconfig.build.json --noEmit`.
 - `pnpm lint` → `eslint src`.
-- `pnpm test` → `vitest` (left as-is; not part of CI).
+- `pnpm test` → `vitest`, run in CI twice: as is and on the TypeScript floor.
 
 esbuild does **not** emit declarations, so `tsc` owns `.d.ts` generation. Both
 write into `dist/` with `rootDir: src`, so JS and types land side by side.
@@ -253,8 +253,8 @@ misses, so it can stand in for a native watch over the same tree but never the r
 
 ### Replay dedupe
 
-Events whose recorded identity — mtime **and** byte length — is unchanged since the last one
-seen for that path are dropped before they reach either channel (`dedupeReplays`, default
+Events whose recorded identity — mtime, ctime **and** byte length — is unchanged since the last
+one seen for that path are dropped before they reach either channel (`dedupeReplays`, default
 **on**). macOS FSEvents re-delivers 'changed' for recently edited files roughly every 30s;
 with a watch list of a few thousand sources that replay alone keeps a rebuild loop awake
 forever.
@@ -262,6 +262,11 @@ forever.
 Length is paired with mtime so that the common ambiguous case — a second save landing inside
 one mtime tick, on a filesystem with coarse mtime granularity — is settled on data rather
 than on a clock. Only a save that also left byte length untouched reaches the time check.
+ctime covers a replace that keeps size and restores an old mtime (`cp -p`, `rsync -a`, tar), which
+the poll catches by inode. The inode itself is left out of the dedupe: on a mount whose inode
+numbers are not stable (CIFS `noserverino` may hand out new ones) the poll reports unchanged files,
+and the dedupe, seeing the same mtime, ctime and length, is what drops them. ctime cannot replace the
+inode in the poll, since it comes from the same coarse clock as mtime.
 
 That check is `replayGraceMs` (default 2000): an event whose identity matches still passes
 while the mtime is recent. The default is a derived bound, not a tuned constant. A filesystem
@@ -358,8 +363,8 @@ Native Federation uses an intelligent caching system to speed up builds:
 
 - Unit tests use Vitest and live alongside source files (`.spec.ts`).
 - Run with `pnpm test` (`vitest`).
-- Tests are **not currently part of CI** and the test config has only been
-  de-Nx'd, not fully verified after the build migration.
+- CI runs the suite on pushes to `main` and on pull requests against `main` (a stacked PR is
+  checked once it is retargeted), so a flaky spec blocks merges: fix it rather than retrying it.
 
 ## Common Patterns & Conventions
 
