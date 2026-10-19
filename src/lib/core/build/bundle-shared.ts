@@ -46,6 +46,7 @@ import type {
 import { getBuildAdapter } from './build-adapter.js';
 import { synthesizeCjsNamedExportsEntry, type ModuleEvaluator } from './synthesize-cjs-exports.js';
 import { createRequire } from 'module';
+import { inferPackageFromSecondary } from '../../utils/normalize.js';
 
 export async function bundleShared(
   sharedBundles: Record<string, NormalizedExternalConfig>,
@@ -249,11 +250,28 @@ export async function bundleSharedCore(
 
     logger.notice('** Important Information: ***');
     logger.notice('The error message above shows an issue with bundling a node_module.');
-    logger.notice('In most cases this is because you (indirectly) shared a Node.js package,');
-    logger.notice('while Native Federation builds for the browser.');
-    logger.notice(
-      'You can move such packages into devDependencies or skip them in your federation.config.js.'
+    const keepingAll = packagesKeepingAllSecondaries(
+      sharedBundles,
+      config.features.ignoreUnusedDeps
     );
+    if (keepingAll.length > 0) {
+      logger.notice(
+        `${keepingAll.join(', ')} publish every entry point they export ` +
+          "(includeSecondaries: { keepAll: true } or 'ignoreUnusedDeps: false'), " +
+          'including ones this build never imports.'
+      );
+      logger.notice(
+        'If the error comes from one of those, it may import a package that is not installed, ' +
+          'such as an optional peer dependency.'
+      );
+      logger.notice("Exclude that entry point with 'skip' in your federation.config.js.");
+    } else {
+      logger.notice('In most cases this is because you (indirectly) shared a Node.js package,');
+      logger.notice('while Native Federation builds for the browser.');
+      logger.notice(
+        'You can move such packages into devDependencies or skip them in your federation.config.js.'
+      );
+    }
     logger.notice('');
     logger.notice('More Details: https://bit.ly/nf-issue');
 
@@ -307,6 +325,19 @@ export async function bundleSharedCore(
   bundleCache.copyFiles(resolveOutputPath(fedOptions));
 
   return { externals: result, chunks: exportedChunks, integrity };
+}
+
+// Their secondaries are published whether or not anything imports them, so one that imports an
+// uninstalled optional peer fails the bundle (core#195).
+function packagesKeepingAllSecondaries(
+  sharedBundles: Record<string, NormalizedExternalConfig>,
+  ignoreUnusedDeps: boolean
+): string[] {
+  const roots = Object.entries(sharedBundles)
+    .filter(([key]) => key !== inferPackageFromSecondary(key))
+    .filter(([, cfg]) => cfg.includeSecondaries || !ignoreUnusedDeps)
+    .map(([key]) => `'${inferPackageFromSecondary(key)}'`);
+  return [...new Set(roots)];
 }
 
 function rewriteImports(

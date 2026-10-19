@@ -9,6 +9,7 @@ import {
   type FakeBuildAdapter,
 } from './__test-helpers__/fake-build-adapter.js';
 import { prepareSkipList } from '../../config/default-skip-list.js';
+import { logger } from '../../utils/logger.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
 import type { IoPort } from '../../domain/utils/io-port.contract.js';
 import type {
@@ -906,5 +907,97 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     expect(mem.isFile(path.join('/cache', 'browser-a', chunkOf(a)))).toBe(true);
     expect(mem.isFile(path.join('/cache', 'browser-b', chunkOf(b)))).toBe(true);
     expect(mem.isFile(path.join('/ws/dist', chunkOf(a)))).toBe(true);
+  });
+});
+
+// core#195: a secondary published only because of keepAll may import an uninstalled optional
+// peer; the bundle fails, and the notice should point there rather than at Node.js packages.
+describe('bundleSharedCore error notice', () => {
+  function entry(entryPoint: string, includeSecondaries?: boolean): NormalizedExternalConfig {
+    return {
+      singleton: true,
+      strictVersion: false,
+      requiredVersion: '^1.0.0',
+      chunks: false,
+      platform: 'browser',
+      build: 'default',
+      ...(includeSecondaries !== undefined && { includeSecondaries }),
+      packageInfo: { entryPoint, version: '1.0.0', esm: true },
+    };
+  }
+
+  async function failingBuild(
+    sharedBundles: Record<string, NormalizedExternalConfig>,
+    ignoreUnusedDeps: boolean
+  ): Promise<string> {
+    const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+    const adapter: NFBuildAdapter = {
+      ...createFakeBuildAdapter({ io: mem }),
+      build: async () => {
+        throw new Error('Could not resolve "@pkg/peer"');
+      },
+    };
+    const config = makeConfig();
+    config.features.ignoreUnusedDeps = ignoreUnusedDeps;
+    const notice = vi.spyOn(logger, 'notice').mockImplementation(() => undefined);
+    vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+
+    await expect(
+      bundleSharedCore(
+        { io: mem, repo: emptyRepo, adapter },
+        sharedBundles,
+        config,
+        makeFedOptions(),
+        [],
+        BUILD_OPTIONS
+      )
+    ).rejects.toThrow('Could not resolve');
+
+    const output = notice.mock.calls.map(c => c.join(' ')).join('\n');
+    vi.restoreAllMocks();
+    return output;
+  }
+
+  it('names the packages whose secondaries keepAll published', async () => {
+    const output = await failingBuild(
+      {
+        '@pkg/browser': entry('@pkg/browser/index.js', true),
+        '@pkg/browser/animations': entry('@pkg/browser/animations.js', true),
+        rxjs: entry('rxjs/index.js'),
+      },
+      true
+    );
+
+    expect(output).toContain("'@pkg/browser' publish every entry point");
+    expect(output).toContain('optional peer dependency');
+    expect(output).not.toContain('rxjs');
+    expect(output).not.toContain('Node.js package');
+  });
+
+  // Nothing prunes secondaries then, so they are published the same way keepAll publishes them.
+  it('names every package with secondaries when ignoreUnusedDeps is off', async () => {
+    const output = await failingBuild(
+      {
+        '@pkg/browser': entry('@pkg/browser/index.js'),
+        '@pkg/browser/animations': entry('@pkg/browser/animations.js'),
+      },
+      false
+    );
+
+    expect(output).toContain("'@pkg/browser' publish every entry point");
+  });
+
+  it('keeps the Node.js notice when no secondary is kept wholesale', async () => {
+    const output = await failingBuild(
+      {
+        '@pkg/browser': entry('@pkg/browser/index.js', true),
+        rxjs: entry('rxjs/index.js'),
+        'rxjs/operators': entry('rxjs/operators/index.js'),
+      },
+      true
+    );
+
+    expect(output).toContain('Node.js package');
+    expect(output).not.toContain('publish every entry point');
   });
 });
