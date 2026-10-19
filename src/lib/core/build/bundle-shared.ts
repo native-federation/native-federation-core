@@ -238,19 +238,15 @@ export async function bundleSharedCore(
     );
     applyRenames(bundleResult, entryPoints, renamed);
   } catch (e) {
-    logger.error('Error bundling shared npm package ');
+    logger.error('Error bundling shared npm package');
     if (e instanceof Error) {
       logger.error(e.message);
     }
 
-    logger.error('For more information, run in verbose mode');
-
-    logger.notice('');
-    logger.notice('');
-
-    logger.notice('** Important Information: ***');
-    logger.notice('Usually a shared Node.js package; Native Federation builds for the browser.');
-    logger.notice("Move it to devDependencies or add it to 'skip'.");
+    logger.notice(
+      'Usually a shared Node.js package; Native Federation builds for the browser. ' +
+        "Move it to devDependencies or add it to 'skip'."
+    );
     const keepingAll = packagesKeepingAllSecondaries(
       sharedBundles,
       config.features.ignoreUnusedDeps
@@ -258,17 +254,11 @@ export async function bundleSharedCore(
     if (keepingAll.length > 0) {
       logger.notice(
         `All entry points of ${keepingAll.join(', ')} are published, used or not ` +
-          "(keepAll or 'ignoreUnusedDeps: false')."
-      );
-      logger.notice(
-        "One of them may import an uninstalled package, e.g. an optional peer. Add it to 'skip'."
+          "(keepAll or 'ignoreUnusedDeps: false'). One of them may import an uninstalled " +
+          "package, e.g. an optional peer. Add it to 'skip'."
       );
     }
-    logger.notice('');
-    logger.notice('More Details: https://bit.ly/nf-issue');
-
-    logger.notice('');
-    logger.notice('');
+    logger.notice('Run in verbose mode for the full error. More details: https://bit.ly/nf-issue');
 
     logger.verbose(e);
     throw e;
