@@ -29,19 +29,19 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "~24.19.0",
-    "@vitest/coverage-v8": "^4.0.0",
-    "@vitest/ui": "^4.0.0",
+    "@vitest/coverage-v8": "^4.1.11",
+    "@vitest/ui": "^4.1.11",
     "eslint": "^10.10.0",
     "globals": "^17.11.0",
     "jiti": "^2.6.1",
-    "jsdom": "^30.1.0",
+    "jsdom": "^30.1.2",
     "knip": "^6.34.0",
     "prettier": "^3.9.6",
     "tslib": "^2.3.0",
     "typescript-eslint": "^8.68.0",
-    "typescript-floor": "npm:typescript@5.0.4",
+    "typescript-floor": "npm:typescript@5.9.3",
     "vite": "^8.3.1",
-    "vitest": "^4.0.0"
+    "vitest": "^4.1.11"
   },
   "exports": {
     "./package.json": "./package.json",
