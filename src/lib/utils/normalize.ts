@@ -18,6 +18,15 @@ export function normalize(path: string, trailingSlash?: boolean): string {
   return cand;
 }
 
+// Callers sanitize the variable part of a name to [A-Za-z0-9_], so a '-n' suffix never recreates
+// an unsuffixed name.
+export function claimUniqueName(name: string, taken: Set<string>): string {
+  let unique = name;
+  for (let n = 2; taken.has(unique); n++) unique = `${name}-${n}`;
+  taken.add(unique);
+  return unique;
+}
+
 export function normalizePackageName(fileName: string) {
   const sanitized = fileName.replace(/[^A-Za-z0-9]/g, '_');
   return sanitized.startsWith('_') ? sanitized.slice(1) : sanitized;

@@ -13,7 +13,7 @@ import { createBuildResultMap, popFromResultMap } from './build-result-map.js';
 import { computeIntegrityMapCore } from './compute-integrity.js';
 import { resolveOutputPath } from '../../utils/output-path.js';
 import { logger } from '../../utils/logger.js';
-import { normalize } from '../../utils/normalize.js';
+import { claimUniqueName, normalize } from '../../utils/normalize.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import { type NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
 import { AbortedError } from '../../utils/errors.js';
@@ -61,11 +61,13 @@ export async function bundleExposedAndMappingsCore(
   }
   const io = deps.io ?? nodeIo;
 
+  // Mapping bundles share one outdir, and dev output names carry no hash.
+  const outNames = new Set<string>();
   const mappingPlans = planMappingBundles(config).map(plan => ({
     bundleName: plan.bundleName,
     entryPoints: Object.entries(plan.entries).map(([entryPoint, mappedImport]) => ({
       fileName: entryPoint,
-      outName: mappedImport.replace(/[^A-Za-z0-9]/g, '_') + '.js',
+      outName: claimUniqueName(mappedImport.replace(/[^A-Za-z0-9]/g, '_'), outNames) + '.js',
       key: mappedImport,
     })),
   }));

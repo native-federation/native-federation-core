@@ -317,8 +317,10 @@ Shared mappings and exposed modules are built separately, because a chunk factor
 reached through two import trails — the mapping may be served by another remote, the exposed
 module never is — and is then evaluated twice. Mappings default to one `mapping-bundle`;
 `build: 'separate'` gives a mapping its own bundle and `build: 'package'` one per mapped package,
-the same way a shared external is planned (`planMappingBundles`). `mapping-or-exposed` is a fixed
-name: the orchestrator registers it for every remote it knows.
+the same way a shared external is planned (`planMappingBundles`). Names that normalize alike
+(`@org/ui-table`, `@org/ui/table`) still get an output file each: in one run the build fails on
+the shared path, and across runs a dev build (no hash) would overwrite one file with the other.
+`mapping-or-exposed` is a fixed name: the orchestrator registers it for every remote it knows.
 
 ## Caching System
 

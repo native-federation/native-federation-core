@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalize, normalizePackageName } from './normalize.js';
+import { claimUniqueName, normalize, normalizePackageName } from './normalize.js';
 
 describe('normalize', () => {
   it('converts backslashes to forward slashes', () => {
@@ -28,5 +28,16 @@ describe('normalizePackageName', () => {
 
   it('strips a single leading underscore introduced by sanitization', () => {
     expect(normalizePackageName('@scope/pkg')).toBe('scope_pkg');
+  });
+});
+
+describe('claimUniqueName', () => {
+  it('suffixes a name that is already taken and claims the result', () => {
+    const taken = new Set(['mapping-bundle']);
+
+    expect(claimUniqueName('mapping-a', taken)).toBe('mapping-a');
+    expect(claimUniqueName('mapping-a', taken)).toBe('mapping-a-2');
+    expect(claimUniqueName('mapping-a', taken)).toBe('mapping-a-3');
+    expect(claimUniqueName('mapping-bundle', taken)).toBe('mapping-bundle-2');
   });
 });

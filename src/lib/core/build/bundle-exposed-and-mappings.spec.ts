@@ -265,6 +265,48 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     expect(result.exposes[0]!.dev).toEqual({ entryPoint: file.replace(/\\/g, '/') });
   });
 
+  // One run with two outputs on one path fails the build (esbuild in dev, the result map in prod).
+  it.each([undefined, 'separate' as const])(
+    'gives mappings whose names normalize alike output files of their own (build: %s)',
+    async build => {
+      const mappingCfg = { singleton: true, strictVersion: false, ...(build && { build }) };
+      const config = makeConfig({
+        sharedMappings: { './libs/a': '@org/ui-table', './libs/b': '@org/ui/table' },
+        sharedMappingsConfig: { '@org/ui-table': mappingCfg, '@org/ui/table': mappingCfg },
+      });
+      const adapter = createFakeBuildAdapter();
+
+      const result = await bundleExposedAndMappingsCore({ adapter }, config, makeFedOptions(), []);
+
+      expect(adapter.calls.setup).toHaveLength(1);
+      expect(result.mappings.map(m => [m.packageName, m.outFileName])).toEqual([
+        ['@org/ui-table', '_org_ui_table.js'],
+        ['@org/ui/table', '_org_ui_table-2.js'],
+      ]);
+    }
+  );
+
+  // Two bundles write one outdir; without a hash the second '_org_a_b_x.js' silently replaced
+  // the first, and remoteEntry.json listed both mappings on it.
+  it('keeps output names apart across bundles in a dev build', async () => {
+    const packageCfg = { singleton: true, strictVersion: false, build: 'package' as const };
+    const config = makeConfig({
+      sharedMappings: { './libs/a': '@org/a-b/x', './libs/b': '@org/a/b-x' },
+      sharedMappingsConfig: { '@org/a-b/x': packageCfg, '@org/a/b-x': packageCfg },
+    });
+    const adapter = createFakeBuildAdapter();
+
+    const result = await bundleExposedAndMappingsCore(
+      { adapter },
+      config,
+      makeFedOptions({ dev: true }),
+      []
+    );
+
+    expect(adapter.calls.setup.map(c => c.name)).toEqual(['mapping-org_a_b', 'mapping-org_a']);
+    expect(result.mappings.map(m => m.outFileName)).toEqual(['_org_a_b_x.js', '_org_a_b_x-2.js']);
+  });
+
   // mappingVersion is off in makeConfig, so this is the un-annotated baseline: no version
   // is detected and requiredVersion stays empty.
   it('emits the pre-existing defaults for an un-annotated mapping', async () => {

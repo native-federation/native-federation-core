@@ -18,6 +18,19 @@ describe('createBuildResultMap', () => {
     expect(map).toEqual({ 'main.js': 'dist/main-AB12CD.js' });
   });
 
+  // Mapping output names can carry a '-2' suffix (claimUniqueName); only the last '-' is the hash.
+  it('strips only the hash from a suffixed name', () => {
+    const map = createBuildResultMap(
+      [r('dist/_org_ui_table-AB12CD.js'), r('dist/_org_ui_table-2-EF34GH.js')],
+      true,
+      ['_org_ui_table.js', '_org_ui_table-2.js']
+    );
+    expect(map).toEqual({
+      '_org_ui_table.js': 'dist/_org_ui_table-AB12CD.js',
+      '_org_ui_table-2.js': 'dist/_org_ui_table-2-EF34GH.js',
+    });
+  });
+
   it('keeps the hashed name when it is not in the expected list', () => {
     const map = createBuildResultMap([r('dist/chunk-AB12CD.js')], true, ['main.js']);
     expect(map).toEqual({ 'chunk-AB12CD.js': 'dist/chunk-AB12CD.js' });
