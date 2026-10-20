@@ -9,6 +9,7 @@ import { isInSkipList } from '../../config/default-skip-list.js';
 import { inferPackageFromSecondary } from '../../utils/normalize.js';
 import { resolveOutputPath } from '../../utils/output-path.js';
 import { matchesExternal, readBareImports } from '../../utils/bare-specifier.js';
+import { isScript } from '../../utils/script-file.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import { logger } from '../../utils/logger.js';
 
@@ -131,7 +132,7 @@ function publishedFiles(
   for (const exposed of federationInfo.exposes) {
     files.push({ fileName: exposed.outFileName, allowsBuiltins: false });
   }
-  return files.filter(file => /\.(m|c)?js$/.test(file.fileName));
+  return files.filter(file => isScript(file.fileName));
 }
 
 function isChunk(packageName: string): boolean {

@@ -9,6 +9,7 @@ import {
   type FakeBuildAdapter,
 } from './__test-helpers__/fake-build-adapter.js';
 import { prepareSkipList } from '../../config/default-skip-list.js';
+import { logger } from '../../utils/logger.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
 import { createPackageJsonRepository } from '../../utils/io/package-json-repository.js';
 import type { IoPort } from '../../domain/utils/io-port.contract.js';
@@ -781,7 +782,8 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     const chunkedBuild = async (
       mem: ReturnType<typeof createMemoryIo>,
       chunkText: string,
-      denseChunking: boolean
+      denseChunking: boolean,
+      opts: { asset?: boolean } = {}
     ) => {
       const adapter: FakeBuildAdapter = createFakeBuildAdapter({
         results: name => {
@@ -791,11 +793,16 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
           mem.setFile(entry, `export * from './chunk-AAAAAAAA.js';\n`);
           mem.setFile(chunk, chunkText);
           mem.setFile(`${chunk}.map`, '{"version":3}');
-          return [{ fileName: entry }, { fileName: chunk }, { fileName: `${chunk}.map` }];
+          const files = [{ fileName: entry }, { fileName: chunk }, { fileName: `${chunk}.map` }];
+          if (!opts.asset) return files;
+          const asset = path.join(setup.options.outdir, 'foo.css');
+          mem.setFile(asset, '.foo{}');
+          return [...files, { fileName: asset }];
         },
       });
       const config = makeConfig();
       config.features.denseChunking = denseChunking;
+      config.features.integrityHashes = true;
       const result = await bundleSharedCore(
         { io: mem, repo: repoAtVersion('2.0.0'), adapter },
         fooWith(),
@@ -837,6 +844,23 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       expect(mem.isFile(path.join('/ws/dist', chunk!))).toBe(true);
       expect(result.externals.some(e => e.packageName.startsWith('@nf-internal/'))).toBe(false);
     });
+
+    // A CSS import or a file-loader asset leaves a non-script output beside the chunks.
+    it.each([false, true])(
+      'never publishes or hashes an emitted asset (denseChunking: %s)',
+      async denseChunking => {
+        const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+
+        const result = await chunkedBuild(mem, 'export const a = 1;\n', denseChunking, {
+          asset: true,
+        });
+
+        expect(mem.readText('/ws/dist/foo.css')).toBe('.foo{}');
+        expect(result.externals.map(e => e.outFileName)).not.toContain('foo.css');
+        expect(Object.values(result.chunks ?? {}).flat()).not.toContain('foo.css');
+        expect(Object.keys(result.integrity!)).not.toContain('foo.css');
+      }
+    );
 
     it('gives two builds the same chunk name exactly when the chunk bytes agree', async () => {
       const same = await chunkedBuild(
@@ -999,5 +1023,97 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     expect(mem.isFile(path.join('/cache', 'browser-a', chunkOf(a)))).toBe(true);
     expect(mem.isFile(path.join('/cache', 'browser-b', chunkOf(b)))).toBe(true);
     expect(mem.isFile(path.join('/ws/dist', chunkOf(a)))).toBe(true);
+  });
+});
+
+// core#195: a secondary published only because of keepAll may import an uninstalled optional
+// peer; the bundle fails, and the notice should name that cause next to the Node.js one.
+describe('bundleSharedCore error notice', () => {
+  function entry(entryPoint: string, includeSecondaries?: boolean): NormalizedExternalConfig {
+    return {
+      singleton: true,
+      strictVersion: false,
+      requiredVersion: '^1.0.0',
+      chunks: false,
+      platform: 'browser',
+      build: 'default',
+      ...(includeSecondaries !== undefined && { includeSecondaries }),
+      packageInfo: { entryPoint, version: '1.0.0', esm: true },
+    };
+  }
+
+  async function failingBuild(
+    sharedBundles: Record<string, NormalizedExternalConfig>,
+    ignoreUnusedDeps: boolean
+  ): Promise<string> {
+    const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+    const adapter: NFBuildAdapter = {
+      ...createFakeBuildAdapter({ io: mem }),
+      build: async () => {
+        throw new Error('Could not resolve "@pkg/peer"');
+      },
+    };
+    const config = makeConfig();
+    config.features.ignoreUnusedDeps = ignoreUnusedDeps;
+    const notice = vi.spyOn(logger, 'notice').mockImplementation(() => undefined);
+    vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+
+    await expect(
+      bundleSharedCore(
+        { io: mem, repo: emptyRepo, adapter },
+        sharedBundles,
+        config,
+        makeFedOptions(),
+        [],
+        BUILD_OPTIONS
+      )
+    ).rejects.toThrow('Could not resolve');
+
+    const output = notice.mock.calls.map(c => c.join(' ')).join('\n');
+    vi.restoreAllMocks();
+    return output;
+  }
+
+  it('names the packages whose secondaries keepAll published', async () => {
+    const output = await failingBuild(
+      {
+        '@pkg/browser': entry('@pkg/browser/index.js', true),
+        '@pkg/browser/animations': entry('@pkg/browser/animations.js', true),
+        rxjs: entry('rxjs/index.js'),
+      },
+      true
+    );
+
+    expect(output).toContain("All entry points of '@pkg/browser' are published");
+    expect(output).toContain('optional peer');
+    expect(output).not.toContain("'rxjs'");
+    expect(output).toContain('Node.js package');
+  });
+
+  // Nothing prunes secondaries then, so they are published the same way keepAll publishes them.
+  it('names every package with secondaries when ignoreUnusedDeps is off', async () => {
+    const output = await failingBuild(
+      {
+        '@pkg/browser': entry('@pkg/browser/index.js'),
+        '@pkg/browser/animations': entry('@pkg/browser/animations.js'),
+      },
+      false
+    );
+
+    expect(output).toContain("All entry points of '@pkg/browser' are published");
+  });
+
+  it('shows only the Node.js notice when no secondary is kept wholesale', async () => {
+    const output = await failingBuild(
+      {
+        '@pkg/browser': entry('@pkg/browser/index.js', true),
+        rxjs: entry('rxjs/index.js'),
+        'rxjs/operators': entry('rxjs/operators/index.js'),
+      },
+      true
+    );
+
+    expect(output).toContain('Node.js package');
+    expect(output).not.toContain('All entry points');
   });
 });

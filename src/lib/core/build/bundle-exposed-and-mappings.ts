@@ -25,6 +25,7 @@ import { resolveMappingConfig } from '../../config/mapping-utils.js';
 import { applyAutoRequiredOptions } from '../../config/version-lookup.js';
 import type { AutoRequiredOptions } from '../../domain/config/external-config.contract.js';
 import { planMappingBundles } from './mapping-bundle-plan.js';
+import { isScript } from '../../utils/script-file.js';
 
 // Shared mappings and exposed modules build separately so the bundler cannot factor one chunk out
 // of both: a chunk spanning them is reached through two import trails and evaluated twice.
@@ -211,9 +212,7 @@ export async function bundleExposedAndMappingsCore(
 }
 
 function chunksOf(resultMap: Record<string, string>): string[] {
-  return Object.entries(resultMap)
-    .filter(([file]) => !file.endsWith('.map'))
-    .map(([, chunkPath]) => chunkPath);
+  return Object.values(resultMap).filter(file => isScript(file));
 }
 
 // Chunks are published by name in the `chunks` map, so the name is made to say what the bytes are.

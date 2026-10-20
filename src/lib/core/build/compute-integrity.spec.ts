@@ -21,6 +21,16 @@ describe('computeIntegrityMapCore', () => {
     expect(Object.keys(map)).toEqual(['react.js']);
   });
 
+  // Integrity is published in remoteEntry.json, which only names what an ESM import can load.
+  it('hashes scripts only, not the assets a bundler emits beside them', () => {
+    const io = createMemoryIo()
+      .setFile('/cache/a.mjs', 'A')
+      .setFile('/cache/b.css', 'B')
+      .setFile('/cache/logo-X.png', 'C');
+    const map = computeIntegrityMapCore(io, ['a.mjs', 'b.css', 'logo-X.png'], '/cache');
+    expect(Object.keys(map)).toEqual(['a.mjs']);
+  });
+
   it('skips files that do not exist on disk', () => {
     const io = createMemoryIo().setFile('/cache/react.js', 'REACT');
     const map = computeIntegrityMapCore(io, ['react.js', 'missing.js'], '/cache');

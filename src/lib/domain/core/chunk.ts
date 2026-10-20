@@ -5,6 +5,6 @@ export function toChunkImport(fileName: string): string {
     fileName = fileName.slice(2);
   }
 
-  const packageName = fileName.replace(/.(m|c)?js$/, '');
+  const packageName = fileName.replace(/\.(m|c)?js$/, '');
   return CHUNK_PREFIX + '/' + packageName;
 }
