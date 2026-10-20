@@ -34,7 +34,8 @@ export const getChecksum = (
   features: FeatureFlags = {},
   contentSignals: Record<string, string> = {},
   resolvedVersions: Record<string, string> = {},
-  adapterKey?: ExternalsCacheKey
+  adapterKey?: ExternalsCacheKey,
+  externals: readonly string[] = []
 ): string =>
   getChecksumCore(
     nodeIo,
@@ -44,7 +45,8 @@ export const getChecksum = (
     features,
     contentSignals,
     resolvedVersions,
-    adapterKey
+    adapterKey,
+    externals
   );
 
 export type FeatureFlags = Partial<NormalizedFederationConfig['features']>;
@@ -72,6 +74,10 @@ const sharedInfoState = (config: NormalizedExternalConfig): string => {
   return values.every(value => value === null) ? '' : `!${JSON.stringify(values)}`;
 };
 
+// see AGENTS.md, Caching System
+const externalsState = (externals: readonly string[]): string =>
+  externals.length === 0 ? '' : `:externals=${JSON.stringify([...new Set(externals)].sort())}`;
+
 // JSON-encoded so `1`, `'1'` and `true` stay distinct and a value cannot forge a delimiter.
 const adapterState = (key: ExternalsCacheKey | undefined): string => {
   if (!key) return '';
@@ -91,7 +97,8 @@ export const getChecksumCore = (
   // outright. An omitted map falls back to the declared range for every key, reproducing the
   // pre-installed-version checksum byte for byte.
   resolvedVersions: Record<string, string> = {},
-  adapterKey?: ExternalsCacheKey
+  adapterKey?: ExternalsCacheKey,
+  externals: readonly string[] = []
 ): string => {
   const denseExternals = Object.keys(shared)
     .sort()
@@ -109,7 +116,8 @@ export const getChecksumCore = (
       'sha256',
       denseExternals +
         `:dev=${dev}:builder=${builderVersion}:features=${featureState(features)}` +
-        adapterState(adapterKey)
+        adapterState(adapterKey) +
+        externalsState(externals)
     )
     .hex();
 };
@@ -120,6 +128,9 @@ export type CacheMetadata = {
   chunks?: ChunkInfo;
   integrity?: IntegrityMap;
   files: string[];
+  // Checked on a hit against the current plan (cache-validity.ts).
+  builtExternals?: string[];
+  externalImports?: string[];
 };
 
 type CachePort = FileReaderPort & FileWriterPort;

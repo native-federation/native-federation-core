@@ -215,6 +215,26 @@ describe('getChecksumCore', () => {
     });
   });
 
+  // Adding an external changes what a shared bundle inlines, so a cached bundle that inlined it
+  // must miss (it used to be served stale).
+  describe('externals', () => {
+    const base = { react: ext('18') };
+    const withExternals = (externals?: string[]) =>
+      getChecksumCore(io, base, '0', '2.0.0', {}, {}, {}, undefined, externals);
+
+    it('is byte-identical to the checksum before externals were hashed when there are none', () => {
+      expect(withExternals([])).toBe(getChecksumCore(io, base, '0', '2.0.0'));
+    });
+
+    it('changes when an external is added', () => {
+      expect(withExternals(['react', 'host-sdk'])).not.toBe(withExternals(['react']));
+    });
+
+    it('is independent of order and duplicates', () => {
+      expect(withExternals(['b', 'a', 'a'])).toBe(withExternals(['a', 'b']));
+    });
+  });
+
   it('changes when a content signal changes but is stable when it does not', () => {
     const base = { '@scope/lib': ext('1.0.0') };
     const a = getChecksumCore(io, base, '0', '', {}, { '@scope/lib': '111' });

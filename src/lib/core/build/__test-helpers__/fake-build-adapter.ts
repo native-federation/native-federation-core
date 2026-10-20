@@ -17,9 +17,10 @@ export interface FakeBuildAdapter extends NFBuildAdapter {
 type ResultsFor = NFBuildAdapterResult[] | ((name: string) => NFBuildAdapterResult[]);
 
 // When `results` is omitted, `build()` echoes the most recent `setup()` for that
-// name (one result per entry point); with `io`, those files are also written.
+// name (one result per entry point); with `io`, those files are also written, with `contents`
+// (default `export {};`).
 export function createFakeBuildAdapter(
-  options: { io?: IoPort; results?: ResultsFor } = {}
+  options: { io?: IoPort; results?: ResultsFor; contents?: (fileName: string) => string } = {}
 ): FakeBuildAdapter {
   const calls: FakeBuildAdapter['calls'] = { setup: [], build: [], dispose: [] };
 
@@ -44,7 +45,9 @@ export function createFakeBuildAdapter(
           : options.results
         : echoFromSetup(name);
       if (options.io) {
-        for (const r of results) options.io.writeText(r.fileName, 'export {};\n');
+        for (const r of results) {
+          options.io.writeText(r.fileName, options.contents?.(r.fileName) ?? 'export {};\n');
+        }
       }
       return results;
     },
