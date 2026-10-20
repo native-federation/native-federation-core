@@ -2,7 +2,7 @@ import { initSync, parse } from 'es-module-lexer';
 import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
 import { logger } from './logger.js';
 
-export function isBare(specifier: string): boolean {
+function isBare(specifier: string): boolean {
   if (specifier.startsWith('.') || specifier.startsWith('/')) return false;
   return !/^[a-z][a-z0-9+.-]*:/i.test(specifier) || specifier.startsWith('node:');
 }
