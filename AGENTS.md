@@ -352,9 +352,13 @@ Native Federation uses an intelligent caching system to speed up builds:
   metadata records the list the bundle was built with and the bare imports it left external. The
   entry misses when one of those imports is no longer external (it would resolve through no
   import-map entry), or when a newly external name belongs to a package the entries reach through
-  `dependencies`, `peerDependencies` or `optionalDependencies` (`dependencyClosureCore`). The bundler
-  does not report what it inlined, so the second check errs toward a miss; the walk only runs when
-  something was added. Metadata without these fields misses once
+  `dependencies`, `peerDependencies` or `optionalDependencies` (`dependencyClosureCore`, which
+  resolves from each package's real path so pnpm's store layout is followed). The bundler does not
+  report what it inlined, so a package declared anywhere in that tree counts as inlined, and a
+  `package.json` the walk cannot read is a miss. A package the bundle imports without declaring it
+  (reachable only through hoisting) is not seen; that case still needs something else to
+  invalidate the entry. The walk only runs when something was added. Metadata without these fields
+  misses once
 - Based on the adapter's `externalsCacheKey` (core#152): `builderVersion` is core's own version,
   but the adapter produces the bytes, so it declares its identity and every option that changes
   shared externals. Core reads it before `setup()`, sorts the option keys and JSON-encodes each

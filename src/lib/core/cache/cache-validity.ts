@@ -1,10 +1,8 @@
 import * as path from 'path';
-import { initSync, parse } from 'es-module-lexer';
 import type { FileReaderPort } from '../../domain/utils/io-port.contract.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
 import { getPkgFolder } from '../../utils/io/package-json-repository.js';
-import { isBare, matchesExternal } from '../../utils/bare-specifier.js';
-import { logger } from '../../utils/logger.js';
+import { matchesExternal, readBareImports } from '../../utils/bare-specifier.js';
 import type { CacheMetadata } from './cache-persistence.js';
 
 const DEPENDENCY_FIELDS = ['dependencies', 'peerDependencies', 'optionalDependencies'];
@@ -17,26 +15,17 @@ export function externalImportsCore(
   external: readonly string[]
 ): string[] {
   const found = new Set<string>();
-  initSync();
   for (const file of files.filter(f => /\.(m|c)?js$/.test(f))) {
-    let imports: ReturnType<typeof parse>[0];
-    try {
-      [imports] = parse(io.readText(path.join(dir, file)), file);
-    } catch (e) {
-      logger.debug(`Could not scan the imports of '${file}': ${(e as Error).message}`);
-      continue;
-    }
-    for (const imp of imports) {
-      const specifier = imp.n;
-      if (imp.d === -2 || specifier === undefined || !isBare(specifier)) continue;
+    for (const specifier of readBareImports(io, path.join(dir, file), file)) {
       if (matchesExternal(specifier, external)) found.add(specifier);
     }
   }
   return [...found].sort();
 }
 
-// Every package the entries can reach through package.json, resolved the way Node would.
+// Every package the entries declare a dependency on, directly or transitively.
 export function dependencyClosureCore(
+  io: FileReaderPort,
   roots: string[],
   folder: string,
   repo: PackageJsonRepository
@@ -53,10 +42,10 @@ export function dependencyClosureCore(
     visited.add(pkgJsonPath);
 
     const pkgJson = repo.readJson(pkgJsonPath);
+    // From the real path: pnpm installs a package's own dependencies next to its store copy.
+    const dir = path.dirname(io.realpath(pkgJsonPath));
     for (const field of DEPENDENCY_FIELDS) {
-      for (const dep of Object.keys(pkgJson?.[field] ?? {})) {
-        queue.push({ name: dep, from: path.dirname(pkgJsonPath) });
-      }
+      for (const dep of Object.keys(pkgJson?.[field] ?? {})) queue.push({ name: dep, from: dir });
     }
   }
   return names;
@@ -79,7 +68,12 @@ export function staleCacheReason(
   const added = external.filter(e => !built.has(e));
   if (added.length === 0) return undefined;
 
-  const packages = reachable();
+  let packages: Set<string>;
+  try {
+    packages = reachable();
+  } catch (e) {
+    return `its dependencies could not be read: ${(e as Error).message}`;
+  }
   const inlined = added.find(e => packages.has(getPkgFolder(e)));
   return inlined ? `'${inlined}' is now external and may be inlined in it` : undefined;
 }

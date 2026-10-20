@@ -156,7 +156,7 @@ export async function bundleSharedCore(
     const stale =
       cacheMetadata &&
       staleCacheReason(cacheMetadata, external, () =>
-        dependencyClosureCore(Object.keys(sharedBundles), folder, deps.repo)
+        dependencyClosureCore(deps.io, Object.keys(sharedBundles), folder, deps.repo)
       );
     if (stale) {
       logger.info(`Cached ${buildOptions.bundleName} externals are stale (${stale}), rebuilding.`);
@@ -317,7 +317,9 @@ export async function bundleSharedCore(
     chunks: exportedChunks,
     integrity,
     builtExternals: external,
-    externalImports: externalImportsCore(deps.io, bundleCache.dir, persistedFiles, external),
+    externalImports: fedOptions.cacheExternalArtifacts
+      ? externalImportsCore(deps.io, bundleCache.dir, persistedFiles, external)
+      : undefined,
   });
 
   bundleCache.copyFiles(resolveOutputPath(fedOptions));

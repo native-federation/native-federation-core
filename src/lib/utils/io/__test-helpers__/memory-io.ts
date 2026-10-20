@@ -117,12 +117,12 @@ export function createMemoryIo(): MemoryIo {
     },
 
     readText(p) {
-      const bytes = files.get(toKey(p));
+      const bytes = files.get(deref(p));
       if (!bytes) throw new Error(`ENOENT: ${p}`);
       return new TextDecoder().decode(bytes);
     },
     readBytes(p) {
-      const bytes = files.get(toKey(p));
+      const bytes = files.get(deref(p));
       if (!bytes) throw new Error(`ENOENT: ${p}`);
       return bytes;
     },

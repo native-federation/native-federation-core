@@ -46,10 +46,34 @@ describe('dependencyClosureCore', () => {
       .setFile('/ws/node_modules/@scope/peer/package.json', '{"optionalDependencies":{"opt":"1"}}')
       .setFile('/ws/node_modules/deep/package.json', '{"dependencies":{"foo":"1"}}');
 
-    const closure = dependencyClosureCore(['foo/sub'], '/ws', createPackageJsonRepository(mem));
+    const closure = dependencyClosureCore(mem, ['foo/sub'], '/ws', createPackageJsonRepository(mem));
 
     // `opt` is not installed but is still a name the bundle may import; `wrong` is never reached.
     expect([...closure].sort()).toEqual(['@scope/peer', 'bar', 'deep', 'foo', 'opt']);
+  });
+
+  // pnpm links only direct dependencies into the project's node_modules; foo's own dependency
+  // bar lives next to foo's store copy and is reachable only from foo's real path.
+  it('resolves dependencies from the real path of a pnpm-linked package', () => {
+    const store = '/ws/node_modules/.pnpm';
+    const mem = createMemoryIo()
+      .setFile(`${store}/foo@1.0.0/node_modules/foo/package.json`, '{"dependencies":{"bar":"1"}}')
+      .setFile(`${store}/bar@1.0.0/node_modules/bar/package.json`, '{"dependencies":{"deep":"1"}}')
+      .setFile(`${store}/deep@1.0.0/node_modules/deep/package.json`, '{}')
+      .setSymlink('/ws/node_modules/foo', `${store}/foo@1.0.0/node_modules/foo`)
+      .setSymlink(`${store}/foo@1.0.0/node_modules/bar`, `${store}/bar@1.0.0/node_modules/bar`)
+      .setSymlink(`${store}/bar@1.0.0/node_modules/deep`, `${store}/deep@1.0.0/node_modules/deep`);
+
+    const closure = dependencyClosureCore(mem, ['foo'], '/ws', createPackageJsonRepository(mem));
+
+    expect([...closure].sort()).toEqual(['bar', 'deep', 'foo']);
+  });
+
+  it('throws on a package.json it cannot parse, for the caller to treat as stale', () => {
+    const mem = createMemoryIo().setFile('/ws/node_modules/foo/package.json', '{ truncated');
+    expect(() =>
+      dependencyClosureCore(mem, ['foo'], '/ws', createPackageJsonRepository(mem))
+    ).toThrow();
   });
 });
 
@@ -90,6 +114,15 @@ describe('staleCacheReason', () => {
       return new Set();
     });
     expect(walked).toBe(false);
+  });
+
+  it('rejects the entry when its dependencies cannot be read', () => {
+    const broken = () => {
+      throw new Error('bad package.json');
+    };
+    expect(staleCacheReason(meta({}), ['rxjs', '@angular/core', 'new'], broken)).toMatch(
+      /could not be read/
+    );
   });
 
   it('rejects metadata that predates the recorded list', () => {
