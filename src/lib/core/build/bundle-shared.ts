@@ -20,7 +20,6 @@ import { DEFAULT_EXTERNAL_LIST } from './default-external-list.js';
 import {
   applyEdits,
   collectSpecifierEdits,
-  isSourceFile,
   shiftSourceMap,
   SOURCE_MAP_COMMENT,
 } from './rewrite-chunk-imports.js';
@@ -47,6 +46,7 @@ import { getBuildAdapter } from './build-adapter.js';
 import { synthesizeCjsNamedExportsEntry, type ModuleEvaluator } from './synthesize-cjs-exports.js';
 import { createRequire } from 'module';
 import { inferPackageFromSecondary } from '../../utils/normalize.js';
+import { isScript } from '../../utils/script-file.js';
 
 export async function bundleShared(
   sharedBundles: Record<string, NormalizedExternalConfig>,
@@ -269,9 +269,7 @@ export async function bundleSharedCore(
   const result = buildResult(packageInfos, sharedBundles, outFileNames);
 
   const chunks = bundleResult.filter(
-    br =>
-      !br.fileName.endsWith('.map') &&
-      !result.find(r => r.outFileName === path.basename(br.fileName))
+    br => isScript(br.fileName) && !result.find(r => r.outFileName === path.basename(br.fileName))
   );
 
   /**
@@ -329,7 +327,7 @@ function rewriteImports(
   entries: Set<string>,
   hashEntries: Set<string>
 ): Map<string, string> {
-  const sourceFiles = cachedFiles.filter(isSourceFile);
+  const sourceFiles = cachedFiles.filter(isScript);
 
   for (const file of sourceFiles) {
     const filePath = path.join(bundleDir, file);
