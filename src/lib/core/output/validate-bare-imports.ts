@@ -9,6 +9,7 @@ import { toChunkImport } from '../../domain/core/chunk.js';
 import { isInSkipList } from '../../config/default-skip-list.js';
 import { inferPackageFromSecondary } from '../../utils/normalize.js';
 import { resolveOutputPath } from '../../utils/output-path.js';
+import { isBare, matchesExternal } from '../../utils/bare-specifier.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import { logger } from '../../utils/logger.js';
 
@@ -82,7 +83,7 @@ export function findUnresolvedImportsCore(
     for (const imp of imports) {
       const specifier = imp.n;
       if (imp.d === -2 || specifier === undefined || !isBare(specifier)) continue;
-      if (declared.has(specifier) || isOptedOut(specifier, config.externals)) continue;
+      if (declared.has(specifier) || matchesExternal(specifier, config.externals)) continue;
       if (file.allowsBuiltins && isNodeBuiltin(specifier)) continue;
 
       const importers = importersBySpecifier.get(specifier) ?? [];
@@ -148,28 +149,8 @@ function isChunk(packageName: string): boolean {
   return packageName.startsWith(toChunkImport(''));
 }
 
-function isBare(specifier: string): boolean {
-  if (specifier.startsWith('.') || specifier.startsWith('/')) return false;
-  return !/^[a-z][a-z0-9+.-]*:/i.test(specifier) || specifier.startsWith('node:');
-}
-
 function isNodeBuiltin(specifier: string): boolean {
   return specifier.startsWith('node:') || builtinModules.includes(specifier.split('/')[0]!);
-}
-
-// Matches the way esbuild reads `external`: a name covers its subpaths, and one '*' is a wildcard.
-function isOptedOut(specifier: string, externals: string[]): boolean {
-  return externals.some(external => {
-    const star = external.indexOf('*');
-    if (star === -1) return specifier === external || specifier.startsWith(external + '/');
-    const prefix = external.slice(0, star);
-    const suffix = external.slice(star + 1);
-    return (
-      specifier.length >= prefix.length + suffix.length &&
-      specifier.startsWith(prefix) &&
-      specifier.endsWith(suffix)
-    );
-  });
 }
 
 function explain(

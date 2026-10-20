@@ -10,6 +10,7 @@ import {
 } from './__test-helpers__/fake-build-adapter.js';
 import { prepareSkipList } from '../../config/default-skip-list.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
+import { createPackageJsonRepository } from '../../utils/io/package-json-repository.js';
 import type { IoPort } from '../../domain/utils/io-port.contract.js';
 import type {
   ExternalsCacheKey,
@@ -208,9 +209,10 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     expect(mem.exists('/ws/out')).toBe(false);
   });
 
-  // A cached bundle that inlined a package must not be served once that package became external.
-  it('misses the cache once config.externals changes, not when only the shared set does', async () => {
-    const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+  // A cached bundle is built against one external list; serving it against another either leaves a
+  // bare import nothing resolves or keeps a private copy of what is now shared.
+  describe('cache entries built against other externals', () => {
+    const SEPARATE = { ...BUILD_OPTIONS, bundleName: 'browser-foo' };
     const sharedBundles: Record<string, NormalizedExternalConfig> = {
       foo: {
         singleton: true,
@@ -219,30 +221,84 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
         version: '1.0.0',
         chunks: false,
         platform: 'browser',
-        build: 'default',
+        build: 'separate',
         packageInfo: { entryPoint: 'foo/index.js', version: '1.0.0', esm: true },
       },
     };
-    const fedOptions = makeFedOptions({ cacheExternalArtifacts: true });
-    const run = (adapter: FakeBuildAdapter, planExternals: string[], userExternals: string[]) =>
-      bundleSharedCore(
-        { io: mem, repo: emptyRepo, adapter },
-        sharedBundles,
-        { ...makeConfig(), externals: userExternals },
-        fedOptions,
-        planExternals,
-        BUILD_OPTIONS
+
+    // foo depends on bar; baz is installed but unrelated.
+    const setup = () => {
+      const mem = createMemoryIo()
+        .setFile(ROOT_PKG, '{}')
+        .setFile('/ws/node_modules/foo/package.json', '{"dependencies":{"bar":"^1.0.0"}}')
+        .setFile('/ws/node_modules/bar/package.json', '{"version":"1.0.0"}')
+        .setFile('/ws/node_modules/baz/package.json', '{"version":"1.0.0"}');
+      const repo = createPackageJsonRepository(mem);
+      const fedOptions = makeFedOptions({ cacheExternalArtifacts: true });
+      const run = (planExternals: string[], userExternals: string[] = [], body = 'export {};') => {
+        const adapter = createFakeBuildAdapter({ io: mem, contents: () => body });
+        return bundleSharedCore(
+          { io: mem, repo, adapter },
+          sharedBundles,
+          { ...makeConfig(), externals: userExternals },
+          fedOptions,
+          planExternals,
+          SEPARATE
+        ).then(() => adapter.calls.setup.length);
+      };
+      return { mem, run };
+    };
+
+    it('misses once a specifier the bundle imports is no longer external (pruned)', async () => {
+      const { run } = setup();
+      const importsBar = "import 'bar';\nexport {};";
+      expect(await run(['bar'], [], importsBar)).toBe(1);
+      expect(await run(['bar'], [], importsBar)).toBe(0);
+      expect(await run([], [], importsBar)).toBe(1);
+    });
+
+    it('keeps the entry when a removed external was never imported', async () => {
+      const { run } = setup();
+      expect(await run(['bar'])).toBe(1);
+      expect(await run([])).toBe(0);
+    });
+
+    it('misses once a package the entries depend on becomes external', async () => {
+      const { run } = setup();
+      expect(await run([])).toBe(1);
+      expect(await run(['bar/testing'])).toBe(1);
+    });
+
+    it('keeps the entry when an unrelated package becomes external', async () => {
+      const { run } = setup();
+      expect(await run([])).toBe(1);
+      expect(await run(['baz'])).toBe(0);
+    });
+
+    it('misses once config.externals gains an entry the adapter receives', async () => {
+      const { run } = setup();
+      expect(await run([])).toBe(1);
+      expect(await run(['host-sdk'], ['host-sdk'])).toBe(1);
+    });
+
+    // planSeparate strips foo's own subpaths from the externals it passes, so the bytes are the same.
+    it('keeps the entry when config.externals gains an entry this plan does not pass', async () => {
+      const { run } = setup();
+      expect(await run([])).toBe(1);
+      expect(await run([], ['foo/internal'])).toBe(0);
+    });
+
+    it('misses on metadata written before the external list was recorded', async () => {
+      const { mem, run } = setup();
+      expect(await run([])).toBe(1);
+      const metaFile = path.join('/cache', 'browser-foo.meta.json');
+      const { builtExternals: _b, externalImports: _i, ...legacy } = JSON.parse(
+        mem.readText(metaFile)
       );
-
-    await run(createFakeBuildAdapter({ io: mem }), ['foo'], []);
-    // A shared key added elsewhere changes the plan's externals: the cached bundle is still used.
-    const sharedGrew = createFakeBuildAdapter({ io: mem });
-    await run(sharedGrew, ['foo', 'bar'], []);
-    const widened = createFakeBuildAdapter({ io: mem });
-    await run(widened, ['foo', 'bar', 'host-sdk'], ['host-sdk']);
-
-    expect(sharedGrew.calls.setup).toHaveLength(0);
-    expect(widened.calls.setup).toHaveLength(1);
+      mem.writeText(metaFile, JSON.stringify(legacy));
+      expect(await run([])).toBe(1);
+      expect(await run([])).toBe(0);
+    });
   });
 
   it('carries a configured pool through to the shared external', async () => {

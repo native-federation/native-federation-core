@@ -33,6 +33,11 @@ import {
   parseBuilderVersion,
   readBuilderPackageJson,
 } from '../cache/cache-persistence.js';
+import {
+  dependencyClosureCore,
+  externalImportsCore,
+  staleCacheReason,
+} from '../cache/cache-validity.js';
 import { linkedContentSignals } from './resolve-shared-dirs.js';
 import { computeIntegrityMapCore } from './compute-integrity.js';
 import { resolveOutputPath } from '../../utils/output-path.js';
@@ -128,7 +133,7 @@ export async function bundleSharedCore(
     contentSignals,
     resolvedVersions,
     deps.adapter.externalsCacheKey,
-    config.externals
+    externals.filter(e => config.externals.includes(e))
   );
 
   const bundleCache = cacheEntryCore(
@@ -138,9 +143,24 @@ export async function bundleSharedCore(
     fedOptions.dev
   );
 
+  // If we build for the browser and don't remote unused deps from the shared config,
+  // we need to exclude typical node libs to avoid compilation issues
+  const useDefaultExternalList =
+    buildOptions.platform === 'browser' && !config.features.ignoreUnusedDeps;
+
+  const additionalExternals = useDefaultExternalList ? DEFAULT_EXTERNAL_LIST : [];
+  const external = [...additionalExternals, ...externals];
+
   if (fedOptions?.cacheExternalArtifacts) {
     const cacheMetadata = bundleCache.getMetadata(checksum);
-    if (cacheMetadata) {
+    const stale =
+      cacheMetadata &&
+      staleCacheReason(cacheMetadata, external, () =>
+        dependencyClosureCore(Object.keys(sharedBundles), folder, deps.repo)
+      );
+    if (stale) {
+      logger.info(`Cached ${buildOptions.bundleName} externals are stale (${stale}), rebuilding.`);
+    } else if (cacheMetadata) {
       logger.info(`Checksum of ${buildOptions.bundleName} matched, re-using cached externals.`);
       bundleCache.copyFiles(resolveOutputPath(fedOptions));
       let integrity = cacheMetadata.integrity;
@@ -194,20 +214,13 @@ export async function bundleSharedCore(
 
   const fullOutputPath = resolveOutputPath(fedOptions);
 
-  // If we build for the browser and don't remote unused deps from the shared config,
-  // we need to exclude typical node libs to avoid compilation issues
-  const useDefaultExternalList =
-    buildOptions.platform === 'browser' && !config.features.ignoreUnusedDeps;
-
-  const additionalExternals = useDefaultExternalList ? DEFAULT_EXTERNAL_LIST : [];
-
   let bundleResult: NFBuildAdapterResult[];
 
   try {
     await deps.adapter.setup(buildOptions.bundleName, {
       entryPoints,
       tsConfigPath: fedOptions.tsConfig,
-      external: [...additionalExternals, ...externals],
+      external,
       outdir: bundleCache.dir,
       mappedPaths: config.sharedMappings,
       dev: fedOptions.dev,
@@ -303,6 +316,8 @@ export async function bundleSharedCore(
     files: persistedFiles,
     chunks: exportedChunks,
     integrity,
+    builtExternals: external,
+    externalImports: externalImportsCore(deps.io, bundleCache.dir, persistedFiles, external),
   });
 
   bundleCache.copyFiles(resolveOutputPath(fedOptions));

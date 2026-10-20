@@ -74,9 +74,7 @@ const sharedInfoState = (config: NormalizedExternalConfig): string => {
   return values.every(value => value === null) ? '' : `!${JSON.stringify(values)}`;
 };
 
-// `config.externals` decides what a shared bundle leaves unbundled, so adding one must miss. Only
-// that opt-out list: the shared keys and mappings change with every pruned import and would make
-// every bundle miss. An empty list adds nothing, so the checksum is unchanged without externals.
+// see AGENTS.md, Caching System
 const externalsState = (externals: readonly string[]): string =>
   externals.length === 0 ? '' : `:externals=${JSON.stringify([...new Set(externals)].sort())}`;
 
@@ -130,6 +128,9 @@ export type CacheMetadata = {
   chunks?: ChunkInfo;
   integrity?: IntegrityMap;
   files: string[];
+  // Checked on a hit against the current plan (cache-validity.ts).
+  builtExternals?: string[];
+  externalImports?: string[];
 };
 
 type CachePort = FileReaderPort & FileWriterPort;
