@@ -131,12 +131,12 @@ export async function bundleExposedAndMappingsCore(
   const written: string[] = [];
 
   // Renamed before the next build runs, so the two never hold the bundler's names at once.
-  const takeOutputs = (
+  const collectBundleOutputs = (
     bundleName: string,
     resultMap: Record<string, string>,
     entries: string[]
   ) => {
-    const { files, chunks } = takeBundleOutputs(io, resultMap, entries, dense);
+    const { files, chunks } = finalizeBundleOutputs(io, resultMap, entries, { dense });
     written.push(...files);
     if (chunks) exportedChunks[bundleName] = chunks;
   };
@@ -164,7 +164,7 @@ export async function bundleExposedAndMappingsCore(
       files.push(distEntryFile);
     }
 
-    takeOutputs(plan.bundleName, results, files);
+    collectBundleOutputs(plan.bundleName, results, files);
     logger.measure(start, `Bundling '${plan.bundleName}' shared mappings`);
   }
 
@@ -192,7 +192,7 @@ export async function bundleExposedAndMappingsCore(
     exposedFiles.push(distEntryFile);
   }
 
-  takeOutputs(EXPOSED_BUNDLE, exposedResults, exposedFiles);
+  collectBundleOutputs(EXPOSED_BUNDLE, exposedResults, exposedFiles);
   if (exposes.length > 0) logger.measure(exposedStart, 'Bundling exposed modules');
 
   const outputPaths = [...new Set(written)];
@@ -211,11 +211,11 @@ export async function bundleExposedAndMappingsCore(
 }
 
 // `resultMap` holds what is left once the entries were popped from it: chunks, maps and assets.
-function takeBundleOutputs(
+function finalizeBundleOutputs(
   io: IoPort,
   resultMap: Record<string, string>,
   entries: string[],
-  dense: boolean
+  { dense }: { dense: boolean }
 ): { files: string[]; chunks?: string[] } {
   const outputs = Object.values(resultMap);
   if (!dense || entries.length === 0) return { files: [...entries, ...outputs] };
