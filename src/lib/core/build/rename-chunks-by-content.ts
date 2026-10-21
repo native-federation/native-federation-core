@@ -4,10 +4,10 @@ import type {
   FileWriterPort,
   HashPort,
 } from '../../domain/utils/io-port.contract.js';
-import { CHUNK_PREFIX } from '../../domain/core/chunk.js';
+import { CHUNK_PREFIX, SCRIPT_EXTENSION } from '../../domain/core/chunk.js';
 import { DEFAULT_HASH_LENGTH, hashChunkContent } from '../../utils/hash.js';
 import { SOURCE_MAP_COMMENT } from './rewrite-chunk-imports.js';
-import { isScript, SCRIPT_EXTENSION } from '../../utils/script-file.js';
+import { isScript } from '../../utils/script-file.js';
 
 type RenameDeps = FileReaderPort & FileWriterPort & HashPort;
 
