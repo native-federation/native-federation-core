@@ -597,8 +597,8 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         features: { ...makeConfig().features, denseChunking, integrityHashes: true },
       });
 
-    const names = (files: { fileName: string }[]) => files.map(f => f.fileName).sort();
-    const scripts = (files: { fileName: string }[]) => names(files).filter(f => f.endsWith('.js'));
+    const names = (files: { fileName: string }[] = []) => files.map(f => f.fileName).sort();
+    const scripts = (files: { fileName: string }[] = []) => names(files).filter(f => f.endsWith('.js'));
 
     it('reports non-dense mapping and exposed chunks among the written files', async () => {
       const io = createMemoryIo();
@@ -620,7 +620,7 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         'foo.js',
         'foo.js.map',
       ]);
-      expect(result.outputFiles.every(f => f.platform === 'browser')).toBe(true);
+      expect(result.outputFiles!.every(f => f.platform === 'browser')).toBe(true);
       // Not dense, so nothing is published as a chunk.
       expect(result.chunks).toBeUndefined();
     });
