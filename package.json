@@ -1,6 +1,6 @@
 {
   "name": "@softarc/native-federation",
-  "version": "4.8.1",
+  "version": "4.9.0-next.0",
   "type": "module",
   "license": "MIT",
   "homepage": "https://native-federation.com/docs/v4/core/",
