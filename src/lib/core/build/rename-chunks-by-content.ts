@@ -15,7 +15,8 @@ type RenameDeps = FileReaderPort & FileWriterPort & HashPort;
 // least as long as the 8 characters both bundlers write: a trailing word like `-vendor` is not one.
 const HASH_SEGMENT = /-([A-Za-z0-9_$]{8,})$/;
 
-// `'./chunk-x.js'` as the bundler wrote it, or `'@nf-internal/chunk-x'` after the rewrite.
+// `'./chunk-x.js'` as the bundler wrote it, or `'@nf-internal/chunk-x'` after the rewrite, in
+// quotes or backticks (Rolldown's minified dynamic import).
 const CHUNK_NAME = `[^'"\`/]+`;
 const CHUNK_REFERENCE = new RegExp(
   `(['"\`])(?:\\.\\/(${CHUNK_NAME})|${CHUNK_PREFIX}\\/(${CHUNK_NAME}))\\1`,
