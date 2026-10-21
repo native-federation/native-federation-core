@@ -20,7 +20,14 @@ export function createBuildResultMap(
   for (const item of buildResult) {
     const resultName = path.basename(item.fileName);
     const isEntryByName = !byEntry && isHashed && expected.has(stripHash(resultName));
-    map[item.entry ?? (isEntryByName ? stripHash(resultName) : resultName)] = item.fileName;
+    const requestName = item.entry ?? (isEntryByName ? stripHash(resultName) : resultName);
+    if (byEntry && map[requestName] !== undefined) {
+      throw new Error(
+        `NFBuildAdapter.build returned two results for entry '${requestName}': ` +
+          `'${map[requestName]}' and '${item.fileName}'.`
+      );
+    }
+    map[requestName] = item.fileName;
   }
   return map;
 }

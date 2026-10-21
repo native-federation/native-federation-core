@@ -45,6 +45,20 @@ describe('createBuildResultMap with entry set by the adapter', () => {
     });
   });
 
+  // esbuild sets the entry point on the CSS it extracts from an entry too: copied over as is, the
+  // stylesheet would silently replace the script as the published entry.
+  it('throws when two results set the same entry', () => {
+    expect(() =>
+      createBuildResultMap(
+        [r('/d/Cmp-AAAA1111.js', 'Cmp.js'), r('/d/Cmp-BBBB2222.css', 'Cmp.js')],
+        true,
+        ['Cmp.js']
+      )
+    ).toThrow(
+      "NFBuildAdapter.build returned two results for entry 'Cmp.js': '/d/Cmp-AAAA1111.js' and '/d/Cmp-BBBB2222.css'."
+    );
+  });
+
   // Rollup and Rolldown hashes can contain '-', which the name match cuts at.
   it('finds an entry whose hash contains a dash', () => {
     const map = createBuildResultMap([r('/d/Rel-_z3-emEa.js', 'Rel.js')], true, ['Rel.js']);
