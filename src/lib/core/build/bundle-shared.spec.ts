@@ -890,17 +890,23 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       }
     );
 
-    it('reports the same files and integrity on a cache hit as on the fresh build', async () => {
-      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
-      const opts = { integrityHashes: true, cache: true };
+    // A warm build is the common case, so a node bundle's cache hit must not turn into browser:
+    // its built-ins would then be reported.
+    it.each(['browser', 'node'] as const)(
+      'reports the same files and integrity on a cache hit as on the fresh build (%s)',
+      async platform => {
+        const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+        const opts = { integrityHashes: true, cache: true, platform };
 
-      const fresh = await chunkedBuild(mem, 'export const a = 1;\n', false, opts);
-      const cached = await chunkedBuild(mem, 'export const a = 1;\n', false, opts);
+        const fresh = await chunkedBuild(mem, 'export const a = 1;\n', false, opts);
+        const cached = await chunkedBuild(mem, 'export const a = 1;\n', false, opts);
 
-      expect(cached.adapter.calls.build).toHaveLength(0);
-      expect(cached.outputFiles).toEqual(fresh.outputFiles);
-      expect(cached.integrity).toEqual(fresh.integrity);
-    });
+        expect(cached.adapter.calls.build).toHaveLength(0);
+        expect(cached.outputFiles).toEqual(fresh.outputFiles);
+        expect(cached.outputFiles.every(f => f.platform === platform)).toBe(true);
+        expect(cached.integrity).toEqual(fresh.integrity);
+      }
+    );
 
     it('recomputes the same integrity on a cache hit whose metadata has none', async () => {
       const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
