@@ -203,10 +203,17 @@ the extension for scripts.
 - Shared bundles keep theirs per bundle in `federationCache.externalFiles`, which survives a
   rebuild that touches no linked package. The mapping and exposed part (`artifactFiles`) comes
   fresh from every build, so it is replaced, never merged: stale non-dense chunks stay on disk but
-  drop out. The full list is derived from the two on every read and never stored, so a rebuild
-  that fails between the shared and the mapping/exposed bundles cannot leave it out of step. A
-  rebuild aborted while re-running the shared bundles can still leave `externalFiles` incomplete
-  until the next full build, like `externals` itself.
+  drop out. The full list is derived from the two on every read and never stored. After a failed
+  build it mixes the newest complete shared set with the last complete mapping/exposed set, both
+  of which are on disk.
+- The shared bundles write into a staged copy of `externals`, `chunks`, `integrity` and
+  `externalFiles`, which replaces the cached fields only once every plan ran
+  (`withStagedExternals`). A failed or aborted run keeps the last complete set and leaves
+  the run marked incomplete (`sharedRunIncomplete`), so the next rebuild re-runs every plan even
+  when nothing shared changed: the run that failed may already have cleared a bundle's disk
+  cache. In a dev build with `integrityHashes`, the bundles that finished before the failure have
+  already overwritten their files in the output folder, so the served bytes may not match the kept
+  integrity until that re-run.
 - A file the adapter writes into a subfolder is listed under a wrong name, and nothing notices:
   integrity and the bare import check both skip a listed file that is not in the output folder.
 - Exposed and mapping output is always listed as `browser`: built-ins are allowed only in shared
@@ -373,6 +380,10 @@ Native Federation uses an intelligent caching system to speed up builds:
 - Accumulates the externals, chunks and integrity hashes that go into `remoteEntry.json`, and the
   files each shared bundle wrote (`externalFiles`)
 - Holds `artifactFiles`, what the last mapping and exposed bundle wrote
+- State a build's correctness depends on lives on `FederationCache` itself, such as
+  `sharedRunIncomplete`, never in a module-private side table keyed by the cache object: a copy
+  of the cache (`{ ...cache }`) would silently lose it. Only state that controls how often a
+  warning repeats may sit in such a side table
 
 **Cache invalidation**:
 

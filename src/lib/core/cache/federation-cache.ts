@@ -31,6 +31,36 @@ export function addExternalsToCache(
   }
 }
 
+type ExternalsState = Pick<FederationCache, 'externals' | 'chunks' | 'integrity' | 'externalFiles'>;
+
+const pickExternals = ({ externals, chunks, integrity, externalFiles }: ExternalsState) => ({
+  externals,
+  chunks,
+  integrity,
+  externalFiles,
+});
+
+const emptyExternals = (): ExternalsState => ({
+  externals: [],
+  chunks: undefined,
+  integrity: undefined,
+  externalFiles: undefined,
+});
+
+// The bundles add to a staged copy, written back in one assignment only once all of them ran, so a
+// failed or aborted run leaves the last complete externals in place. Until then the run is marked
+// incomplete: one that cleared a bundle's disk cache and then failed must not be skipped next time.
+export async function withStagedExternals(
+  cache: FederationCache,
+  run: (staged: FederationCache) => Promise<void>
+): Promise<void> {
+  cache.sharedRunIncomplete = true;
+  const staged: FederationCache = { ...cache, ...emptyExternals() };
+  await run(staged);
+  Object.assign(cache, pickExternals(staged));
+  cache.sharedRunIncomplete = false;
+}
+
 // Replaced, never merged: a rebuild's chunks need not keep their names, and stale ones stay on disk.
 export function recordArtifactFiles(cache: FederationCache, artifactInfo: ArtifactInfo): void {
   cache.artifactFiles = artifactInfo.outputFiles ?? [];

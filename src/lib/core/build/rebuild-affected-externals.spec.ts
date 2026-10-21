@@ -12,15 +12,17 @@ import type { PackageJsonRepository } from '../../domain/utils/package-json.cont
 vi.mock('./build-for-federation.js', () => ({
   executeSharedBundlePlans: vi.fn(
     async (_plans, _config, fedOptions: NormalizedFederationOptions) => {
-      fedOptions.federationCache.externals.push({
-        packageName: 'a',
-        outFileName: 'a.fresh.js',
-      } as SharedInfo);
+      // Like the real one, it replaces the cached externals rather than adding to them.
+      fedOptions.federationCache.externals = [
+        { packageName: 'a', outFileName: 'a.fresh.js' } as SharedInfo,
+      ];
     }
   ),
 }));
 
 const { rebuildAffectedExternals } = await import('./rebuild-for-federation.js');
+const { withStagedExternals } = await import('../cache/federation-cache.js');
+const { planSharedBundles } = await import('./shared-bundle-plan.js');
 const { executeSharedBundlePlans } = await import('./build-for-federation.js');
 
 function config(): NormalizedFederationConfig {
@@ -103,5 +105,37 @@ describe('rebuildAffectedExternals — port-injected resolution + invalidation',
 
     expect(executeSharedBundlePlans).not.toHaveBeenCalled();
     expect(fed.federationCache.externals).toEqual(cached);
+  });
+
+  // The run that failed may have cleared a bundle's disk cache, so a rebuild must not skip it
+  // just because the next save touched nothing shared.
+  it('re-runs every plan after a run that did not complete, even with no files changed', async () => {
+    const fed = fedOptions([]);
+    await withStagedExternals(fed.federationCache, async () => {
+      throw new Error('aborted');
+    }).catch(() => undefined);
+
+    await rebuildAffectedExternals(config(), fed, ['a'], [], undefined, linkedIo(), repo());
+
+    expect(executeSharedBundlePlans).toHaveBeenCalledOnce();
+    expect(vi.mocked(executeSharedBundlePlans).mock.calls[0]![0]).toEqual(
+      planSharedBundles(config(), ['a'])
+    );
+  });
+
+  // A spread copy of the cache keeps its fields but not its identity, so the mark must be a field.
+  it('still re-runs every plan when the cache was copied after the failed run', async () => {
+    const fed = fedOptions([]);
+    await withStagedExternals(fed.federationCache, async () => {
+      throw new Error('aborted');
+    }).catch(() => undefined);
+    fed.federationCache = { ...fed.federationCache };
+
+    await rebuildAffectedExternals(config(), fed, ['a'], [], undefined, linkedIo(), repo());
+
+    expect(executeSharedBundlePlans).toHaveBeenCalledOnce();
+    expect(vi.mocked(executeSharedBundlePlans).mock.calls[0]![0]).toEqual(
+      planSharedBundles(config(), ['a'])
+    );
   });
 });

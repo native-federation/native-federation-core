@@ -4,8 +4,9 @@ import {
   collectOutputFiles,
   createFederationCache,
   recordArtifactFiles,
+  withStagedExternals,
 } from './federation-cache.js';
-import type { OutputFile } from '../../domain/core/federation-info.contract.js';
+import type { OutputFile, SharedInfo } from '../../domain/core/federation-info.contract.js';
 
 const browser = (...fileNames: string[]): OutputFile[] =>
   fileNames.map(fileName => ({ fileName, platform: 'browser' }));
@@ -78,8 +79,8 @@ describe('collectOutputFiles', () => {
     ]);
   });
 
-  // Derived on every read, so the list cannot go stale when a rebuild fails between the shared
-  // bundles and the mapping/exposed bundle.
+  // Derived on every read: after a rebuild that fails between the shared bundles and the
+  // mapping/exposed bundle, it pairs the newest shared files with the last artifact files.
   it('reflects external files replaced after the artifact files were recorded', () => {
     const cache = createFederationCache('/cache');
     cache.externalFiles = { shared: browser('a.old.js') };
@@ -96,5 +97,93 @@ describe('collectOutputFiles', () => {
     recordArtifactFiles(cache, { mappings: [], exposes: [] });
 
     expect(collectOutputFiles(cache)).toEqual(browser('a.js'));
+  });
+});
+
+// A run that throws halfway (an abort in watch mode) must not leave the cache holding only the
+// bundles that finished: remoteEntry.json would lose the others until a full rebuild.
+describe('withStagedExternals', () => {
+  const external = (packageName: string) =>
+    ({ packageName, outFileName: `${packageName}.js` }) as SharedInfo;
+  const seeded = () => {
+    const cache = createFederationCache('/cache');
+    addExternalsToCache(cache, 'browser-shared', {
+      externals: [external('old')],
+      outputFiles: browser('old.js'),
+    });
+    return cache;
+  };
+
+  it('replaces the externals once the run completes', async () => {
+    const cache = seeded();
+
+    await withStagedExternals(cache, async staged => {
+      addExternalsToCache(staged, 'browser-shared', {
+        externals: [external('new')],
+        outputFiles: browser('new.js'),
+      });
+    });
+
+    expect(cache.externals).toEqual([external('new')]);
+    expect(cache.externalFiles).toEqual({ 'browser-shared': browser('new.js') });
+    expect(cache.sharedRunIncomplete).toBe(false);
+  });
+
+  it('keeps the last complete externals and marks the run incomplete when it throws', async () => {
+    const cache = seeded();
+
+    await expect(
+      withStagedExternals(cache, async staged => {
+        addExternalsToCache(staged, 'browser-shared', {
+          externals: [external('new')],
+          outputFiles: browser('new.js'),
+        });
+        throw new Error('aborted');
+      })
+    ).rejects.toThrow('aborted');
+
+    expect(cache.externals).toEqual([external('old')]);
+    expect(cache.externalFiles).toEqual({ 'browser-shared': browser('old.js') });
+    expect(cache.sharedRunIncomplete).toBe(true);
+  });
+
+  // The staged copy starts from the cache, so any field it does not reset explicitly would carry
+  // the previous run's chunks and hashes into the new set.
+  it('starts a run from empty chunks, integrity and externalFiles', async () => {
+    const cache = seeded();
+    addExternalsToCache(cache, 'node-lib', {
+      externals: [],
+      chunks: { b: ['c-OLD.js'] },
+      integrity: { 'c-OLD.js': 'sha384-OLD' },
+      outputFiles: browser('c-OLD.js'),
+    });
+
+    await withStagedExternals(cache, async staged => {
+      addExternalsToCache(staged, 'browser-shared', {
+        externals: [external('new')],
+        chunks: { 'browser-shared': ['c-NEW.js'] },
+        integrity: { 'c-NEW.js': 'sha384-NEW' },
+        outputFiles: browser('new.js', 'c-NEW.js'),
+      });
+    });
+
+    expect(cache.chunks).toEqual({ 'browser-shared': ['c-NEW.js'] });
+    expect(cache.integrity).toEqual({ 'c-NEW.js': 'sha384-NEW' });
+    expect(cache.externalFiles).toEqual({ 'browser-shared': browser('new.js', 'c-NEW.js') });
+  });
+
+  it('does not add a retried run to the previous one', async () => {
+    const cache = seeded();
+    const run = async (staged: typeof cache) => {
+      addExternalsToCache(staged, 'browser-shared', {
+        externals: [external('new')],
+        outputFiles: [],
+      });
+    };
+
+    await withStagedExternals(cache, run);
+    await withStagedExternals(cache, run);
+
+    expect(cache.externals).toEqual([external('new')]);
   });
 });

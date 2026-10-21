@@ -55,7 +55,10 @@ export async function rebuildAffectedExternals(
   io: IoPort = nodeIo,
   repo: PackageJsonRepository = sharedPackageJsonRepository
 ): Promise<void> {
-  if (modifiedFiles.length === 0) return;
+  const federationCache = fedOptions.federationCache;
+  // The last run did not complete, so it is re-run whatever changed since.
+  const incomplete = federationCache.sharedRunIncomplete === true;
+  if (modifiedFiles.length === 0 && !incomplete) return;
 
   const plans = planSharedBundles(config, externals);
   if (plans.length === 0) return;
@@ -63,9 +66,8 @@ export async function rebuildAffectedExternals(
   const dirs = resolveSharedPackageDirs(config, fedOptions, io, repo);
   const affected = affectedSharedKeys(modifiedFiles, dirs, io);
   const affectedPlans = plans.filter(p => p.keys.some(k => affected.has(k)));
-  if (affectedPlans.length === 0) return;
+  if (affectedPlans.length === 0 && !incomplete) return;
 
-  const federationCache = fedOptions.federationCache;
   // Authoritative, modifiedFiles-driven invalidation. bundleShared already misses
   // its cache when the content-signal changes, but that signal is an mtime heuristic;
   // clearing here covers the cases it can miss (mtime granularity, a deleted file).
@@ -73,11 +75,6 @@ export async function rebuildAffectedExternals(
     logger.info(`Detected change in linked shared package(s); re-bundling '${plan.bundleName}'.`);
     cacheEntryCore(io, federationCache.cachePath, plan.bundleName, fedOptions.dev).clear();
   }
-
-  federationCache.externals = [];
-  federationCache.chunks = undefined;
-  federationCache.integrity = undefined;
-  federationCache.externalFiles = undefined;
 
   await executeSharedBundlePlans(plans, config, fedOptions, signal);
 }

@@ -13,6 +13,7 @@ import { prepareSkipList } from '../../config/default-skip-list.js';
 import { logger } from '../../utils/logger.js';
 import type * as sharedDirs from './resolve-shared-dirs.js';
 import type * as validation from '../output/validate-bare-imports.js';
+import type { SharedBundleResult } from './bundle-shared.js';
 
 // Isolate the assembly logic in buildForFederation: no real FS writes, no build adapter.
 vi.mock('../output/write-federation-info.js', () => ({ writeFederationInfo: vi.fn() }));
@@ -22,6 +23,30 @@ vi.mock('./bundle-exposed-and-mappings.js', () => ({
 }));
 
 vi.mock('../output/validate-bare-imports.js', () => ({ validateBareImports: vi.fn() }));
+
+// A full build replaces the cached externals with what its plans bundled, so each test seeds
+// `bundled` (one plan per entry; a name starting with 'separate-' is a separate plan) instead of
+// the cache.
+let bundled: Record<string, SharedBundleResult | (() => Promise<SharedBundleResult>)> = {};
+vi.mock('./shared-bundle-plan.js', () => ({
+  planSharedBundles: vi.fn(() =>
+    Object.keys(bundled).map(bundleName => ({
+      kind: bundleName.startsWith('separate-') ? 'separate' : 'shared',
+      bundleName,
+      entries: {},
+      externals: [],
+      platform: 'browser',
+      chunks: false,
+      keys: [],
+    }))
+  ),
+}));
+vi.mock('./bundle-shared.js', () => ({
+  bundleShared: vi.fn(async (_e, _c, _o, _x, { bundleName }) => {
+    const result = bundled[bundleName]!;
+    return typeof result === 'function' ? result() : result;
+  }),
+}));
 
 vi.mock('../cache/cache-persistence.js', async importActual => ({
   ...(await importActual<object>()),
@@ -84,6 +109,7 @@ function makeFedOptions(
   externals: SharedInfo[],
   overrides: Partial<NormalizedFederationOptions> = {}
 ): NormalizedFederationOptions {
+  bundled = externals.length > 0 ? { 'browser-shared': { externals, outputFiles: [] } } : {};
   return {
     workspaceRoot: '/ws',
     outputPath: 'dist',
@@ -93,7 +119,7 @@ function makeFedOptions(
     cacheExternalArtifacts: false,
     watchLinkedDeps: false,
     federationCache: {
-      externals,
+      externals: [],
       bundlerCache: {},
       cachePath: '/cache',
     },
@@ -235,9 +261,9 @@ describe('buildForFederation — output files (core#177)', () => {
     });
     const config = makeConfig(false);
     const fedOptions = makeFedOptions([]);
-    fedOptions.federationCache.externalFiles = {
-      'browser-shared': [external[0]!],
-      'node-lib': [external[1]!],
+    bundled = {
+      'browser-shared': { externals: [], outputFiles: [external[0]!] },
+      'node-lib': { externals: [], outputFiles: [external[1]!] },
     };
 
     const info = await buildForFederation(config, fedOptions, []);
@@ -270,5 +296,63 @@ describe('buildForFederation — output files (core#177)', () => {
       buildForFederation(config, makeFedOptions([], { workspaceRoot }), [])
     ).rejects.toThrow(/features\.strictImports/);
     expect(writeFederationInfo).not.toHaveBeenCalled();
+  });
+});
+
+describe('buildForFederation — an aborted build', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('keeps the externals of the last complete build', async () => {
+    const fedOptions = makeFedOptions([flat('react', 'react.js')]);
+    await buildForFederation(makeConfig(false), fedOptions, []);
+
+    bundled = {
+      'browser-shared': { externals: [flat('vue', 'vue.js')], outputFiles: [] },
+      'node-lib': { externals: [flat('fs-extra', 'fs-extra.js')], outputFiles: [] },
+    };
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      buildForFederation(makeConfig(false), fedOptions, [], controller.signal)
+    ).rejects.toThrow(/After browser-shared bundle/);
+
+    expect(fedOptions.federationCache.externals).toEqual([flat('react', 'react.js')]);
+  });
+
+  // An incomplete run makes the next rebuild re-run every plan, so a separate bundle that is still
+  // running when its sibling fails would race that rebuild for the same bundle name.
+  it('waits for every separate bundle before it rethrows a failed one', async () => {
+    let slowFinished = false;
+    const fedOptions = makeFedOptions([]);
+    bundled = {
+      'separate-fails': async () => {
+        throw new Error('bundle failed');
+      },
+      'separate-slow': async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+        slowFinished = true;
+        return { externals: [flat('slow', 'slow.js')], outputFiles: [] };
+      },
+    };
+
+    await expect(buildForFederation(makeConfig(false), fedOptions, [])).rejects.toThrow(
+      'bundle failed'
+    );
+
+    expect(slowFinished).toBe(true);
+    expect(fedOptions.federationCache.sharedRunIncomplete).toBe(true);
+    expect(fedOptions.federationCache.externals).toEqual([]);
+  });
+
+  it('clears the incomplete mark once a run completes', async () => {
+    const fedOptions = makeFedOptions([]);
+    bundled = { 'separate-fails': async () => Promise.reject(new Error('bundle failed')) };
+    await expect(buildForFederation(makeConfig(false), fedOptions, [])).rejects.toThrow();
+
+    bundled = { 'browser-shared': { externals: [flat('react', 'react.js')], outputFiles: [] } };
+    await buildForFederation(makeConfig(false), fedOptions, []);
+
+    expect(fedOptions.federationCache.sharedRunIncomplete).toBe(false);
+    expect(fedOptions.federationCache.externals).toEqual([flat('react', 'react.js')]);
   });
 });

@@ -5,7 +5,7 @@ import type { NormalizedFederationOptions } from '../../domain/core/federation-o
 import { logger } from '../../utils/logger.js';
 import { AbortedError } from '../../utils/errors.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
-import { addExternalsToCache } from '../cache/federation-cache.js';
+import { addExternalsToCache, withStagedExternals } from '../cache/federation-cache.js';
 import { finalizeFederationBuild } from './finalize-federation-build.js';
 import { planSharedBundles, type SharedBundlePlan } from './shared-bundle-plan.js';
 import { hintUnwatchedLinkedDeps } from './resolve-shared-dirs.js';
@@ -56,41 +56,51 @@ export async function executeSharedBundlePlans(
   fedOptions: NormalizedFederationOptions,
   signal?: AbortSignal
 ): Promise<void> {
-  for (const plan of plans.filter(p => p.kind === 'shared')) {
-    logger.info(`Bundling external npm packages with bundle type '${plan.bundleName}'`);
-    const start = process.hrtime();
-
-    const info = await bundleShared(plan.entries, config, fedOptions, plan.externals, {
+  const runPlan = (plan: SharedBundlePlan) =>
+    bundleShared(plan.entries, config, fedOptions, plan.externals, {
       platform: plan.platform,
       bundleName: plan.bundleName,
       chunks: plan.chunks,
     });
 
-    logger.measure(start, `Step 2.1) Bundling '${plan.bundleName}' externals`);
-    addExternalsToCache(fedOptions.federationCache, plan.bundleName, info);
+  await withStagedExternals(fedOptions.federationCache, async staged => {
+    for (const plan of plans.filter(p => p.kind === 'shared')) {
+      logger.info(`Bundling external npm packages with bundle type '${plan.bundleName}'`);
+      const start = process.hrtime();
 
-    if (signal?.aborted)
-      throw new AbortedError(`[executeSharedBundlePlans] After ${plan.bundleName} bundle`);
-  }
+      const info = await runPlan(plan);
 
-  const separatePlans = plans.filter(p => p.kind === 'separate');
-  if (separatePlans.length > 0) {
-    const start = process.hrtime();
-    const results = await Promise.all(
-      separatePlans.map(async plan => ({
-        plan,
-        info: await bundleShared(plan.entries, config, fedOptions, plan.externals, {
-          platform: plan.platform,
-          bundleName: plan.bundleName,
-          chunks: plan.chunks,
-        }),
-      }))
-    );
-    logger.measure(start, 'Step 2.2) Bundling all separate external packages');
-    for (const { plan, info } of results) {
-      addExternalsToCache(fedOptions.federationCache, plan.bundleName, info);
+      logger.measure(start, `Step 2.1) Bundling '${plan.bundleName}' externals`);
+      addExternalsToCache(staged, plan.bundleName, info);
+
+      if (signal?.aborted)
+        throw new AbortedError(`[executeSharedBundlePlans] After ${plan.bundleName} bundle`);
     }
 
-    if (signal?.aborted) throw new AbortedError('[executeSharedBundlePlans] After separate bundle');
-  }
+    const separatePlans = plans.filter(p => p.kind === 'separate');
+    if (separatePlans.length > 0) {
+      const start = process.hrtime();
+      const results = await allOrFirstFailure(
+        separatePlans.map(async plan => ({ plan, info: await runPlan(plan) }))
+      );
+      logger.measure(start, 'Step 2.2) Bundling all separate external packages');
+      for (const { plan, info } of results) {
+        addExternalsToCache(staged, plan.bundleName, info);
+      }
+
+      if (signal?.aborted)
+        throw new AbortedError('[executeSharedBundlePlans] After separate bundle');
+    }
+  });
+}
+
+// Unlike Promise.all, waits for every bundle before it rethrows, so a failed one cannot leave its
+// siblings running into the next rebuild, which re-runs every plan after an incomplete run.
+async function allOrFirstFailure<T>(tasks: Promise<T>[]): Promise<T[]> {
+  const settled = await Promise.allSettled(tasks);
+  const failed = settled.find(
+    (result): result is PromiseRejectedResult => result.status === 'rejected'
+  );
+  if (failed) throw failed.reason;
+  return settled.map(result => (result as PromiseFulfilledResult<T>).value);
 }
