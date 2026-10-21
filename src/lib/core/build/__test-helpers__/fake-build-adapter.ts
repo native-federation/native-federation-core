@@ -23,6 +23,7 @@ export function createFakeBuildAdapter(
   options: { io?: IoPort; results?: ResultsFor; contents?: (fileName: string) => string } = {}
 ): FakeBuildAdapter {
   const calls: FakeBuildAdapter['calls'] = { setup: [], build: [], dispose: [] };
+  const contexts = new Set<string>();
 
   const echoFromSetup = (name: string): NFBuildAdapterResult[] => {
     const setup = [...calls.setup].reverse().find(s => s.name === name);
@@ -36,9 +37,12 @@ export function createFakeBuildAdapter(
     calls,
     async setup(name, opts) {
       calls.setup.push({ name, options: opts });
+      contexts.add(name);
     },
     async build(name, opts) {
       calls.build.push({ name, modifiedFiles: opts?.modifiedFiles });
+      // Like a real adapter, so a build that skips setup fails the spec instead of returning nothing.
+      if (!contexts.has(name)) throw new Error(`build('${name}') without setup`);
       const results = options.results
         ? typeof options.results === 'function'
           ? options.results(name)
@@ -53,6 +57,8 @@ export function createFakeBuildAdapter(
     },
     async dispose(name) {
       calls.dispose.push(name);
+      if (name === undefined) contexts.clear();
+      else contexts.delete(name);
     },
   };
 }

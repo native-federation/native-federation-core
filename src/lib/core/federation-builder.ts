@@ -11,6 +11,7 @@ import { normalizeFederationOptions } from './normalize-options.js';
 import type { NFBuildAdapter } from '../domain/core/build-adapter.contract.js';
 import { rebuildForFederation } from './build/rebuild-for-federation.js';
 import { collectOutputFiles } from './cache/federation-cache.js';
+import type { FederationCache } from '../domain/core/federation-cache.contract.js';
 
 export interface BuildHelperParams {
   options: FederationOptions;
@@ -21,13 +22,14 @@ let externals: string[] = [];
 let config: NormalizedFederationConfig;
 let options: NormalizedFederationOptions;
 let fedInfo: FederationInfo;
+let builtCache: FederationCache | undefined;
 
 async function init(params: BuildHelperParams): Promise<void> {
-  setBuildAdapter(params.adapter);
-
   const normalized = await normalizeFederationOptions(params.options, undefined, {
     externals: params.adapter.externals,
   });
+
+  setBuildAdapter(params.adapter);
 
   options = normalized.options;
   config = normalized.config;
@@ -36,8 +38,12 @@ async function init(params: BuildHelperParams): Promise<void> {
 }
 
 async function build(opts: { modifiedFiles?: string[]; signal?: AbortSignal } = {}): Promise<void> {
-  if (!fedInfo) {
+  // Every init normalizes into a new cache, which a rebuild would publish without shared externals.
+  // Read before the await: an init during this build replaces it.
+  if (builtCache !== options.federationCache) {
+    const cache = options.federationCache;
     fedInfo = await buildForFederation(config, options, externals, opts.signal);
+    builtCache = cache;
   } else {
     fedInfo = await rebuildForFederation(
       config,
