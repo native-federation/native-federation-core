@@ -288,6 +288,7 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
           './a/Cmp': { file: './src/a.ts' },
           './b/Cmp': { file: './src/b.ts' },
           './Cmp_2': { file: './src/c.ts' },
+          './c/Cmp': { file: './src/d.ts' },
         },
       });
       const adapter = createFakeBuildAdapter({
@@ -305,11 +306,12 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
       );
 
       // './Cmp_2' does not collide, so it keeps its name and the duplicate skips past it.
-      expect(outNames(adapter)).toEqual(['Cmp.js', 'Cmp_3.js', 'Cmp_2.js']);
+      expect(outNames(adapter)).toEqual(['Cmp.js', 'Cmp_3.js', 'Cmp_2.js', 'Cmp_4.js']);
       expect(result.exposes.map(e => [e.key, e.outFileName])).toEqual([
         ['./a/Cmp', 'Cmp-HASH0000.js'],
         ['./b/Cmp', 'Cmp_3-HASH0001.js'],
         ['./Cmp_2', 'Cmp_2-HASH0002.js'],
+        ['./c/Cmp', 'Cmp_4-HASH0003.js'],
       ]);
     });
   });
