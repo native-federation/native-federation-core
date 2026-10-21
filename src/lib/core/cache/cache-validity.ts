@@ -4,7 +4,6 @@ import type { PackageJsonRepository } from '../../domain/utils/package-json.cont
 import { getPkgFolder } from '../../utils/io/package-json-repository.js';
 import { matchesExternal, readBareImports } from '../../utils/bare-specifier.js';
 import { isScript } from '../../utils/script-file.js';
-import { logger } from '../../utils/logger.js';
 import type { CacheMetadata } from './cache-persistence.js';
 
 const DEPENDENCY_FIELDS = ['dependencies', 'peerDependencies', 'optionalDependencies'];
@@ -18,14 +17,8 @@ export function externalImportsCore(
 ): string[] {
   const found = new Set<string>();
   for (const file of files.filter(isScript)) {
-    let specifiers: string[];
-    try {
-      specifiers = readBareImports(io, path.join(dir, file), file);
-    } catch (e) {
-      logger.debug(`Could not scan the imports of '${file}': ${(e as Error).message}`);
-      continue;
-    }
-    for (const specifier of specifiers) {
+    // No catch: rewriteImports parsed these already; skipping one could keep a stale entry.
+    for (const specifier of readBareImports(io, path.join(dir, file), file)) {
       if (matchesExternal(specifier, external)) found.add(specifier);
     }
   }
