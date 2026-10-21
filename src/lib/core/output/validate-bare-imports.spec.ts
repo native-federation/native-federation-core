@@ -423,6 +423,23 @@ describe('validateBareImports', () => {
     ).toThrow(/1 bare import/);
   });
 
+  // Real files: the memory IO decodes with TextDecoder, which drops the BOM, while nodeIo keeps it
+  // and es-module-lexer then finds no import that follows it directly.
+  it('reads the imports of a script that starts with a BOM', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const { config, fedOptions, fedInfo, files } = setup(false);
+    fs.writeFileSync(
+      path.join(fedOptions.workspaceRoot, 'dist', 'a.js'),
+      '\uFEFFimport "@angular/common/http";'
+    );
+
+    validateBareImports(config, fedOptions, fedInfo, files);
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("'a.js' imports '@angular/common/http'")
+    );
+  });
+
   it('warns about a file it could not scan, and fails the build on it with strictImports', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     vi.spyOn(logger, 'error').mockImplementation(() => undefined);

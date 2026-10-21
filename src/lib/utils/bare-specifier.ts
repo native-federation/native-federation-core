@@ -24,7 +24,8 @@ export function matchesExternal(specifier: string, externals: readonly string[])
 // Static and dynamic imports alike; throws on a file the lexer cannot parse.
 export function readBareImports(io: FileReaderPort, filePath: string, fileName: string): string[] {
   initSync();
-  const [imports] = parse(io.readText(filePath), fileName);
+  // es-module-lexer finds no import or export directly after a BOM.
+  const [imports] = parse(io.readText(filePath).replace(/^\uFEFF/, ''), fileName);
   return imports
     .filter(imp => imp.d !== -2 && imp.n !== undefined && isBare(imp.n))
     .map(imp => imp.n!);
