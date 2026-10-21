@@ -42,6 +42,13 @@ const pickExternals = ({ externals, chunks, integrity, externalFiles }: External
   externalFiles,
 });
 
+const emptyExternals = (): ExternalsState => ({
+  externals: [],
+  chunks: undefined,
+  integrity: undefined,
+  externalFiles: undefined,
+});
+
 // The bundles add to a staged copy, written back in one assignment only once all of them ran, so a
 // failed or aborted run leaves the last complete externals in place. Until then the run is marked
 // incomplete: one that cleared a bundle's disk cache and then failed must not be skipped next time.
@@ -50,7 +57,7 @@ export async function withStagedExternals(
   run: (staged: FederationCache) => Promise<void>
 ): Promise<void> {
   staleExternals.add(cache);
-  const staged: FederationCache = { ...cache, ...pickExternals({ externals: [] }) };
+  const staged: FederationCache = { ...cache, ...emptyExternals() };
   await run(staged);
   Object.assign(cache, pickExternals(staged));
   staleExternals.delete(cache);

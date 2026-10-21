@@ -148,6 +148,31 @@ describe('withStagedExternals', () => {
     expect(externalsAreStale(cache)).toBe(true);
   });
 
+  // The staged copy starts from the cache, so any field it does not reset explicitly would carry
+  // the previous run's chunks and hashes into the new set.
+  it('starts a run from empty chunks, integrity and externalFiles', async () => {
+    const cache = seeded();
+    addExternalsToCache(cache, 'node-lib', {
+      externals: [],
+      chunks: { b: ['c-OLD.js'] },
+      integrity: { 'c-OLD.js': 'sha384-OLD' },
+      outputFiles: browser('c-OLD.js'),
+    });
+
+    await withStagedExternals(cache, async staged => {
+      addExternalsToCache(staged, 'browser-shared', {
+        externals: [external('new')],
+        chunks: { 'browser-shared': ['c-NEW.js'] },
+        integrity: { 'c-NEW.js': 'sha384-NEW' },
+        outputFiles: browser('new.js', 'c-NEW.js'),
+      });
+    });
+
+    expect(cache.chunks).toEqual({ 'browser-shared': ['c-NEW.js'] });
+    expect(cache.integrity).toEqual({ 'c-NEW.js': 'sha384-NEW' });
+    expect(cache.externalFiles).toEqual({ 'browser-shared': browser('new.js', 'c-NEW.js') });
+  });
+
   it('does not add a retried run to the previous one', async () => {
     const cache = seeded();
     const run = async (staged: typeof cache) => {
