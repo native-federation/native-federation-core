@@ -354,11 +354,13 @@ function rewriteImports(
   hashEntries: Set<string>
 ): Map<string, string> {
   const sourceFiles = cachedFiles.filter(isScript);
+  const chunks = sourceFiles.filter(file => !entries.has(file));
+  const chunkSet = new Set(chunks);
 
   for (const file of sourceFiles) {
     const filePath = path.join(bundleDir, file);
     const sourceCode = io.readText(filePath);
-    const edits = collectSpecifierEdits(sourceCode, file);
+    const edits = collectSpecifierEdits(sourceCode, file, chunkSet);
     io.writeText(filePath, applyEdits(sourceCode, edits));
     // The map esbuild wrote describes the text before the edits; move its columns along.
     shiftSourceMap(io, `${filePath}.map`, sourceCode, edits);
@@ -370,7 +372,7 @@ function rewriteImports(
   const chunkRenames = renameChunksByContentCore(
     io,
     bundleDir,
-    sourceFiles.filter(file => !entries.has(file)),
+    chunks,
     sourceFiles.filter(file => entries.has(file))
   );
   for (const [file, target] of chunkRenames) {

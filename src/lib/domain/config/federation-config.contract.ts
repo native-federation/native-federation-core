@@ -47,6 +47,8 @@ export interface FederationConfig {
   sharedMappings?: Array<SharedMappingEntry> | ConfigBuilder<Array<SharedMappingEntry>>;
   chunks?: boolean;
   skip?: SkipList;
+  // A wildcard also keeps a matching relative import (`./a.css` under `*.css`): it stays relative,
+  // so the file has to be served next to the module that imports it.
   externals?: string[];
   shareScope?: string;
   features?: {

@@ -91,10 +91,13 @@ to follow a few rules that `build-adapter.contract.ts` states where they apply:
 
 - ESM, written flat into `outdir`. `.js`/`.mjs`/`.cjs` are all treated as scripts (scanned, hashed,
   chunk candidates), but only ESM syntax is read, so a CommonJS `.cjs` file's `require`s go
-  unchecked. Core rewrites a chunk import to `@nf-internal/*` only when it starts with `./`.
+  unchecked. Core rewrites a `./x` import to `@nf-internal/x` only when `x` is a non-entry script
+  the bundle's `build` returned; any other relative import stays as written. A dynamic import's
+  specifier may be quoted or a backtick literal without `${`.
 - `external` is read the way `matchesExternal` reads it: a name also covers its subpaths and `*` is
   one wildcard, on the unresolved specifier. A bundler with exact-match externals has to widen
-  them, and every match stays the bare specifier, never a resolved path.
+  them, and every match stays the specifier as written, never a resolved path. A wildcard also
+  matches a relative import (`./a.css` under `*.css`).
 - `build` returns every file it wrote, chunks, source maps and assets included, on a rebuild too:
   `outputFiles`, integrity and `validateBareImports` all read that list, and a file left out is
   neither hashed nor scanned.
@@ -200,7 +203,8 @@ export default withNativeFederation({
   but are never published in `remoteEntry.json`: the host page or another loader provides them.
   The normalized list also holds the build adapter's own `externals`.
   Adapters must read every `external` the way `matchesExternal` (exported from `./internal`) does
-  for the unresolved specifier.
+  for the unresolved specifier. A wildcard also keeps a matching relative import, which stays
+  relative and has to be served next to its importer: no import map resolves it.
 
 ### Unresolvable bare imports
 

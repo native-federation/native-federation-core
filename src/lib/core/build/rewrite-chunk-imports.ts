@@ -13,32 +13,28 @@ export interface SpecifierEdit {
 }
 
 /**
- * Every `./x.js` specifier of a static import, an export-from or a dynamic `import()`, as
- * an edit that swaps the specifier text for its `@nf-internal/x` form. The edits are the
- * only change the rewrite makes, so the source map esbuild wrote next to the file stays
- * valid apart from the columns after an edit on the same line, which `shiftSourceMap`
+ * Every `./x` specifier of a static import, an export-from or a dynamic `import()` whose `x` is
+ * one of `chunks`, as an edit that swaps the specifier text for its `@nf-internal/x` form. The
+ * edits are the only change the rewrite makes, so the source map esbuild wrote next to the file
+ * stays valid apart from the columns after an edit on the same line, which `shiftSourceMap`
  * moves along.
  */
-export function collectSpecifierEdits(sourceCode: string, fileName: string): SpecifierEdit[] {
+export function collectSpecifierEdits(
+  sourceCode: string,
+  fileName: string,
+  chunks: ReadonlySet<string>
+): SpecifierEdit[] {
   const imports = lexImports(sourceCode, fileName);
   const edits: SpecifierEdit[] = [];
 
   for (const imp of imports) {
-    // import.meta, a non-literal dynamic argument, or not a chunk reference
-    if (imp.d === -2 || imp.n === undefined || !imp.n.startsWith('./')) continue;
+    // import.meta, a non-literal dynamic argument, or not a chunk reference: a wildcard external
+    // also keeps a relative import such as `./styles.css`, which has to stay relative.
+    if (imp.d === -2 || !imp.n?.startsWith('./') || !chunks.has(imp.n.slice(2))) continue;
 
-    let start = imp.s;
-    let end = imp.e;
-
-    if (imp.d > -1) {
-      // dynamic import: s/e include the quotes, step inside them
-      const quote = sourceCode[start];
-      if (quote !== '"' && quote !== "'") continue;
-      start += 1;
-      end -= 1;
-    }
-
-    edits.push({ start, end, text: toChunkImport(imp.n) });
+    // A dynamic import's span includes its quotes or backticks; `n` is only set for a plain literal.
+    const delimiter = imp.d > -1 ? 1 : 0;
+    edits.push({ start: imp.s + delimiter, end: imp.e - delimiter, text: toChunkImport(imp.n) });
   }
 
   return edits.sort((a, b) => a.start - b.start);
@@ -121,10 +117,11 @@ export function shiftSourceMap(
 
 export function rewriteChunkImportsCore(
   io: FileReaderPort & FileWriterPort,
-  filePath: string
+  filePath: string,
+  chunks: ReadonlySet<string>
 ): void {
   const sourceCode = io.readText(filePath);
-  const edits = collectSpecifierEdits(sourceCode, path.basename(filePath));
+  const edits = collectSpecifierEdits(sourceCode, path.basename(filePath), chunks);
   if (edits.length === 0) return;
 
   io.writeText(filePath, applyEdits(sourceCode, edits));

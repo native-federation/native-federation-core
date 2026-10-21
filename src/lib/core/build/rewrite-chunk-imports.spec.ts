@@ -7,9 +7,12 @@ import {
 } from './rewrite-chunk-imports.js';
 import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
 
+// The chunks the adapter reported next to the rewritten file; only these are rewritten.
+const CHUNKS = new Set(['dep.js', 'side.js']);
+
 const rewrite = (source: string): string => {
   const io = createMemoryIo().setFile('/chunk.js', source);
-  rewriteChunkImportsCore(io, '/chunk.js');
+  rewriteChunkImportsCore(io, '/chunk.js', CHUNKS);
   return io.readText('/chunk.js');
 };
 
@@ -30,6 +33,29 @@ describe('rewriteChunkImportsCore', () => {
     expect(rewrite(`import './dep.js';`)).toBe(`import '@nf-internal/dep';`);
   });
 
+  // Rolldown with Oxc minification prints a dynamic chunk import this way.
+  it('rewrites a dynamic import written as a template literal and keeps its backticks', () => {
+    expect(rewrite('const m=()=>import(`./dep.js`);')).toBe(
+      'const m=()=>import(`@nf-internal/dep`);'
+    );
+  });
+
+  // The lexer reports no specifier for a literal with a substitution, so it cannot be a chunk.
+  it('leaves a template literal with a substitution alone', () => {
+    const source = 'const m=x=>import(`./dep-${x}.js`);';
+    expect(rewrite(source)).toBe(source);
+  });
+
+  // A wildcard external (`*.css`, `*/local.js`) keeps a relative import external, and the file is
+  // then served next to the importer; `@nf-internal/*` would resolve through no import-map key.
+  it.each([
+    ['a non-script import', `import './styles.css';`],
+    ['a script the adapter did not report', `import './local.js';`],
+    ['a bare specifier named like a chunk', `import 'dep.js';`],
+  ])('leaves %s as written', (_, source) => {
+    expect(rewrite(source)).toBe(source);
+  });
+
   it('leaves bare/external specifiers untouched', () => {
     const out = rewrite(`import 'react';`);
     expect(out).toContain("'react'");
@@ -45,7 +71,7 @@ describe('rewriteChunkImportsCore', () => {
   // es-module-lexer finds no import that directly follows one.
   it('rewrites a chunk import that directly follows a BOM, and keeps the BOM', () => {
     const source = `\uFEFFimport './dep.js';`;
-    expect(applyEdits(source, collectSpecifierEdits(source, 'chunk.js'))).toBe(
+    expect(applyEdits(source, collectSpecifierEdits(source, 'chunk.js', CHUNKS))).toBe(
       `\uFEFFimport '@nf-internal/dep';`
     );
   });
@@ -58,7 +84,7 @@ describe('rewriteChunkImportsCore', () => {
       writes.push(p);
       original(p, data);
     };
-    rewriteChunkImportsCore(io, '/chunk.js');
+    rewriteChunkImportsCore(io, '/chunk.js', CHUNKS);
     expect(writes).toEqual([]);
   });
 
@@ -83,9 +109,12 @@ describe('rewriteChunkImportsCore', () => {
       .setFile('/chunk.js', source)
       .setFile('/chunk.js.map', JSON.stringify(map));
 
-    rewriteChunkImportsCore(io, '/chunk.js');
+    rewriteChunkImportsCore(io, '/chunk.js', CHUNKS);
 
     const rewritten = io.readText('/chunk.js');
+    // Without both edits the columns would not move and the assertions below would prove nothing.
+    expect(rewritten).toContain('"@nf-internal/dep"');
+    expect(rewritten).toContain('"@nf-internal/side"');
     const shifted = JSON.parse(io.readText('/chunk.js.map'));
     const [line1, line2] = decode(shifted.mappings);
 

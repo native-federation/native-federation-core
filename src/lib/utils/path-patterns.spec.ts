@@ -112,7 +112,13 @@ describe('matchesExternal', () => {
   const table: [string, Record<string, boolean>][] = [
     [
       'host-sdk',
-      { 'host-sdk': true, 'host-sdk/events': true, 'host-sdk/a/b': true, 'host-sdkx': false },
+      {
+        'host-sdk': true,
+        'host-sdk/events': true,
+        'host-sdk/a/b': true,
+        'host-sdkx': false,
+        './host-sdk': false,
+      },
     ],
     ['@scope/pkg', { '@scope/pkg': true, '@scope/pkg/sub': true, '@scope/pkg-other': false }],
     ['@icons/*.svg', { '@icons/home.svg': true, '@icons/a/b.svg': true, '@icons/home.png': false }],
@@ -123,8 +129,11 @@ describe('matchesExternal', () => {
     ['lodash/', { lodash: false, 'lodash/fp': false }],
     // An empty capture is allowed, at either end.
     ['@scope/*', { '@scope/': true, '@scope/a': true, '@scope': false }],
-    ['*.svg', { '.svg': true, 'a.svg': true, '@icons/a.svg': true, svg: false }],
-    ['*', { a: true, '@scope/a/b': true }],
+    // A wildcard also matches a relative import, which then stays relative (issue 04).
+    ['*.svg', { '.svg': true, 'a.svg': true, '@icons/a.svg': true, svg: false, './a.svg': true }],
+    ['*.css', { './styles.css': true, './local.js': false }],
+    ['*/local.js', { './local.js': true, '../local.js': true, './other.js': false }],
+    ['*', { a: true, '@scope/a/b': true, './local.js': true, '../up.js': true }],
     // '' + '/' prefixes every absolute path; harmless, since only bare imports are checked.
     ['', { a: false, '@scope/a': false, '/abs': true }],
   ];
