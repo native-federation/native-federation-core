@@ -191,11 +191,15 @@ Every file a build writes — entries, chunks, source maps and assets such as an
 is reported as an `OutputFile` (`{ fileName, platform }`, `fileName` its base name, since adapters
 write flat into the output folder) and listed by `collectOutputFiles(federationCache)`, also exposed as `federationBuilder.outputFiles`
 (core#177).
-Adapters copy from it (the Angular adapter's i18n step) instead of globbing the output folder,
-which also holds the app's own output. It is never published; filter on the extension for scripts.
+An adapter that post-processes federation files (such as the Angular adapter's i18n step) should
+copy from it rather than glob the output folder, which also holds the app's own output, or derive
+the list from `remoteEntry.json`, which misses non-dense chunks. It is never published; filter on
+the extension for scripts.
 
 - Each bundle reports what its adapter returned, so `NFBuildAdapter.build` must return every file
-  it wrote for the bundle, on a rebuild too.
+  it wrote for the bundle, on a rebuild too. A relative `fileName` fails the build
+  (`assertAbsoluteFileNames`): it would be read against cwd, not `outdir`, and integrity would
+  skip the file without a word.
 - Shared bundles keep theirs per bundle in `federationCache.externalFiles`, which survives a
   rebuild that touches no linked package. The mapping and exposed part (`artifactFiles`) comes
   fresh from every build, so it is replaced, never merged: stale non-dense chunks stay on disk but
@@ -203,8 +207,8 @@ which also holds the app's own output. It is never published; filter on the exte
   that fails between the shared and the mapping/exposed bundles cannot leave it out of step. A
   rebuild aborted while re-running the shared bundles can still leave `externalFiles` incomplete
   until the next full build, like `externals` itself.
-- A file the adapter writes into a subfolder is listed under a wrong name: integrity and the bare
-  import check catch a missing script, but nothing notices a missing asset.
+- A file the adapter writes into a subfolder is listed under a wrong name, and nothing notices:
+  integrity and the bare import check both skip a listed file that is not in the output folder.
 - Exposed and mapping output is always listed as `browser`: built-ins are allowed only in shared
   bundles built with `platform: 'node'`.
 - Integrity is computed over the same files, so the two cannot drift.
