@@ -56,16 +56,19 @@ export async function executeSharedBundlePlans(
   fedOptions: NormalizedFederationOptions,
   signal?: AbortSignal
 ): Promise<void> {
+  const runPlan = (plan: SharedBundlePlan) =>
+    bundleShared(plan.entries, config, fedOptions, plan.externals, {
+      platform: plan.platform,
+      bundleName: plan.bundleName,
+      chunks: plan.chunks,
+    });
+
   await withStagedExternals(fedOptions.federationCache, async staged => {
     for (const plan of plans.filter(p => p.kind === 'shared')) {
       logger.info(`Bundling external npm packages with bundle type '${plan.bundleName}'`);
       const start = process.hrtime();
 
-      const info = await bundleShared(plan.entries, config, fedOptions, plan.externals, {
-        platform: plan.platform,
-        bundleName: plan.bundleName,
-        chunks: plan.chunks,
-      });
+      const info = await runPlan(plan);
 
       logger.measure(start, `Step 2.1) Bundling '${plan.bundleName}' externals`);
       addExternalsToCache(staged, plan.bundleName, info);
@@ -78,14 +81,7 @@ export async function executeSharedBundlePlans(
     if (separatePlans.length > 0) {
       const start = process.hrtime();
       const results = await allOrFirstFailure(
-        separatePlans.map(async plan => ({
-          plan,
-          info: await bundleShared(plan.entries, config, fedOptions, plan.externals, {
-            platform: plan.platform,
-            bundleName: plan.bundleName,
-            chunks: plan.chunks,
-          }),
-        }))
+        separatePlans.map(async plan => ({ plan, info: await runPlan(plan) }))
       );
       logger.measure(start, 'Step 2.2) Bundling all separate external packages');
       for (const { plan, info } of results) {
