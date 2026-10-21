@@ -21,7 +21,8 @@ export interface SpecifierEdit {
  */
 export function collectSpecifierEdits(sourceCode: string, fileName: string): SpecifierEdit[] {
   initSync();
-  const [imports] = parse(sourceCode, fileName);
+  // es-module-lexer finds no import directly after a BOM; a space keeps every offset in place.
+  const [imports] = parse(sourceCode.replace(/^\uFEFF/, ' '), fileName);
   const edits: SpecifierEdit[] = [];
 
   for (const imp of imports) {
