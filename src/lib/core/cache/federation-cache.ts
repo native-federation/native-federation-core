@@ -1,9 +1,6 @@
 import type { FederationCache } from '../../domain/core/federation-cache.contract.js';
-import type {
-  ArtifactInfo,
-  OutputFile,
-  SharedBundleResult,
-} from '../../domain/core/federation-info.contract.js';
+import type { ArtifactInfo, OutputFile } from '../../domain/core/federation-info.contract.js';
+import type { SharedBundleResult } from '../build/bundle-shared.js';
 
 export function createFederationCache(cachePath: string): FederationCache<undefined>;
 export function createFederationCache<TBundlerCache>(

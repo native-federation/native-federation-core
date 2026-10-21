@@ -9,7 +9,8 @@ import {
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
 import type {
   ChunkInfo,
-  SharedBundleResult,
+  IntegrityMap,
+  OutputFile,
   SharedInfo,
 } from '../../domain/core/federation-info.contract.js';
 import type { HashPort, IoPort } from '../../domain/utils/io-port.contract.js';
@@ -53,6 +54,13 @@ import { getBuildAdapter } from './build-adapter.js';
 import { synthesizeCjsNamedExportsEntry, type ModuleEvaluator } from './synthesize-cjs-exports.js';
 import { createRequire } from 'module';
 import { inferPackageFromSecondary } from '../../utils/normalize.js';
+
+export interface SharedBundleResult {
+  externals: SharedInfo[];
+  chunks?: ChunkInfo;
+  integrity?: IntegrityMap;
+  outputFiles: OutputFile[];
+}
 
 export async function bundleShared(
   sharedBundles: Record<string, NormalizedExternalConfig>,

@@ -45,14 +45,6 @@ export interface ExposesInfo {
   };
 }
 
-// Not exported from ./domain: only bundleShared returns it.
-export interface SharedBundleResult {
-  externals: SharedInfo[];
-  chunks?: ChunkInfo;
-  integrity?: IntegrityMap;
-  outputFiles: OutputFile[];
-}
-
 export interface ArtifactInfo {
   mappings: SharedInfo[];
   exposes: ExposesInfo[];
