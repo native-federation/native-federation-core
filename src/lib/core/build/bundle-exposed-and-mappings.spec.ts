@@ -558,6 +558,37 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     }
   );
 
+  // A chunk is a non-entry script the adapter reported: an entry, or a file left in the folder by
+  // an earlier build, is no chunk and keeps its relative import.
+  it('rewrites only the reported chunks of a dense bundle', async () => {
+    const io = createMemoryIo().setFile('/ws/dist/stale-AAAAAAAA.js', 'export const s = 1;\n');
+    const config = makeConfig({
+      exposes: { './Comp': { file: './src/comp.ts' }, './Other': { file: './src/other.ts' } },
+      chunks: true,
+      features: { ...makeConfig().features, denseChunking: true },
+    });
+    const adapter = createFakeBuildAdapter({
+      results: () => {
+        io.setFile(
+          '/ws/dist/Comp.js',
+          "import './Other.js';\nimport './stale-AAAAAAAA.js';\nexport * from './chunk-AAAAAAAA.js';\n"
+        );
+        io.setFile('/ws/dist/Other.js', 'export const o = 1;\n');
+        io.setFile('/ws/dist/chunk-AAAAAAAA.js', 'export const a = 1;\n');
+        return ['Comp.js', 'Other.js', 'chunk-AAAAAAAA.js'].map(f => ({
+          fileName: `/ws/dist/${f}`,
+        }));
+      },
+    });
+
+    await bundleExposedAndMappingsCore({ adapter, io }, config, makeFedOptions(), []);
+
+    const comp = io.readText('/ws/dist/Comp.js');
+    expect(comp).toContain("import './Other.js';");
+    expect(comp).toContain("import './stale-AAAAAAAA.js';");
+    expect(comp).toMatch(/from '@nf-internal\/chunk-[A-Z2-7]{8}'/);
+  });
+
   it('builds a mapping that asked for its own bundle apart from the rest', async () => {
     const config = makeConfig({
       exposes: { './Comp': { file: './src/comp.ts' } },
