@@ -159,9 +159,7 @@ describe('findUnresolvedImportsCore', () => {
 
     expect(rest).toEqual([]);
     expect(unresolved!.specifier).toBe('@angular/common/http');
-    expect(unresolved!.reason).toContain(
-      "It is skipped, but stays external because '@angular/common' is shared"
-    );
+    expect(unresolved!.reason).toContain("It is in 'skip', but '@angular/common' is shared");
   });
 
   it('accepts every key a dense group declares', () => {
@@ -207,7 +205,7 @@ describe('findUnresolvedImportsCore', () => {
     );
 
     expect(result.map(r => r.specifier)).toEqual(['other']);
-    expect(result[0]!.reason).toContain("list it in 'externals'");
+    expect(result[0]!.reason).toContain("add it to 'externals'");
   });
 
   it('lets a scoped external cover its subpaths but not a lookalike package', () => {
@@ -388,9 +386,7 @@ describe('findUnresolvedImportsCore', () => {
       info()
     );
 
-    expect(unresolved!.reason).toContain(
-      "'buffer' is shared, but this entry point was not published"
-    );
+    expect(unresolved!.reason).toContain("'buffer' is shared, but not this entry point");
   });
 
   it('offers the npm polyfill reading only for an exact unprefixed built-in name', () => {
@@ -422,7 +418,7 @@ describe('findUnresolvedImportsCore', () => {
       })
     );
 
-    expect(unresolved!.reason).toContain("subpath of the shared mapping '@my-org/ui'");
+    expect(unresolved!.reason).toContain("Import the shared mapping '@my-org/ui' itself");
   });
 
   it('lists every importer once and scans only JavaScript', () => {
@@ -507,7 +503,7 @@ describe('validateBareImports', () => {
 
     expect(() => validateBareImports(config, fedOptions, fedInfo, files, FULL)).not.toThrow();
     expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining("'a.js' imports '@angular/common/http'")
+      expect.stringContaining("'@angular/common/http' will not resolve (imported by 'a.js')")
     );
   });
 
@@ -547,7 +543,7 @@ describe('validateBareImports', () => {
     validateBareImports(config, fedOptions, fedInfo, files, FULL);
 
     expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining("'a.js' imports '@angular/common/http'")
+      expect.stringContaining("'@angular/common/http' will not resolve (imported by 'a.js')")
     );
   });
 
@@ -558,9 +554,7 @@ describe('validateBareImports', () => {
     fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'a.js'), '{}/`/;import "x";');
 
     expect(() => validateBareImports(config, fedOptions, fedInfo, files, FULL)).not.toThrow();
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining("Could not scan the imports of 'a.js'")
-    );
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("Could not scan 'a.js'"));
 
     config.features.strictImports = true;
     expect(() => validateBareImports(config, fedOptions, fedInfo, files, FULL)).toThrow(
@@ -577,9 +571,7 @@ describe('validateBareImports', () => {
     expect(() => validateBareImports(config, fedOptions, fedInfo, files, FULL)).toThrow(
       /strictImports/
     );
-    expect(error).toHaveBeenCalledWith(
-      expect.stringContaining("Could not scan the imports of 'a.js'")
-    );
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("Could not scan 'a.js'"));
     expect(warn).not.toHaveBeenCalled();
   });
 
@@ -594,7 +586,7 @@ describe('validateBareImports', () => {
       validateBareImports(config, fedOptions, fedInfo, browser('a.js', 'ghost.js'), FULL)
     ).not.toThrow();
     expect(warn).toHaveBeenCalledWith(
-      expect.stringMatching(/^Reported as written but not in .*, so not scanned: 'ghost.js'\./)
+      expect.stringMatching(/^Not in .*, so not scanned: 'ghost.js'\./)
     );
   });
 
@@ -614,7 +606,7 @@ describe('validateBareImports', () => {
     );
 
     const missingWarnings = warn.mock.calls.filter(([message]) =>
-      String(message).includes('Reported as written')
+      String(message).includes('so not scanned')
     );
     expect(missingWarnings).toEqual([
       [expect.stringMatching(/so not scanned: 'ghost.js', 'ghost2.js'\./)],
@@ -651,7 +643,7 @@ describe('validateBareImports', () => {
 
       expect(warn).toHaveBeenCalledTimes(1);
       expect(notice).toHaveBeenCalledWith(
-        '1 bare import(s) still unresolved, unchanged since the last build.'
+        '1 unresolved bare import(s), unchanged since the last build.'
       );
     });
 
@@ -689,7 +681,7 @@ describe('validateBareImports', () => {
       validateBareImports(config, fedOptions, fedInfo, files, FULL);
       writeDist(fedOptions.workspaceRoot, 'a.js', `export {};`);
       validateBareImports(config, fedOptions, fedInfo, files, REBUILD);
-      expect(info).toHaveBeenCalledWith('All bare imports resolve again.');
+      expect(info).toHaveBeenCalledWith('All bare imports resolve.');
 
       writeDist(fedOptions.workspaceRoot, 'a.js', `import "@angular/common/http";`);
       validateBareImports(config, fedOptions, fedInfo, files, REBUILD);
@@ -738,7 +730,7 @@ describe('validateBareImports', () => {
       validateBareImports(config, fedOptions, fedInfo, files, FULL);
       validateBareImports(config, fedOptions, fedInfo, files, REBUILD);
 
-      const missing = warn.mock.calls.filter(([m]) => String(m).includes('Reported as written'));
+      const missing = warn.mock.calls.filter(([m]) => String(m).includes('so not scanned'));
       expect(missing).toHaveLength(2);
     });
   });

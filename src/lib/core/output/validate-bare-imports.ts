@@ -51,15 +51,15 @@ export function validateBareImports(
   // An adapter that breaks the outputFiles contract is its bug, not the build's: never fatal.
   if (missing.length > 0) {
     logger.warn(
-      `Reported as written but not in '${outputDir}', so not scanned: ${formatList(missing, 3)}. ` +
-        'NFBuildAdapter.build must write its files flat into outdir.'
+      `Not in '${outputDir}', so not scanned: ${formatList(missing, 3)}. ` +
+        'The adapter must write its files flat into outdir.'
     );
   }
 
   const strict = config.features.strictImports;
   const report = strict ? logger.error : logger.warn;
   for (const { fileName, error } of unparsable) {
-    report(`Could not scan the imports of '${fileName}' (${error}), so they were not checked.`);
+    report(`Could not scan '${fileName}': ${error}`);
   }
 
   // A watch rebuild repeating unchanged warnings buries new ones. Only the specifiers are compared:
@@ -71,19 +71,17 @@ export function validateBareImports(
   if (!strict && !fullReport && key === previous) {
     if (unresolved.length > 0) {
       logger.notice(
-        `${unresolved.length} bare import(s) still unresolved, unchanged since the last build.`
+        `${unresolved.length} unresolved bare import(s), unchanged since the last build.`
       );
     }
   } else {
     for (const { specifier, importers, reason } of unresolved) {
       report(
-        `${formatList(importers, 3)} import${importers.length === 1 ? 's' : ''} ` +
-          `'${specifier}', which remoteEntry.json does not declare, so it will not resolve at ` +
-          `runtime. ${reason}`
+        `'${specifier}' will not resolve (imported by ${formatList(importers, 3)}). ${reason}`
       );
     }
   }
-  if (!fullReport && previous && !key) logger.info('All bare imports resolve again.');
+  if (!fullReport && previous && !key) logger.info('All bare imports resolve.');
 
   if (strict && (unresolved.length > 0 || unparsable.length > 0)) {
     const problems: string[] = [];
@@ -165,29 +163,28 @@ function explain(
 ): string {
   const mapping = Object.values(config.sharedMappings).find(m => specifier.startsWith(m + '/'));
   if (mapping) {
-    return `It is a subpath of the shared mapping '${mapping}'. Import the mapping by its exact name.`;
+    return `Import the shared mapping '${mapping}' itself, not a subpath.`;
   }
 
   const root = inferPackageFromSecondary(specifier);
   if (declared.has(root) || root in config.shared) {
     if (isInSkipList(specifier, config.skip)) {
-      return `It is skipped, but stays external because '${root}' is shared. Remove it from 'skip'.`;
+      return `It is in 'skip', but '${root}' is shared: remove it from 'skip'.`;
     }
     return (
-      `'${root}' is shared, but this entry point was not published: 'ignoreUnusedDeps' pruned it, ` +
-      `or '${root}' does not export it. Set includeSecondaries: { keepAll: true } on '${root}', ` +
-      "or disable 'ignoreUnusedDeps'."
+      `'${root}' is shared, but not this entry point (pruned, or not exported). ` +
+      `Set includeSecondaries: { keepAll: true } on '${root}'.`
     );
   }
 
   if (isBuiltin(specifier)) {
     const polyfill = specifier === root && !specifier.startsWith('node:');
     return (
-      'It is a Node.js built-in in a browser bundle: the package that imports it is probably ' +
-      "Node-only. Skip that package in your federation config, or build it with platform: 'node'." +
-      (polyfill ? ` If it is the npm polyfill '${specifier}', share it.` : '')
+      'Node.js built-in in a browser bundle: skip the package that imports it, or build it with ' +
+      "platform: 'node'." +
+      (polyfill ? ' If it is the npm polyfill, share it.' : '')
     );
   }
 
-  return "Share it, or list it in 'externals' if the host page provides it.";
+  return "Share it, or add it to 'externals'.";
 }
