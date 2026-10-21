@@ -25,7 +25,9 @@ let fedInfo: FederationInfo;
 async function init(params: BuildHelperParams): Promise<void> {
   setBuildAdapter(params.adapter);
 
-  const normalized = await normalizeFederationOptions(params.options);
+  const normalized = await normalizeFederationOptions(params.options, undefined, {
+    externals: params.adapter.externals,
+  });
 
   options = normalized.options;
   config = normalized.config;

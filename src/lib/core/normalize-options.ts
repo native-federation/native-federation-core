@@ -11,6 +11,7 @@ import { removeUnusedDeps } from '../config/remove-unused-deps.js';
 import { expandOrDropWildcards } from '../config/expand-mappings.js';
 import { assertBarrelMappings, warnNonNpmMappingNames } from '../config/validate-mappings.js';
 import { type FederationCache } from '../../domain.js';
+import type { NFAdapterInput } from '../domain/core/build-adapter.contract.js';
 import { createFederationCache } from './cache/federation-cache.js';
 import { getDefaultCachePath } from './cache/cache-persistence.js';
 import { getUsedDependenciesFactory } from '../config/get-used-dependencies.js';
@@ -30,19 +31,24 @@ interface NormalizeFederationDeps {
   usedDependenciesFactory?: typeof getUsedDependenciesFactory;
 }
 
+/** @param cache Moves into `NFAdapterInput` in v5. */
 export function normalizeFederationOptions(
-  options: FederationOptions
+  options: FederationOptions,
+  cache?: undefined,
+  fromAdapter?: NFAdapterInput
 ): Promise<{ config: NormalizedFederationConfig; options: NormalizedFederationOptions<undefined> }>;
 export function normalizeFederationOptions<TBundlerCache>(
   options: FederationOptions,
-  cache: FederationCache<TBundlerCache>
+  cache: FederationCache<TBundlerCache>,
+  fromAdapter?: NFAdapterInput
 ): Promise<{
   config: NormalizedFederationConfig;
   options: NormalizedFederationOptions<TBundlerCache>;
 }>;
 export async function normalizeFederationOptions<TBundlerCache = undefined>(
   options: FederationOptions,
-  cache?: FederationCache<TBundlerCache>
+  cache?: FederationCache<TBundlerCache>,
+  fromAdapter?: NFAdapterInput
 ): Promise<{
   config: NormalizedFederationConfig;
   options: NormalizedFederationOptions<TBundlerCache>;
@@ -50,14 +56,16 @@ export async function normalizeFederationOptions<TBundlerCache = undefined>(
   return normalizeFederationOptionsCore(
     { io: nodeIo, loadConfig: defaultConfigLoader },
     options,
-    cache
+    cache,
+    fromAdapter
   );
 }
 
 export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
   deps: NormalizeFederationDeps,
   options: FederationOptions,
-  cache?: FederationCache<TBundlerCache>
+  cache?: FederationCache<TBundlerCache>,
+  fromAdapter: NFAdapterInput = {}
 ): Promise<{
   config: NormalizedFederationConfig;
   options: NormalizedFederationOptions<TBundlerCache>;
@@ -140,7 +148,10 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
   assertBarrelMappings(config.sharedMappings);
   warnNonNpmMappingNames(config.sharedMappings, config.features.strictImports);
 
-  return { config, options: normalizedOptions };
+  if (!fromAdapter.externals?.length) return { config, options: normalizedOptions };
+  // A new list leaves the user's array untouched; the Set stops a second normalize adding twice.
+  const externals = [...new Set([...config.externals, ...fromAdapter.externals])];
+  return { config: { ...config, externals }, options: normalizedOptions };
 }
 
 function resolveProjectName(name?: string): string {

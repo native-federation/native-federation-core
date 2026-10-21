@@ -18,6 +18,10 @@ export interface NFBuildAdapter {
   // Read before setup(), so it must be known when the adapter is created (core#152).
   readonly externalsCacheKey?: ExternalsCacheKey;
 
+  // Imports the adapter injects itself (a dev client, a polyfill). Core never reads this field:
+  // pass it to normalizeFederationOptions in `NFAdapterInput`. Keep entries exact or scoped.
+  readonly externals?: readonly string[];
+
   setup(name: string, options: NFBuildAdapterOptions): Promise<void>;
 
   // Every file written for the bundle, on a rebuild too, not only the changed ones. Files go flat
@@ -59,4 +63,8 @@ export interface NFBuildAdapterOptions<TBundlerCache = unknown> {
 
 export interface NFBuildAdapterResult {
   fileName: string;
+}
+
+export interface NFAdapterInput {
+  externals?: readonly string[];
 }

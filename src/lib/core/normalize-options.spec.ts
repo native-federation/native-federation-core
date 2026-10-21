@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
-import { normalizeFederationOptionsCore } from './normalize-options.js';
+import { normalizeFederationOptions, normalizeFederationOptionsCore } from './normalize-options.js';
+import { setBuildAdapter } from './build/build-adapter.js';
+import { getExternals } from './build/get-externals.js';
+import { findUnresolvedImportsCore } from './output/validate-bare-imports.js';
+import type { NFBuildAdapter } from '../domain/core/build-adapter.contract.js';
 import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
 import { prepareSkipList } from '../config/default-skip-list.js';
 import { logger } from '../utils/logger.js';
@@ -498,5 +504,113 @@ describe('normalizeFederationOptionsCore', () => {
     expect(result.config.sharedMappings).toEqual({
       [path.join('/ws', 'libs/ui/button/index.ts')]: '@org/ui/button',
     });
+  });
+});
+
+// An adapter's own externals are merged into config.externals while the options are normalized.
+// They are passed in explicitly: federationBuilder.init does, and a builder that normalizes itself
+// passes its adapter's `externals` too.
+describe('adapter externals', () => {
+  const adapter = (externals: string[]) =>
+    ({ externals, setup: vi.fn(), build: vi.fn(), dispose: vi.fn() }) as unknown as NFBuildAdapter;
+  const tempDirs: string[] = [];
+
+  afterEach(() => {
+    useWorkspace('');
+    usePackageJson(undefined);
+    vi.restoreAllMocks();
+    setBuildAdapter(null as unknown as NFBuildAdapter);
+    for (const dir of tempDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  async function normalize(config: NormalizedFederationConfig, adapterExternals: string[]) {
+    const io = createMemoryIo().setFile(CONFIG_PATH, '');
+    return normalizeFederationOptionsCore(
+      { io, loadConfig: loaderFor(config) },
+      baseOptions,
+      cache,
+      {
+        externals: adapterExternals,
+      }
+    );
+  }
+
+  // getExternals is the one list every bundle's `external` and the bare import check start from.
+  it('reach getExternals, and so every bundle and the bare import check', async () => {
+    const { config } = await normalize(makeConfig({ externals: ['host-sdk'] }), ['@vite/client']);
+
+    expect(config.externals).toEqual(['host-sdk', '@vite/client']);
+    expect(getExternals(config)).toContain('@vite/client');
+  });
+
+  it('are not reported by the bare import check', async () => {
+    const { config } = await normalize(makeConfig(), ['@vite/client']);
+    const io = createMemoryIo().setFile('/ws/dist/a.js', 'import "@vite/client";');
+
+    const scan = findUnresolvedImportsCore(
+      io,
+      '/ws/dist',
+      [{ fileName: 'a.js', platform: 'browser' }],
+      config,
+      { name: 'host', shared: [], exposes: [] }
+    );
+
+    expect(scan.unresolved).toEqual([]);
+  });
+
+  it('leave the user list untouched and are not added twice by a second normalize', async () => {
+    const userExternals = ['host-sdk'];
+    const loaded = makeConfig({ externals: userExternals });
+
+    await normalize(loaded, ['@vite/client', 'host-sdk']);
+    const { config } = await normalize(loaded, ['@vite/client', 'host-sdk']);
+
+    expect(userExternals).toEqual(['host-sdk']);
+    expect(config.externals).toEqual(['host-sdk', '@vite/client']);
+  });
+
+  it('change nothing without an adapter', async () => {
+    const io = createMemoryIo().setFile(CONFIG_PATH, '');
+    const loaded = makeConfig({ externals: ['host-sdk'] });
+
+    const { config } = await normalizeFederationOptionsCore(
+      { io, loadConfig: loaderFor(loaded) },
+      baseOptions,
+      cache
+    );
+
+    expect(config).toBe(loaded);
+  });
+
+  function writeDiskConfig(externals: string[]) {
+    const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-adapter-externals-'));
+    tempDirs.push(workspaceRoot);
+    const disk = {
+      ...makeConfig({ externals }),
+      skip: { strings: [], functions: [], regexps: [] },
+    };
+    fs.writeFileSync(
+      path.join(workspaceRoot, 'federation.config.mjs'),
+      `const c = ${JSON.stringify(disk)}; c.skip.strings = new Set(); export default c;`
+    );
+    return { ...baseOptions, workspaceRoot, federationConfig: 'federation.config.mjs' };
+  }
+
+  // The registry is process-global: a config normalized outside a build, after some adapter was
+  // registered, must not silently pick up that adapter's externals.
+  it('are not read from the registered adapter', async () => {
+    setBuildAdapter(adapter(['@vite/client']));
+
+    const { config } = await normalizeFederationOptions(writeDiskConfig(['host-sdk']), cache);
+
+    expect(config.externals).toEqual(['host-sdk']);
+  });
+
+  it('are merged and de-duplicated when passed to normalizeFederationOptions', async () => {
+    const { config } = await normalizeFederationOptions(writeDiskConfig(['host-sdk']), cache, {
+      externals: ['@vite/client', 'host-sdk'],
+    });
+
+    expect(config.externals).toEqual(['host-sdk', '@vite/client']);
   });
 });

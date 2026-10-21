@@ -42,3 +42,19 @@ describe('federationBuilder.outputFiles (core#177)', () => {
     ]);
   });
 });
+
+describe('federationBuilder.init', () => {
+  beforeEach(() => vi.resetModules());
+
+  it("passes the adapter's externals to normalize", async () => {
+    const { federationBuilder } = await import('./federation-builder.js');
+    const { normalizeFederationOptions } = await import('./normalize-options.js');
+    const options = {} as FederationOptions;
+
+    await federationBuilder.init({ options, adapter: { ...adapter, externals: ['@vite/client'] } });
+
+    expect(normalizeFederationOptions).toHaveBeenLastCalledWith(options, undefined, {
+      externals: ['@vite/client'],
+    });
+  });
+});
