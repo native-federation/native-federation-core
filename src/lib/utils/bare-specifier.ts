@@ -1,5 +1,5 @@
-import { initSync, parse } from 'es-module-lexer';
 import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
+import { lexImports } from './lex-imports.js';
 
 function isBare(specifier: string): boolean {
   if (specifier.startsWith('.') || specifier.startsWith('/')) return false;
@@ -23,10 +23,7 @@ export function matchesExternal(specifier: string, externals: readonly string[])
 
 // Static and dynamic imports alike; throws on a file the lexer cannot parse.
 export function readBareImports(io: FileReaderPort, filePath: string, fileName: string): string[] {
-  initSync();
-  // es-module-lexer finds no import or export directly after a BOM.
-  const [imports] = parse(io.readText(filePath).replace(/^\uFEFF/, ''), fileName);
-  return imports
+  return lexImports(io.readText(filePath), fileName)
     .filter(imp => imp.d !== -2 && imp.n !== undefined && isBare(imp.n))
     .map(imp => imp.n!);
 }

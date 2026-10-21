@@ -1,8 +1,8 @@
 import * as path from 'path';
-import { initSync, parse } from 'es-module-lexer';
 import { decode, encode } from '@jridgewell/sourcemap-codec';
 import type { FileReaderPort, FileWriterPort } from '../../domain/utils/io-port.contract.js';
 import { toChunkImport } from '../../domain/core/chunk.js';
+import { lexImports } from '../../utils/lex-imports.js';
 
 export interface SpecifierEdit {
   /** Offset of the first character of the specifier text (inside the quotes). */
@@ -20,9 +20,7 @@ export interface SpecifierEdit {
  * moves along.
  */
 export function collectSpecifierEdits(sourceCode: string, fileName: string): SpecifierEdit[] {
-  initSync();
-  // es-module-lexer finds no import directly after a BOM; a space keeps every offset in place.
-  const [imports] = parse(sourceCode.replace(/^\uFEFF/, ' '), fileName);
+  const imports = lexImports(sourceCode, fileName);
   const edits: SpecifierEdit[] = [];
 
   for (const imp of imports) {
