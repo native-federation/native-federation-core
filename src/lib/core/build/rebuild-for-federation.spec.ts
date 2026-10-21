@@ -157,6 +157,8 @@ describe('rebuildForFederation — output files (core#177)', () => {
     expect(vi.mocked(validateBareImports).mock.calls[0]![3]).toEqual(
       browser('a.cached.js', 'Comp.js')
     );
+    // A rebuild only repeats bare import warnings that changed.
+    expect(vi.mocked(validateBareImports).mock.calls[0]![4]).toEqual({ fullReport: false });
   });
 
   it('refreshes the external files when a shared package is re-bundled', async () => {

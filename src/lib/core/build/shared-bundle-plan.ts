@@ -19,9 +19,7 @@ type SplitSharedResult = {
   separateServer: Record<string, NormalizedExternalConfig>;
 };
 
-export function splitShared(
-  shared: Record<string, NormalizedExternalConfig>
-): SplitSharedResult {
+export function splitShared(shared: Record<string, NormalizedExternalConfig>): SplitSharedResult {
   const sharedServer: Record<string, NormalizedExternalConfig> = {};
   const sharedBrowser: Record<string, NormalizedExternalConfig> = {};
   const separateBrowser: Record<string, NormalizedExternalConfig> = {};

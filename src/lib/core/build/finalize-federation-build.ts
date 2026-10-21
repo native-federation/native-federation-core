@@ -9,7 +9,8 @@ import { writeFederationOutputs } from '../output/write-federation-outputs.js';
 export function finalizeFederationBuild(
   config: NormalizedFederationConfig,
   fedOptions: NormalizedFederationOptions,
-  artifactInfo: ArtifactInfo
+  artifactInfo: ArtifactInfo,
+  { fullReport }: { fullReport: boolean }
 ): FederationInfo {
   const federationInfo = assembleFederationInfo(config, fedOptions, artifactInfo);
   recordArtifactFiles(fedOptions.federationCache, artifactInfo);
@@ -17,7 +18,8 @@ export function finalizeFederationBuild(
     config,
     fedOptions,
     federationInfo,
-    collectOutputFiles(fedOptions.federationCache)
+    collectOutputFiles(fedOptions.federationCache),
+    { fullReport }
   );
   writeFederationOutputs(federationInfo, fedOptions);
   return federationInfo;

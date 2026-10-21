@@ -78,6 +78,9 @@ const browser = (...fileNames: string[]): OutputFile[] =>
 const node = (...fileNames: string[]): OutputFile[] =>
   fileNames.map(fileName => ({ fileName, platform: 'node' }));
 
+const FULL = { fullReport: true };
+const REBUILD = { fullReport: false };
+
 const unresolvedImports = (...args: Parameters<typeof findUnresolvedImportsCore>) =>
   findUnresolvedImportsCore(...args).unresolved;
 
@@ -156,9 +159,7 @@ describe('findUnresolvedImportsCore', () => {
 
     expect(rest).toEqual([]);
     expect(unresolved!.specifier).toBe('@angular/common/http');
-    expect(unresolved!.reason).toContain(
-      "It is skipped, but stays external because '@angular/common' is shared"
-    );
+    expect(unresolved!.reason).toContain("It is in 'skip', but '@angular/common' is shared");
   });
 
   it('accepts every key a dense group declares', () => {
@@ -204,7 +205,7 @@ describe('findUnresolvedImportsCore', () => {
     );
 
     expect(result.map(r => r.specifier)).toEqual(['other']);
-    expect(result[0]!.reason).toContain("list it in 'externals'");
+    expect(result[0]!.reason).toContain("add it to 'externals'");
   });
 
   it('lets a scoped external cover its subpaths but not a lookalike package', () => {
@@ -361,6 +362,48 @@ describe('findUnresolvedImportsCore', () => {
     expect(result.map(r => [r.specifier, r.importers])).toEqual([['crypto', ['chunk-B.js']]]);
   });
 
+  // Only an exact built-in name passes in a node file: nothing resolves 'process/browser' there.
+  it('reports a node file import that only looks like a built-in', () => {
+    const io = createMemoryIo().setFile(
+      out('chunk-N.js'),
+      `import "fs/promises"; import "process/browser"; import "events/x"; import "node:nope";`
+    );
+
+    const result = unresolvedImports(io, OUT, node('chunk-N.js'), makeConfig(), info());
+
+    expect(result.map(r => r.specifier)).toEqual(['events/x', 'node:nope', 'process/browser']);
+  });
+
+  // 'buffer' is a built-in and also an npm polyfill; with 'buffer' shared, it is the polyfill.
+  it('names a shared package before the built-in reading', () => {
+    const io = createMemoryIo().setFile(out('chunk-B.js'), `import "buffer";`);
+
+    const [unresolved] = unresolvedImports(
+      io,
+      OUT,
+      browser('chunk-B.js'),
+      makeConfig({ shared: { buffer: ext() } }),
+      info()
+    );
+
+    expect(unresolved!.reason).toContain("'buffer' is shared, but not this entry point");
+  });
+
+  it('offers the npm polyfill reading only for an exact unprefixed built-in name', () => {
+    const io = createMemoryIo().setFile(
+      out('chunk-B.js'),
+      `import "buffer"; import "node:buffer"; import "fs/promises";`
+    );
+
+    const result = unresolvedImports(io, OUT, browser('chunk-B.js'), makeConfig(), info());
+
+    expect(result.map(r => [r.specifier, r.reason.includes('npm polyfill')])).toEqual([
+      ['buffer', true],
+      ['fs/promises', false],
+      ['node:buffer', false],
+    ]);
+  });
+
   it('points a subpath of a shared mapping at the mapping', () => {
     const io = createMemoryIo().setFile(out('Component.js'), `import "@my-org/ui/button";`);
 
@@ -375,7 +418,7 @@ describe('findUnresolvedImportsCore', () => {
       })
     );
 
-    expect(unresolved!.reason).toContain("subpath of the shared mapping '@my-org/ui'");
+    expect(unresolved!.reason).toContain("Import the shared mapping '@my-org/ui' itself");
   });
 
   it('lists every importer once and scans only JavaScript', () => {
@@ -431,20 +474,25 @@ describe('findUnresolvedImportsCore', () => {
 });
 
 describe('validateBareImports', () => {
-  let workspaceRoot: string | undefined;
+  // A list, since a test may set up two workspaces (one per federation cache).
+  const workspaceRoots: string[] = [];
   afterEach(() => {
     vi.restoreAllMocks();
-    if (workspaceRoot) fs.rmSync(workspaceRoot, { recursive: true, force: true });
-    workspaceRoot = undefined;
+    for (const root of workspaceRoots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
   });
 
   function setup(strictImports: boolean) {
-    workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-validate-'));
+    const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-validate-'));
+    workspaceRoots.push(workspaceRoot);
     fs.mkdirSync(path.join(workspaceRoot, 'dist'));
     fs.writeFileSync(path.join(workspaceRoot, 'dist', 'a.js'), `import "@angular/common/http";`);
     const config = makeConfig({ shared: { '@angular/common': ext() } });
     config.features.strictImports = strictImports;
-    const fedOptions = { workspaceRoot, outputPath: 'dist' } as NormalizedFederationOptions;
+    const fedOptions = {
+      workspaceRoot,
+      outputPath: 'dist',
+      federationCache: {},
+    } as NormalizedFederationOptions;
     const fedInfo = info({ shared: [shared('@angular/common', 'a.js')] });
     return { config, fedOptions, fedInfo, files: browser('a.js') };
   }
@@ -453,9 +501,9 @@ describe('validateBareImports', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     const { config, fedOptions, fedInfo, files } = setup(false);
 
-    expect(() => validateBareImports(config, fedOptions, fedInfo, files)).not.toThrow();
+    expect(() => validateBareImports(config, fedOptions, fedInfo, files, FULL)).not.toThrow();
     expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining("'a.js' imports '@angular/common/http'")
+      expect.stringContaining("'@angular/common/http' will not resolve (imported by 'a.js')")
     );
   });
 
@@ -463,7 +511,9 @@ describe('validateBareImports', () => {
     const error = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
     const { config, fedOptions, fedInfo, files } = setup(true);
 
-    expect(() => validateBareImports(config, fedOptions, fedInfo, files)).toThrow(/strictImports/);
+    expect(() => validateBareImports(config, fedOptions, fedInfo, files, FULL)).toThrow(
+      /strictImports/
+    );
     expect(error).toHaveBeenCalledWith(expect.stringContaining('@angular/common/http'));
   });
 
@@ -476,7 +526,7 @@ describe('validateBareImports', () => {
     const fedInfo = info({ shared: [shared('@angular/common', 'a.js')] });
 
     expect(() =>
-      validateBareImports(config, fedOptions, fedInfo, [...files, ...browser('chunk-X.js')])
+      validateBareImports(config, fedOptions, fedInfo, [...files, ...browser('chunk-X.js')], FULL)
     ).toThrow(/1 bare import/);
   });
 
@@ -490,10 +540,10 @@ describe('validateBareImports', () => {
       '\uFEFFimport "@angular/common/http";'
     );
 
-    validateBareImports(config, fedOptions, fedInfo, files);
+    validateBareImports(config, fedOptions, fedInfo, files, FULL);
 
     expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining("'a.js' imports '@angular/common/http'")
+      expect.stringContaining("'@angular/common/http' will not resolve (imported by 'a.js')")
     );
   });
 
@@ -503,13 +553,11 @@ describe('validateBareImports', () => {
     const { config, fedOptions, fedInfo, files } = setup(false);
     fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'a.js'), '{}/`/;import "x";');
 
-    expect(() => validateBareImports(config, fedOptions, fedInfo, files)).not.toThrow();
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining("Could not scan the imports of 'a.js'")
-    );
+    expect(() => validateBareImports(config, fedOptions, fedInfo, files, FULL)).not.toThrow();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("Could not scan 'a.js'"));
 
     config.features.strictImports = true;
-    expect(() => validateBareImports(config, fedOptions, fedInfo, files)).toThrow(
+    expect(() => validateBareImports(config, fedOptions, fedInfo, files, FULL)).toThrow(
       /^1 file\(s\) could not be scanned \(features.strictImports\)/
     );
   });
@@ -520,10 +568,10 @@ describe('validateBareImports', () => {
     const { config, fedOptions, fedInfo, files } = setup(true);
     fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'a.js'), '{}/`/;import "x";');
 
-    expect(() => validateBareImports(config, fedOptions, fedInfo, files)).toThrow();
-    expect(error).toHaveBeenCalledWith(
-      expect.stringContaining("Could not scan the imports of 'a.js'")
+    expect(() => validateBareImports(config, fedOptions, fedInfo, files, FULL)).toThrow(
+      /strictImports/
     );
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("Could not scan 'a.js'"));
     expect(warn).not.toHaveBeenCalled();
   });
 
@@ -535,10 +583,10 @@ describe('validateBareImports', () => {
     fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'a.js'), `export {};`);
 
     expect(() =>
-      validateBareImports(config, fedOptions, fedInfo, browser('a.js', 'ghost.js'))
+      validateBareImports(config, fedOptions, fedInfo, browser('a.js', 'ghost.js'), FULL)
     ).not.toThrow();
     expect(warn).toHaveBeenCalledWith(
-      expect.stringMatching(/^Reported as written but not in .*, so not scanned: 'ghost.js'\./)
+      expect.stringMatching(/^Not in .*, so not scanned: 'ghost.js'\./)
     );
   });
 
@@ -549,10 +597,16 @@ describe('validateBareImports', () => {
     const { config, fedOptions, fedInfo } = setup(false);
     fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'a.js'), `export {};`);
 
-    validateBareImports(config, fedOptions, fedInfo, browser('a.js', 'ghost.js', 'ghost2.js'));
+    validateBareImports(
+      config,
+      fedOptions,
+      fedInfo,
+      browser('a.js', 'ghost.js', 'ghost2.js'),
+      FULL
+    );
 
     const missingWarnings = warn.mock.calls.filter(([message]) =>
-      String(message).includes('Reported as written')
+      String(message).includes('so not scanned')
     );
     expect(missingWarnings).toEqual([
       [expect.stringMatching(/so not scanned: 'ghost.js', 'ghost2.js'\./)],
@@ -564,8 +618,120 @@ describe('validateBareImports', () => {
     const { config, fedOptions, fedInfo } = setup(true);
     fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'b.js'), '{}/`/;import "x";');
 
-    expect(() => validateBareImports(config, fedOptions, fedInfo, browser('a.js', 'b.js'))).toThrow(
+    expect(() =>
+      validateBareImports(config, fedOptions, fedInfo, browser('a.js', 'b.js'), FULL)
+    ).toThrow(
       /^1 bare import\(s\) cannot be resolved from remoteEntry.json and 1 file\(s\) could not be scanned/
     );
+  });
+
+  describe('on a rebuild', () => {
+    const quiet = () => {
+      const spy = (level: 'warn' | 'notice' | 'info') =>
+        vi.spyOn(logger, level).mockImplementation(() => undefined);
+      return { warn: spy('warn'), notice: spy('notice'), info: spy('info') };
+    };
+    const writeDist = (root: string, file: string, code: string) =>
+      fs.writeFileSync(path.join(root, 'dist', file), code);
+
+    it('only notes findings that did not change', () => {
+      const { warn, notice } = quiet();
+      const { config, fedOptions, fedInfo, files } = setup(false);
+
+      validateBareImports(config, fedOptions, fedInfo, files, FULL);
+      validateBareImports(config, fedOptions, fedInfo, files, REBUILD);
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(notice).toHaveBeenCalledWith(
+        '1 unresolved bare import(s), unchanged since the last build.'
+      );
+    });
+
+    // Chunks are named after their content, so an edit renames the importer.
+    it('does not repeat a warning because its importer was renamed', () => {
+      const { warn } = quiet();
+      const { config, fedOptions, fedInfo, files } = setup(false);
+      writeDist(fedOptions.workspaceRoot, 'chunk-B.js', `import "@angular/common/http";`);
+
+      validateBareImports(config, fedOptions, fedInfo, files, FULL);
+      validateBareImports(config, fedOptions, fedInfo, browser('chunk-B.js'), REBUILD);
+
+      expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports every finding again once one changes', () => {
+      const { warn } = quiet();
+      const { config, fedOptions, fedInfo, files } = setup(false);
+
+      validateBareImports(config, fedOptions, fedInfo, files, FULL);
+      writeDist(
+        fedOptions.workspaceRoot,
+        'a.js',
+        `import "@angular/common/http"; import "lodash";`
+      );
+      validateBareImports(config, fedOptions, fedInfo, files, REBUILD);
+
+      expect(warn).toHaveBeenCalledTimes(3);
+    });
+
+    it('says when the findings are resolved, and warns again when one comes back', () => {
+      const { warn, info } = quiet();
+      const { config, fedOptions, fedInfo, files } = setup(false);
+
+      validateBareImports(config, fedOptions, fedInfo, files, FULL);
+      writeDist(fedOptions.workspaceRoot, 'a.js', `export {};`);
+      validateBareImports(config, fedOptions, fedInfo, files, REBUILD);
+      expect(info).toHaveBeenCalledWith('All bare imports resolve.');
+
+      writeDist(fedOptions.workspaceRoot, 'a.js', `import "@angular/common/http";`);
+      validateBareImports(config, fedOptions, fedInfo, files, REBUILD);
+      expect(warn).toHaveBeenCalledTimes(2);
+    });
+
+    it('still reports in full on a full build', () => {
+      const { warn } = quiet();
+      const { config, fedOptions, fedInfo, files } = setup(false);
+
+      validateBareImports(config, fedOptions, fedInfo, files, FULL);
+      validateBareImports(config, fedOptions, fedInfo, files, FULL);
+
+      expect(warn).toHaveBeenCalledTimes(2);
+    });
+
+    // A strict build fails, so its errors must always be above the thrown message.
+    it('reports and fails every strict build', () => {
+      const error = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+      const { config, fedOptions, fedInfo, files } = setup(true);
+
+      expect(() => validateBareImports(config, fedOptions, fedInfo, files, FULL)).toThrow();
+      expect(() => validateBareImports(config, fedOptions, fedInfo, files, REBUILD)).toThrow(
+        /strictImports/
+      );
+      expect(error).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps the reported findings per federation cache', () => {
+      const { warn } = quiet();
+      const first = setup(false);
+      const second = setup(false);
+
+      validateBareImports(first.config, first.fedOptions, first.fedInfo, first.files, REBUILD);
+      validateBareImports(second.config, second.fedOptions, second.fedInfo, second.files, REBUILD);
+
+      expect(warn).toHaveBeenCalledTimes(2);
+    });
+
+    // Rare, and the adapter's or the lexer's problem: no reason to hide them.
+    it('repeats a missing file on every rebuild', () => {
+      const { warn } = quiet();
+      const { config, fedOptions, fedInfo } = setup(false);
+      const files = browser('a.js', 'ghost.js');
+
+      validateBareImports(config, fedOptions, fedInfo, files, FULL);
+      validateBareImports(config, fedOptions, fedInfo, files, REBUILD);
+
+      const missing = warn.mock.calls.filter(([m]) => String(m).includes('so not scanned'));
+      expect(missing).toHaveLength(2);
+    });
   });
 });

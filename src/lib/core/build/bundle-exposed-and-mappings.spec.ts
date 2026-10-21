@@ -495,7 +495,9 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     expect(chunk).not.toBe('chunk-AAAAAAAA.js');
     expect(io.isFile(`/ws/dist/${chunk}`)).toBe(true);
     expect(io.isFile('/ws/dist/chunk-AAAAAAAA.js')).toBe(false);
-    expect(io.readText('/ws/dist/Comp.js')).toContain(`@nf-internal/${chunk!.replace(/\.js$/, '')}`);
+    expect(io.readText('/ws/dist/Comp.js')).toContain(
+      `@nf-internal/${chunk!.replace(/\.js$/, '')}`
+    );
     expect(io.readText('/ws/dist/Comp.js')).not.toContain('AAAAAAAA');
   });
 
@@ -598,7 +600,8 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
       });
 
     const names = (files: { fileName: string }[] = []) => files.map(f => f.fileName).sort();
-    const scripts = (files: { fileName: string }[] = []) => names(files).filter(f => f.endsWith('.js'));
+    const scripts = (files: { fileName: string }[] = []) =>
+      names(files).filter(f => f.endsWith('.js'));
 
     it('reports non-dense mapping and exposed chunks among the written files', async () => {
       const io = createMemoryIo();
