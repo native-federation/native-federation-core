@@ -18,11 +18,8 @@ export interface NFBuildAdapter {
   // Read before setup(), so it must be known when the adapter is created (core#152).
   readonly externalsCacheKey?: ExternalsCacheKey;
 
-  // Specifiers the adapter's own output imports and something at runtime provides (a dev client,
-  // a polyfill), handled exactly like `config.externals`, which they are merged into. Core never
-  // reads them from the adapter: pass them to normalizeFederationOptions in `NFAdapterInput`
-  // (federationBuilder.init does). Keep them exact or scoped: a broad `*` would also leave real
-  // dependencies unbundled in the shared bundles.
+  // Imports the adapter injects itself (a dev client, a polyfill). Core never reads this field:
+  // pass it to normalizeFederationOptions in `NFAdapterInput`. Keep entries exact or scoped.
   readonly externals?: readonly string[];
 
   setup(name: string, options: NFBuildAdapterOptions): Promise<void>;
@@ -68,8 +65,6 @@ export interface NFBuildAdapterResult {
   fileName: string;
 }
 
-// What an adapter hands normalizeFederationOptions besides the build options. In v5 it also
-// takes the cache, which is the second argument until then.
 export interface NFAdapterInput {
   externals?: readonly string[];
 }

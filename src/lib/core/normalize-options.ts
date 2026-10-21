@@ -31,9 +31,7 @@ interface NormalizeFederationDeps {
   usedDependenciesFactory?: typeof getUsedDependenciesFactory;
 }
 
-/**
- * @param cache Moves into the third argument (`NFAdapterInput.cache`) in v5.
- */
+/** @param cache Moves into `NFAdapterInput` in v5. */
 export function normalizeFederationOptions(
   options: FederationOptions,
   cache?: undefined,
@@ -151,8 +149,7 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
   warnNonNpmMappingNames(config.sharedMappings, config.features.strictImports);
 
   if (!fromAdapter.externals?.length) return { config, options: normalizedOptions };
-  // A new, de-duplicated list: the user's `externals` stay as written, and normalizing the same
-  // config module twice does not add the adapter's entries twice.
+  // A new list leaves the user's array untouched; the Set stops a second normalize adding twice.
   const externals = [...new Set([...config.externals, ...fromAdapter.externals])];
   return { config: { ...config, externals }, options: normalizedOptions };
 }
