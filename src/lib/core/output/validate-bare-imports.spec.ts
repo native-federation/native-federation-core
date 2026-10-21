@@ -327,8 +327,9 @@ describe('findUnresolvedImportsCore', () => {
     const io = createMemoryIo()
       .setFile(out('a.js'), `import "missing"; import "missing";`)
       .setFile(out('b.js'), `import "missing";`)
-      .setFile(out('styles.css'), `@import "missing";`)
-      .setFile(out('a.js.map'), `{"sources":["import 'missing'"]}`);
+      // Both would lex as an import, so they are left out only because they are not scripts.
+      .setFile(out('styles.css'), `import "missing";`)
+      .setFile(out('a.js.map'), `import "missing";`);
 
     const result = findUnresolvedImportsCore(
       io,
