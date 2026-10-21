@@ -58,7 +58,8 @@ write into `dist/` with `rootDir: src`, so JS and types land side by side.
 - `.` - Main build API: `federationBuilder`, `buildForFederation`, etc.
 - `./config` - Configuration utilities: `withNativeFederation`, `shareAll`, `share`
 - `./domain` - Type definitions and contracts
-- `./internal` - Internal utilities (generally not for public use)
+- `./internal` - Internal utilities and adapter-facing helpers (`matchesExternal`, the file
+  watcher); not for app configs
 
 ### Core responsibilities
 
@@ -171,7 +172,8 @@ export default withNativeFederation({
 - **`build: 'package'`**: Bundle a shared dependency in isolation (not in the shared bundle)
 - **`externals`**: Opt-out specifiers. They reach the bundler as external, so they stay bare imports,
   but are never published in `remoteEntry.json`: the host page or another loader provides them.
-  Adapters must read every `external` the way `matchesExternal` (exported from `./internal`) does.
+  Adapters must read every `external` the way `matchesExternal` (exported from `./internal`) does
+  for a specifier as written.
 
 ### Unresolvable bare imports
 
@@ -180,11 +182,12 @@ exact keys `remoteEntry.json` declares. A shared package's secondary that `ignor
 or that is in `skip`, therefore stays an import nothing resolves (core#168). After assembling
 `remoteEntry.json`, `validateBareImports` reads every script in `outputFiles` (see below), so
 non-dense chunks that `remoteEntry.json` never names are covered too, and reports each bare
-specifier that is neither declared, a published chunk, nor matched by `externals` (`matchesExternal`:
-a name covers its subpaths, one `*` is a wildcard; a spec pins it to esbuild's behaviour). Node built-ins pass only in files whose own bundle is
-`platform: 'node'`; a file that a node and a browser bundle both wrote counts as browser. It
-warns by default and throws with `features.strictImports`. It reads the files from the output
-directory, so cached bundles are covered too.
+specifier that is neither declared, a published chunk, nor matched by `externals`
+(`matchesExternal`: a name covers its subpaths, one `*` is a wildcard; a spec pins it to esbuild's
+behaviour). Node built-ins pass only in files whose own bundle is `platform: 'node'`; a file that
+a node and a browser bundle both wrote counts as browser. It warns by default and throws with
+`features.strictImports`. It reads the files from the output directory, so cached bundles are
+covered too.
 
 It never passes a file it did not read. A script the lexer cannot parse is reported (and fails a
 strict build); a reported file missing from the output folder, usually an adapter writing into a
