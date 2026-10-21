@@ -265,6 +265,57 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     expect(result.exposes[0]!.dev).toEqual({ entryPoint: file.replace(/\\/g, '/') });
   });
 
+  describe('exposed outNames', () => {
+    const outNames = (adapter: ReturnType<typeof createFakeBuildAdapter>) =>
+      adapter.calls.setup.at(-1)!.options.entryPoints.map(ep => ep.outName);
+
+    it('keeps the last segment of the key as a flat file name', async () => {
+      const config = makeConfig({
+        exposes: { './Comp': { file: './src/comp.ts' }, './nested/Other': { file: './src/o.ts' } },
+      });
+      const adapter = createFakeBuildAdapter();
+
+      await bundleExposedAndMappingsCore({ adapter }, config, makeFedOptions(), []);
+
+      expect(outNames(adapter)).toEqual(['Comp.js', 'Other.js']);
+    });
+
+    // Both published adapters emit `path.parse(outName).name`, so './a/Cmp' and './b/Cmp' wrote one
+    // file: esbuild failed the dev build, and a hashed build found no result for the second.
+    it('gives a second key with the same last segment its own name, in a hashed build', async () => {
+      const config = makeConfig({
+        exposes: {
+          './a/Cmp': { file: './src/a.ts' },
+          './b/Cmp': { file: './src/b.ts' },
+          './Cmp_2': { file: './src/c.ts' },
+          './c/Cmp': { file: './src/d.ts' },
+        },
+      });
+      const adapter = createFakeBuildAdapter({
+        results: () =>
+          outNames(adapter).map((outName, i) => ({
+            fileName: `/ws/dist/${path.parse(outName).name}-HASH000${i}.js`,
+          })),
+      });
+
+      const result = await bundleExposedAndMappingsCore(
+        { adapter },
+        config,
+        makeFedOptions({ dev: false }),
+        []
+      );
+
+      // './Cmp_2' does not collide, so it keeps its name and the duplicate skips past it.
+      expect(outNames(adapter)).toEqual(['Cmp.js', 'Cmp_3.js', 'Cmp_2.js', 'Cmp_4.js']);
+      expect(result.exposes.map(e => [e.key, e.outFileName])).toEqual([
+        ['./a/Cmp', 'Cmp-HASH0000.js'],
+        ['./b/Cmp', 'Cmp_3-HASH0001.js'],
+        ['./Cmp_2', 'Cmp_2-HASH0002.js'],
+        ['./c/Cmp', 'Cmp_4-HASH0003.js'],
+      ]);
+    });
+  });
+
   // mappingVersion is off in makeConfig, so this is the un-annotated baseline: no version
   // is detected and requiredVersion stays empty.
   it('emits the pre-existing defaults for an un-annotated mapping', async () => {

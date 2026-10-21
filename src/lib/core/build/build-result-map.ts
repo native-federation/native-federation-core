@@ -14,12 +14,19 @@ export function createBuildResultMap(
   expectedNames: string[] = []
 ): Record<string, string> {
   const expected = new Set(expectedNames.map(n => path.basename(n)));
+  const byEntry = buildResult.some(item => item.entry !== undefined);
   const map: Record<string, string> = {};
 
   for (const item of buildResult) {
     const resultName = path.basename(item.fileName);
-    const requestName =
-      isHashed && expected.has(stripHash(resultName)) ? stripHash(resultName) : resultName;
+    const isEntryByName = !byEntry && isHashed && expected.has(stripHash(resultName));
+    const requestName = item.entry ?? (isEntryByName ? stripHash(resultName) : resultName);
+    if (byEntry && map[requestName] !== undefined) {
+      throw new Error(
+        `NFBuildAdapter.build returned two results for entry '${requestName}': ` +
+          `'${map[requestName]}' and '${item.fileName}'.`
+      );
+    }
     map[requestName] = item.fileName;
   }
   return map;
@@ -33,6 +40,7 @@ function requireEntry(map: Record<string, string>, key: string): string {
   return value;
 }
 
+/** @deprecated Unused by core; removed in v5. */
 export function lookupInResultMap(map: Record<string, string>, requestName: string): string {
   const key = path.basename(requestName);
 
