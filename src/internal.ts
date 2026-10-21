@@ -45,6 +45,8 @@ export { linkedSharedDirs, sharedMappingDirs } from './lib/core/build/resolve-sh
 // Correlates watcher paths with linkedSharedDirs output; both are posix, so consumers
 // must not hand-roll the prefix check with path.sep.
 export { isUnderDir, isUnderAnyDir } from './lib/utils/path-patterns.js';
+// For an adapter whose bundler does not read `external` the way core does.
+export { matchesExternal } from './lib/utils/path-patterns.js';
 export {
   createMappingImportResolver,
   type MappingImportResolver,

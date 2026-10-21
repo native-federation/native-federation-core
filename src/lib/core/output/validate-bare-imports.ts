@@ -9,7 +9,8 @@ import { isScript } from '../../utils/script-file.js';
 import { isInSkipList } from '../../config/default-skip-list.js';
 import { inferPackageFromSecondary } from '../../utils/normalize.js';
 import { resolveOutputPath } from '../../utils/output-path.js';
-import { matchesExternal, readBareImports } from '../../utils/bare-specifier.js';
+import { readBareImports } from '../../utils/bare-specifier.js';
+import { matchesExternal } from '../../utils/path-patterns.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import { logger } from '../../utils/logger.js';
 
@@ -102,7 +103,8 @@ export function findUnresolvedImportsCore(
       continue;
     }
     for (const specifier of specifiers) {
-      if (declared.has(specifier) || matchesExternal(specifier, config.externals)) continue;
+      if (declared.has(specifier) || config.externals.some(e => matchesExternal(specifier, e)))
+        continue;
       if (file.platform === 'node' && isNodeBuiltin(specifier)) continue;
 
       const importers = importersBySpecifier.get(specifier) ?? [];

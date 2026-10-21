@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { buildSync } from 'esbuild';
 import type {
   FederationInfo,
   OutputFile,
@@ -188,7 +189,7 @@ describe('findUnresolvedImportsCore', () => {
   });
 
   // `externals` is the opt-out: kept as an import, never published, provided by someone else.
-  it('lets externals opt out, with the subpath and wildcard matching esbuild uses', () => {
+  it('lets externals opt out, with subpath and wildcard matching', () => {
     const io = createMemoryIo().setFile(
       out('Component.js'),
       `import "host-sdk"; import "host-sdk/events"; import "@icons/home.svg"; import "other";`
@@ -204,6 +205,57 @@ describe('findUnresolvedImportsCore', () => {
 
     expect(result.map(r => r.specifier)).toEqual(['other']);
     expect(result[0]!.reason).toContain("list it in 'externals'");
+  });
+
+  it('lets a scoped external cover its subpaths but not a lookalike package', () => {
+    const io = createMemoryIo().setFile(
+      out('Component.js'),
+      `import "@host/sdk/events"; import "@host/sdk-extra";`
+    );
+
+    const result = unresolvedImports(
+      io,
+      OUT,
+      browser('Component.js'),
+      makeConfig({ externals: ['@host/sdk'] }),
+      info({ exposes: [{ key: './Component', outFileName: 'Component.js' }] })
+    );
+
+    expect(result.map(r => r.specifier)).toEqual(['@host/sdk-extra']);
+  });
+
+  // Hand-written fixtures are spaced and quoted the readable way; minified output is not.
+  it('reads real minified esbuild output, re-exports and dynamic imports included', () => {
+    const [bundle] = buildSync({
+      stdin: {
+        contents: `export * from "@angular/common/http";
+          export { a } from "@angular/common/testing";
+          export const l = () => import("@angular/common/locales/de");
+          import "@angular/common";`,
+        resolveDir: OUT,
+      },
+      bundle: true,
+      minify: true,
+      write: false,
+      format: 'esm',
+      external: ['@angular/common'],
+      logLevel: 'silent',
+    }).outputFiles;
+    const io = createMemoryIo().setFile(out('main.js'), bundle!.text);
+
+    const result = unresolvedImports(
+      io,
+      OUT,
+      browser('main.js'),
+      makeConfig({ shared: { '@angular/common': ext() } }),
+      info({ shared: [shared('@angular/common', 'common.js')] })
+    );
+
+    expect(result.map(r => r.specifier)).toEqual([
+      '@angular/common/http',
+      '@angular/common/locales/de',
+      '@angular/common/testing',
+    ]);
   });
 
   it('accepts dense chunks and chunks published as externals', () => {

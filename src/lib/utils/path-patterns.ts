@@ -26,10 +26,24 @@ export function parseWildcard(pattern: string): WildcardPattern {
   return { prefix: pattern.slice(0, i), suffix: pattern.slice(i + 1), hasWildcard: true };
 }
 
+// Exact unless the pattern has a '*', and without matchesExternal's overlap guard: mapping keys
+// and `skip` are matched this way, not the way a bundler reads `external`.
 export function matchesWildcard(value: string, pattern: string): boolean {
   const { prefix, suffix, hasWildcard } = parseWildcard(pattern);
   if (!hasWildcard) return value === pattern;
-  return value.startsWith(prefix) && (suffix === '' || value.endsWith(suffix));
+  return value.startsWith(prefix) && value.endsWith(suffix);
+}
+
+// Core's reading of an external, on the unresolved specifier: a name also covers its subpaths, and
+// the one '*' matches only where prefix and suffix do not overlap. esbuild reads it this way.
+export function matchesExternal(specifier: string, pattern: string): boolean {
+  const { prefix, suffix, hasWildcard } = parseWildcard(pattern);
+  if (!hasWildcard) return specifier === pattern || specifier.startsWith(pattern + '/');
+  return (
+    specifier.length >= prefix.length + suffix.length &&
+    specifier.startsWith(prefix) &&
+    specifier.endsWith(suffix)
+  );
 }
 
 /**
