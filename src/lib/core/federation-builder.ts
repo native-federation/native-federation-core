@@ -38,8 +38,6 @@ async function init(params: BuildHelperParams): Promise<void> {
 }
 
 async function build(opts: { modifiedFiles?: string[]; signal?: AbortSignal } = {}): Promise<void> {
-  // Every init normalizes into a new cache, which a rebuild would publish without shared externals.
-  // Read before the await: an init during this build replaces it.
   if (builtCache !== options.federationCache) {
     const cache = options.federationCache;
     fedInfo = await buildForFederation(config, options, externals, opts.signal);
