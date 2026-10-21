@@ -173,7 +173,7 @@ export default withNativeFederation({
 - **`externals`**: Opt-out specifiers. They reach the bundler as external, so they stay bare imports,
   but are never published in `remoteEntry.json`: the host page or another loader provides them.
   Adapters must read every `external` the way `matchesExternal` (exported from `./internal`) does
-  for a specifier as written.
+  for the unresolved specifier.
 
 ### Unresolvable bare imports
 
@@ -184,10 +184,11 @@ or that is in `skip`, therefore stays an import nothing resolves (core#168). Aft
 non-dense chunks that `remoteEntry.json` never names are covered too, and reports each bare
 specifier that is neither declared, a published chunk, nor matched by `externals`
 (`matchesExternal`, core's rule: a name covers its subpaths, one `*` is a wildcard; esbuild reads
-`external` this way, Rollup-based bundlers need a function). Node built-ins pass only in files whose
-own bundle is `platform: 'node'`; a file that a node and a browser bundle both wrote counts as
-browser. It warns by default and throws with `features.strictImports`. It reads the files from the
-output directory, so cached bundles are covered too.
+`external` this way, Rollup-based bundlers need `external` as a function that calls it). Node
+built-ins pass only in files whose own bundle is `platform: 'node'`; a file that a node and a
+browser bundle both wrote counts as browser. It warns by default and throws with
+`features.strictImports`. It reads the files from the output directory, so cached bundles are
+covered too.
 
 It never passes a file it did not read. A script the lexer cannot parse is reported (and fails a
 strict build); a reported file missing from the output folder, usually an adapter writing into a

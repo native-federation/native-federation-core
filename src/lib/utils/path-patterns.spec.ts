@@ -125,7 +125,8 @@ describe('matchesExternal', () => {
     ['@scope/*', { '@scope/': true, '@scope/a': true, '@scope': false }],
     ['*.svg', { '.svg': true, 'a.svg': true, '@icons/a.svg': true, svg: false }],
     ['*', { a: true, '@scope/a/b': true }],
-    ['', { a: false, '@scope/a': false }],
+    // '' + '/' prefixes every absolute path; harmless, since only bare imports are checked.
+    ['', { a: false, '@scope/a': false, '/abs': true }],
   ];
 
   it.each(table)('reads %s the way the table says', (pattern, expected) => {
@@ -146,16 +147,17 @@ describe('matchesExternal', () => {
   });
 });
 
-// esbuild rejects a second '*' outright, so a config with one never builds; matchesExternal reads
-// the rest after the first '*' as literal text. Recorded so a change to either is noticed.
+// Core's rule has one wildcard: everything after the first '*' is literal text.
 describe('matchesExternal with more than one wildcard', () => {
-  it('is rejected by esbuild', () => {
-    expect(() => keptExternalByEsbuild('abc', 'a*b*c')).toThrow(/more than one "\*" wildcard/);
-  });
-
   it('treats the second * as literal text', () => {
     expect(matchesExternal('a-b*c', 'a*b*c')).toBe(true);
     expect(matchesExternal('abxc', 'a*b*c')).toBe(false);
+  });
+
+  // So a config with one never reaches the bundle checks; moves to the esbuild adapter with the
+  // agreement test above.
+  it('is rejected by esbuild', () => {
+    expect(() => keptExternalByEsbuild('abc', 'a*b*c')).toThrow(/more than one "\*" wildcard/);
   });
 });
 
