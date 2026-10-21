@@ -207,6 +207,23 @@ describe('findUnresolvedImportsCore', () => {
     expect(result[0]!.reason).toContain("list it in 'externals'");
   });
 
+  it('lets a scoped external cover its subpaths but not a lookalike package', () => {
+    const io = createMemoryIo().setFile(
+      out('Component.js'),
+      `import "@host/sdk/events"; import "@host/sdk-extra";`
+    );
+
+    const result = unresolvedImports(
+      io,
+      OUT,
+      browser('Component.js'),
+      makeConfig({ externals: ['@host/sdk'] }),
+      info({ exposes: [{ key: './Component', outFileName: 'Component.js' }] })
+    );
+
+    expect(result.map(r => r.specifier)).toEqual(['@host/sdk-extra']);
+  });
+
   // Hand-written fixtures are spaced and quoted the readable way; minified output is not.
   it('reads real minified esbuild output, re-exports and dynamic imports included', () => {
     const [bundle] = buildSync({

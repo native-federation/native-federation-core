@@ -121,6 +121,11 @@ describe('matchesExternal', () => {
     ['a*a', { a: false, aa: true, aba: true }],
     ['@angular/*', { '@angular/core': true, '@angular/common/http': true, '@angular': false }],
     ['lodash/', { lodash: false, 'lodash/fp': false }],
+    // An empty capture is allowed, at either end.
+    ['@scope/*', { '@scope/': true, '@scope/a': true, '@scope': false }],
+    ['*.svg', { '.svg': true, 'a.svg': true, '@icons/a.svg': true, svg: false }],
+    ['*', { a: true, '@scope/a/b': true }],
+    ['', { a: false, '@scope/a': false }],
   ];
 
   it.each(table)('reads %s the way the table says', (pattern, expected) => {
