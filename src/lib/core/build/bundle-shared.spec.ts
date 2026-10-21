@@ -908,6 +908,22 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       }
     );
 
+    it('rejects a relative fileName from the adapter', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const adapter = createFakeBuildAdapter({ results: [{ fileName: 'foo.js' }] });
+
+      await expect(
+        bundleSharedCore(
+          { io: mem, repo: repoAtVersion('2.0.0'), adapter },
+          fooWith(),
+          makeConfig(),
+          makeFedOptions(),
+          [],
+          { ...BUILD_OPTIONS, chunks: true }
+        )
+      ).rejects.toThrow("NFBuildAdapter.build returned a relative fileName 'foo.js'");
+    });
+
     it('recomputes the same integrity on a cache hit whose metadata has none', async () => {
       const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
       const opts = { integrityHashes: true, cache: true };

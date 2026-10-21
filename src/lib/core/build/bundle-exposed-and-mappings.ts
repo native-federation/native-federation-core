@@ -25,7 +25,7 @@ import { resolveMappingConfig } from '../../config/mapping-utils.js';
 import { applyAutoRequiredOptions } from '../../config/version-lookup.js';
 import type { AutoRequiredOptions } from '../../domain/config/external-config.contract.js';
 import { planMappingBundles } from './mapping-bundle-plan.js';
-import { toOutputFiles } from '../output/output-files.js';
+import { assertAbsoluteFileNames, toOutputFiles } from '../output/output-files.js';
 import { isScript } from '../../utils/script-file.js';
 
 // Shared mappings and exposed modules build separately so the bundler cannot factor one chunk out
@@ -112,6 +112,7 @@ export async function bundleExposedAndMappingsCore(
       if (signal?.aborted) {
         throw new AbortedError('[bundle-exposed-and-mappings] Aborted after bundle');
       }
+      assertAbsoluteFileNames(result);
     } catch (error) {
       if (!(error instanceof AbortedError)) {
         logger.error('Error building federation artifacts');

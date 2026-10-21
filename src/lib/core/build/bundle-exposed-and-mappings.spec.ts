@@ -477,9 +477,9 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     });
     const adapter = createFakeBuildAdapter({
       results: () => {
-        io.setFile('dist/Comp.js', "export * from './chunk-AAAAAAAA.js';\n");
-        io.setFile('dist/chunk-AAAAAAAA.js', 'export const a = 1;\n');
-        return [{ fileName: 'dist/Comp.js' }, { fileName: 'dist/chunk-AAAAAAAA.js' }];
+        io.setFile('/ws/dist/Comp.js', "export * from './chunk-AAAAAAAA.js';\n");
+        io.setFile('/ws/dist/chunk-AAAAAAAA.js', 'export const a = 1;\n');
+        return [{ fileName: '/ws/dist/Comp.js' }, { fileName: '/ws/dist/chunk-AAAAAAAA.js' }];
       },
     });
 
@@ -493,10 +493,10 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     const [chunk] = result.chunks!['mapping-or-exposed']!;
     expect(chunk).toMatch(/^chunk-[A-Z2-7]{8}\.js$/);
     expect(chunk).not.toBe('chunk-AAAAAAAA.js');
-    expect(io.isFile(`dist/${chunk}`)).toBe(true);
-    expect(io.isFile('dist/chunk-AAAAAAAA.js')).toBe(false);
-    expect(io.readText('dist/Comp.js')).toContain(`@nf-internal/${chunk!.replace(/\.js$/, '')}`);
-    expect(io.readText('dist/Comp.js')).not.toContain('AAAAAAAA');
+    expect(io.isFile(`/ws/dist/${chunk}`)).toBe(true);
+    expect(io.isFile('/ws/dist/chunk-AAAAAAAA.js')).toBe(false);
+    expect(io.readText('/ws/dist/Comp.js')).toContain(`@nf-internal/${chunk!.replace(/\.js$/, '')}`);
+    expect(io.readText('/ws/dist/Comp.js')).not.toContain('AAAAAAAA');
   });
 
   it('builds a mapping that asked for its own bundle apart from the rest', async () => {
@@ -543,11 +543,11 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     // build can reach into the other's output.
     const adapter = createFakeBuildAdapter({
       results: name => {
-        const entry = name === 'mapping-bundle' ? 'dist/foo.js' : 'dist/Comp.js';
+        const entry = name === 'mapping-bundle' ? '/ws/dist/foo.js' : '/ws/dist/Comp.js';
         const body = name === 'mapping-bundle' ? 'export const m = 1;\n' : 'export const e = 2;\n';
         io.setFile(entry, "export * from './chunk-AAAAAAAA.js';\n");
-        io.setFile('dist/chunk-AAAAAAAA.js', body);
-        return [{ fileName: entry }, { fileName: 'dist/chunk-AAAAAAAA.js' }];
+        io.setFile('/ws/dist/chunk-AAAAAAAA.js', body);
+        return [{ fileName: entry }, { fileName: '/ws/dist/chunk-AAAAAAAA.js' }];
       },
     });
 
@@ -562,12 +562,14 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     const [exposedChunk] = result.chunks!['mapping-or-exposed']!;
     expect(mappingChunk).toMatch(/^chunk-[A-Z2-7]{8}\.js$/);
     expect(exposedChunk).not.toBe(mappingChunk);
-    expect(io.readText(`dist/${mappingChunk}`)).toBe('export const m = 1;\n');
-    expect(io.readText(`dist/${exposedChunk}`)).toBe('export const e = 2;\n');
+    expect(io.readText(`/ws/dist/${mappingChunk}`)).toBe('export const m = 1;\n');
+    expect(io.readText(`/ws/dist/${exposedChunk}`)).toBe('export const e = 2;\n');
     expect(result.mappings[0]).toMatchObject({ packageName: 'foo', bundle: 'mapping-bundle' });
   });
 
   describe('output files (core#177)', () => {
+    afterEach(() => vi.restoreAllMocks());
+
     // One mapping and one expose, each split into an entry and a chunk with source maps, as
     // esbuild emits them with `chunks` on.
     const chunkedFixture = (io: ReturnType<typeof createMemoryIo>) =>
@@ -577,12 +579,12 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
             name === 'mapping-bundle'
               ? ['foo.js', 'chunk-MAPPING1.js']
               : ['Comp.js', 'chunk-EXPOSED1.js'];
-          io.setFile(`dist/${entry}`, `export * from './${chunk}';\n`);
-          io.setFile(`dist/${entry}.map`, '{}');
-          io.setFile(`dist/${chunk}`, `export const x = '${name}';\n`);
-          io.setFile(`dist/${chunk}.map`, '{}');
+          io.setFile(`/ws/dist/${entry}`, `export * from './${chunk}';\n`);
+          io.setFile(`/ws/dist/${entry}.map`, '{}');
+          io.setFile(`/ws/dist/${chunk}`, `export const x = '${name}';\n`);
+          io.setFile(`/ws/dist/${chunk}.map`, '{}');
           return [entry, `${entry}.map`, chunk, `${chunk}.map`].map(f => ({
-            fileName: `dist/${f}`,
+            fileName: `/ws/dist/${f}`,
           }));
         },
       });
@@ -669,7 +671,7 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
       expect(names(result.outputFiles)).not.toContain('chunk-MAPPING1.js');
       // The renamed chunk carries its source map along.
       for (const chunk of published) expect(names(result.outputFiles)).toContain(`${chunk}.map`);
-      expect(names(result.outputFiles).every(f => io.isFile(`dist/${f}`))).toBe(true);
+      expect(names(result.outputFiles).every(f => io.isFile(`/ws/dist/${f}`))).toBe(true);
     });
 
     it('leaves chunk names and entry imports untouched when not dense', async () => {
@@ -682,8 +684,8 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         []
       );
 
-      expect(io.readText('dist/Comp.js')).toBe("export * from './chunk-EXPOSED1.js';\n");
-      expect(io.isFile('dist/chunk-EXPOSED1.js')).toBe(true);
+      expect(io.readText('/ws/dist/Comp.js')).toBe("export * from './chunk-EXPOSED1.js';\n");
+      expect(io.isFile('/ws/dist/chunk-EXPOSED1.js')).toBe(true);
     });
 
     // A CSS import or a file-loader asset leaves a non-script output beside the chunks.
@@ -694,13 +696,13 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         const adapter = createFakeBuildAdapter({
           results: () => {
             io.setFile(
-              'dist/Comp.js',
+              '/ws/dist/Comp.js',
               "import './Comp.css';\nexport * from './chunk-AAAAAAAA.js';\n"
             );
-            io.setFile('dist/chunk-AAAAAAAA.js', 'export const a = 1;\n');
-            io.setFile('dist/Comp.css', '.a{}');
+            io.setFile('/ws/dist/chunk-AAAAAAAA.js', 'export const a = 1;\n');
+            io.setFile('/ws/dist/Comp.css', '.a{}');
             return ['Comp.js', 'chunk-AAAAAAAA.js', 'Comp.css'].map(f => ({
-              fileName: `dist/${f}`,
+              fileName: `/ws/dist/${f}`,
             }));
           },
         });
@@ -719,7 +721,7 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         expect(names(result.outputFiles)).toContain('Comp.css');
         expect(Object.values(result.chunks ?? {}).flat()).not.toContain('Comp.css');
         expect(Object.keys(result.integrity!)).not.toContain('Comp.css');
-        expect(io.readText('dist/Comp.css')).toBe('.a{}');
+        expect(io.readText('/ws/dist/Comp.css')).toBe('.a{}');
       }
     );
 
@@ -745,9 +747,9 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
       const io = createMemoryIo();
       const adapter = createFakeBuildAdapter({
         results: () => {
-          io.setFile('dist/Comp.js', "export * from './chunk-AAAAAAAA.js';\n");
-          io.setFile('dist/chunk-AAAAAAAA.js', 'export const a = 1;\n');
-          return [{ fileName: 'dist/Comp.js' }, { fileName: 'dist/chunk-AAAAAAAA.js' }];
+          io.setFile('/ws/dist/Comp.js', "export * from './chunk-AAAAAAAA.js';\n");
+          io.setFile('/ws/dist/chunk-AAAAAAAA.js', 'export const a = 1;\n');
+          return [{ fileName: '/ws/dist/Comp.js' }, { fileName: '/ws/dist/chunk-AAAAAAAA.js' }];
         },
       });
       const config = makeConfig({
@@ -762,7 +764,7 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         []
       );
       const [chunk] = first.chunks!['mapping-or-exposed']!;
-      io.setFile(`dist/${chunk}.map`, '{}');
+      io.setFile(`/ws/dist/${chunk}.map`, '{}');
 
       const result = await bundleExposedAndMappingsCore(
         { adapter, io },
@@ -790,11 +792,39 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
 
       expect(names(result.outputFiles)).toEqual(['Comp.js', 'chunk-AAAAAAAA.js']);
     });
+
+    // A name relative to outdir used to drop out of integrity without a word (non-dense) or fail
+    // with a bare ENOENT in the chunk rewrite (dense).
+    it.each([false, true])(
+      'rejects a relative fileName from the adapter (denseChunking: %s)',
+      async denseChunking => {
+        const io = createMemoryIo()
+          .setFile('/ws/dist/Comp.js', "export * from './chunk-AAAAAAAA.js';\n")
+          .setFile('/ws/dist/chunk-AAAAAAAA.js', 'export const a = 1;\n');
+        const adapter = createFakeBuildAdapter({
+          results: [{ fileName: 'Comp.js' }, { fileName: 'chunk-AAAAAAAA.js' }],
+        });
+        vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+
+        await expect(
+          bundleExposedAndMappingsCore(
+            { adapter, io },
+            makeConfig({
+              exposes: { './Comp': { file: './src/comp.ts' } },
+              chunks: true,
+              features: { ...makeConfig().features, denseChunking, integrityHashes: true },
+            }),
+            makeFedOptions(),
+            []
+          )
+        ).rejects.toThrow("NFBuildAdapter.build returned a relative fileName 'Comp.js'");
+      }
+    );
   });
 
   it('skips setup and forwards modifiedFiles on a rebuild', async () => {
     // setup() is skipped on a rebuild, so the fake cannot echo the entry points back.
-    const adapter = createFakeBuildAdapter({ results: [{ fileName: 'dist/Comp.js' }] });
+    const adapter = createFakeBuildAdapter({ results: [{ fileName: '/ws/dist/Comp.js' }] });
 
     await bundleExposedAndMappingsCore(
       { adapter },

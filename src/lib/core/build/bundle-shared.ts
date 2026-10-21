@@ -40,7 +40,7 @@ import {
 } from '../cache/cache-validity.js';
 import { linkedContentSignals } from './resolve-shared-dirs.js';
 import { computeIntegrityMapCore } from './compute-integrity.js';
-import { toOutputFiles } from '../output/output-files.js';
+import { assertAbsoluteFileNames, toOutputFiles } from '../output/output-files.js';
 import { isScript } from '../../utils/script-file.js';
 import { resolveOutputPath } from '../../utils/output-path.js';
 import { fileURLToPath } from 'url';
@@ -238,6 +238,7 @@ export async function bundleSharedCore(
     bundleResult = await deps.adapter.build(buildOptions.bundleName);
 
     await deps.adapter.dispose(buildOptions.bundleName);
+    assertAbsoluteFileNames(bundleResult);
 
     const cachedFiles = bundleResult.map(br => path.basename(br.fileName));
     // Re-key entry files (version-based names) to a hash of their final content, so a
