@@ -17,14 +17,14 @@ export interface SpecifierEdit {
 export function collectSpecifierEdits(
   sourceCode: string,
   fileName: string,
-  chunks: ReadonlySet<string>
+  chunkNames: ReadonlySet<string>
 ): SpecifierEdit[] {
   const imports = lexImports(sourceCode, fileName);
   const edits: SpecifierEdit[] = [];
 
   for (const imp of imports) {
     // A wildcard external also keeps relative imports such as `./styles.css`.
-    if (imp.d === -2 || !imp.n?.startsWith('./') || !chunks.has(imp.n.slice(2))) continue;
+    if (!imp.n?.startsWith('./') || !chunkNames.has(imp.n.slice(2))) continue;
 
     // A dynamic import's span includes its quotes or backticks.
     const delimiter = imp.d > -1 ? 1 : 0;
@@ -112,10 +112,10 @@ export function shiftSourceMap(
 export function rewriteChunkImportsCore(
   io: FileReaderPort & FileWriterPort,
   filePath: string,
-  chunks: ReadonlySet<string>
+  chunkNames: ReadonlySet<string>
 ): void {
   const sourceCode = io.readText(filePath);
-  const edits = collectSpecifierEdits(sourceCode, path.basename(filePath), chunks);
+  const edits = collectSpecifierEdits(sourceCode, path.basename(filePath), chunkNames);
   if (edits.length === 0) return;
 
   io.writeText(filePath, applyEdits(sourceCode, edits));

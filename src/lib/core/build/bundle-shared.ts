@@ -355,12 +355,12 @@ function rewriteImports(
 ): Map<string, string> {
   const sourceFiles = cachedFiles.filter(isScript);
   const chunks = sourceFiles.filter(file => !entries.has(file));
-  const chunkSet = new Set(chunks);
+  const chunkNames = new Set(chunks);
 
   for (const file of sourceFiles) {
     const filePath = path.join(bundleDir, file);
     const sourceCode = io.readText(filePath);
-    const edits = collectSpecifierEdits(sourceCode, file, chunkSet);
+    const edits = collectSpecifierEdits(sourceCode, file, chunkNames);
     io.writeText(filePath, applyEdits(sourceCode, edits));
     // The map esbuild wrote describes the text before the edits; move its columns along.
     shiftSourceMap(io, `${filePath}.map`, sourceCode, edits);

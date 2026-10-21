@@ -16,9 +16,9 @@ type RenameDeps = FileReaderPort & FileWriterPort & HashPort;
 const HASH_SEGMENT = /-([A-Za-z0-9_$]{8,})$/;
 
 // `'./chunk-x.js'` as the bundler wrote it, or `'@nf-internal/chunk-x'` after the rewrite.
-const NAME = `[^'"\`/]+`;
+const CHUNK_NAME = `[^'"\`/]+`;
 const CHUNK_REFERENCE = new RegExp(
-  `(['"\`])(?:\\.\\/(${NAME})|${CHUNK_PREFIX}\\/(${NAME}))\\1`,
+  `(['"\`])(?:\\.\\/(${CHUNK_NAME})|${CHUNK_PREFIX}\\/(${CHUNK_NAME}))\\1`,
   'g'
 );
 
