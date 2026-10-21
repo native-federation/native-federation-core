@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -212,6 +212,12 @@ describe('buildForFederation — unwatched linked deps hint', () => {
 
 describe('buildForFederation — output files (core#177)', () => {
   beforeEach(() => vi.clearAllMocks());
+  let workspaceRoot: string | undefined;
+  afterEach(() => {
+    vi.restoreAllMocks();
+    if (workspaceRoot) fs.rmSync(workspaceRoot, { recursive: true, force: true });
+    workspaceRoot = undefined;
+  });
 
   it('hands validateBareImports every written file and records the same list', async () => {
     const external: OutputFile[] = [
@@ -249,7 +255,7 @@ describe('buildForFederation — output files (core#177)', () => {
     const actual = await vi.importActual<typeof validation>('../output/validate-bare-imports.js');
     vi.mocked(validateBareImports).mockImplementationOnce(actual.validateBareImports);
     vi.spyOn(logger, 'error').mockImplementation(() => undefined);
-    const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-strict-'));
+    workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-strict-'));
     fs.mkdirSync(path.join(workspaceRoot, 'dist'));
     fs.writeFileSync(path.join(workspaceRoot, 'dist', 'Comp.js'), `import "@angular/common/http";`);
     vi.mocked(bundleExposedAndMappings).mockResolvedValueOnce({
@@ -264,7 +270,5 @@ describe('buildForFederation — output files (core#177)', () => {
       buildForFederation(config, makeFedOptions([], { workspaceRoot }), [])
     ).rejects.toThrow(/features\.strictImports/);
     expect(writeFederationInfo).not.toHaveBeenCalled();
-
-    vi.restoreAllMocks();
   });
 });
