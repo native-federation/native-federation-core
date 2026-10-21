@@ -185,6 +185,12 @@ own subpath and `*` rules). Node built-ins pass only in files whose own bundle i
 warns by default and throws with `features.strictImports`. It reads the files from the output
 directory, so cached bundles are covered too.
 
+It never passes a file it did not read. A script the lexer cannot parse is reported (and fails a
+strict build); a reported file missing from the output folder, usually an adapter writing into a
+subfolder, only warns, since that is the adapter breaking the `outputFiles` contract. Only ESM
+`import`/`export`/`import()` with a literal specifier is checked: a CommonJS `require` of an
+external (esbuild's `__require` shim), `import.meta.resolve` and `new URL()` are not.
+
 ### Output files
 
 Every file a build writes — entries, chunks, source maps and assets such as an extracted `.css` —
@@ -214,8 +220,8 @@ the extension for scripts.
   cache. In a dev build with `integrityHashes`, the bundles that finished before the failure have
   already overwritten their files in the output folder, so the served bytes may not match the kept
   integrity until that re-run.
-- A file the adapter writes into a subfolder is listed under a wrong name, and nothing notices:
-  integrity and the bare import check both skip a listed file that is not in the output folder.
+- A file the adapter writes into a subfolder is listed under a wrong name: the bare import check
+  warns about a missing script (integrity skips it silently), but nothing notices a missing asset.
 - Exposed and mapping output is always listed as `browser`: built-ins are allowed only in shared
   bundles built with `platform: 'node'`.
 - Integrity is computed over the same files, so the two cannot drift.
@@ -404,6 +410,8 @@ Native Federation uses an intelligent caching system to speed up builds:
   (reachable only through hoisting) is not seen; that case still needs something else to
   invalidate the entry. The walk only runs when something was added. Metadata without these fields
   misses once
+- Never on a file the lexer cannot parse: a shared bundle with one fails in `rewriteImports`
+  before it is persisted, so the cache never holds one
 - Based on the adapter's `externalsCacheKey` (core#152): `builderVersion` is core's own version,
   but the adapter produces the bytes, so it declares its identity and every option that changes
   shared externals. Core reads it before `setup()`, sorts the option keys and JSON-encodes each

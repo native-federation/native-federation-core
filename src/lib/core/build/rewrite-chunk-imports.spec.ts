@@ -1,6 +1,10 @@
 import { decode, encode } from '@jridgewell/sourcemap-codec';
 import { describe, expect, it } from 'vitest';
-import { rewriteChunkImportsCore } from './rewrite-chunk-imports.js';
+import {
+  applyEdits,
+  collectSpecifierEdits,
+  rewriteChunkImportsCore,
+} from './rewrite-chunk-imports.js';
 import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
 
 const rewrite = (source: string): string => {
@@ -35,6 +39,15 @@ describe('rewriteChunkImportsCore', () => {
   it('changes nothing but the specifiers', () => {
     const source = `import{a as b}from"./dep.js";const  x =   b;\n\n// kept as is\nexport{x}\n`;
     expect(rewrite(source)).toBe(source.replace('./dep.js', '@nf-internal/dep'));
+  });
+
+  // On the string itself: the memory IO decodes with TextDecoder, which already drops the BOM.
+  // es-module-lexer finds no import that directly follows one.
+  it('rewrites a chunk import that directly follows a BOM, and keeps the BOM', () => {
+    const source = `\uFEFFimport './dep.js';`;
+    expect(applyEdits(source, collectSpecifierEdits(source, 'chunk.js'))).toBe(
+      `\uFEFFimport '@nf-internal/dep';`
+    );
   });
 
   it('does not write a file without chunk imports', () => {

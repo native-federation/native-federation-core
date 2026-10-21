@@ -13,10 +13,16 @@ import { matchesExternal, readBareImports } from '../../utils/bare-specifier.js'
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import { logger } from '../../utils/logger.js';
 
-export interface UnresolvedImport {
+interface UnresolvedImport {
   specifier: string;
   importers: string[];
   reason: string;
+}
+
+export interface BareImportScan {
+  unresolved: UnresolvedImport[];
+  unparsable: { fileName: string; error: string }[];
+  missing: string[];
 }
 
 export function validateBareImports(
@@ -26,31 +32,44 @@ export function validateBareImports(
   files: OutputFile[]
 ): void {
   const start = process.hrtime();
-  const unresolved = findUnresolvedImportsCore(
+  const outputDir = resolveOutputPath(fedOptions);
+  const { unresolved, unparsable, missing } = findUnresolvedImportsCore(
     nodeIo,
-    resolveOutputPath(fedOptions),
+    outputDir,
     files,
     config,
     federationInfo
   );
   logger.measure(start, 'Validated the bare imports of the published files.');
 
-  if (unresolved.length === 0) return;
+  // An adapter that breaks the outputFiles contract is its bug, not the build's: never fatal.
+  if (missing.length > 0) {
+    logger.warn(
+      `Reported as written but not in '${outputDir}', so not scanned: ${formatFiles(missing)}. ` +
+        'NFBuildAdapter.build must write its files flat into outdir.'
+    );
+  }
 
-  const report = config.features.strictImports ? logger.error : logger.warn;
+  const strict = config.features.strictImports;
+  const report = strict ? logger.error : logger.warn;
+  for (const { fileName, error } of unparsable) {
+    report(`Could not scan the imports of '${fileName}' (${error}), so they were not checked.`);
+  }
   for (const { specifier, importers, reason } of unresolved) {
     report(
-      `${formatImporters(importers)} import${importers.length === 1 ? 's' : ''} ` +
+      `${formatFiles(importers)} import${importers.length === 1 ? 's' : ''} ` +
         `'${specifier}', which remoteEntry.json does not declare, so it will not resolve at ` +
         `runtime. ${reason}`
     );
   }
 
-  if (config.features.strictImports) {
-    throw new Error(
-      `${unresolved.length} bare import(s) cannot be resolved from remoteEntry.json ` +
-        '(features.strictImports). See the errors above.'
-    );
+  if (strict && (unresolved.length > 0 || unparsable.length > 0)) {
+    const problems: string[] = [];
+    if (unresolved.length > 0) {
+      problems.push(`${unresolved.length} bare import(s) cannot be resolved from remoteEntry.json`);
+    }
+    if (unparsable.length > 0) problems.push(`${unparsable.length} file(s) could not be scanned`);
+    throw new Error(`${problems.join(' and ')} (features.strictImports). See the errors above.`);
   }
 }
 
@@ -62,15 +81,27 @@ export function findUnresolvedImportsCore(
   files: OutputFile[],
   config: NormalizedFederationConfig,
   federationInfo: FederationInfo
-): UnresolvedImport[] {
+): BareImportScan {
   const declared = declaredSpecifiers(federationInfo);
   const importersBySpecifier = new Map<string, string[]>();
+  const unparsable: BareImportScan['unparsable'] = [];
+  const missing: string[] = [];
 
   for (const file of files.filter(f => isScript(f.fileName))) {
     const filePath = path.join(outputDir, file.fileName);
-    if (!io.exists(filePath)) continue;
+    if (!io.exists(filePath)) {
+      missing.push(file.fileName);
+      continue;
+    }
 
-    for (const specifier of readBareImports(io, filePath, file.fileName)) {
+    let specifiers: string[];
+    try {
+      specifiers = readBareImports(io, filePath, file.fileName);
+    } catch (e) {
+      unparsable.push({ fileName: file.fileName, error: (e as Error).message });
+      continue;
+    }
+    for (const specifier of specifiers) {
       if (declared.has(specifier) || matchesExternal(specifier, config.externals)) continue;
       if (file.platform === 'node' && isNodeBuiltin(specifier)) continue;
 
@@ -80,13 +111,14 @@ export function findUnresolvedImportsCore(
     }
   }
 
-  return [...importersBySpecifier]
+  const unresolved = [...importersBySpecifier]
     .sort(([a], [b]) => (a < b ? -1 : 1))
     .map(([specifier, importers]) => ({
       specifier,
       importers,
       reason: explain(specifier, config, declared),
     }));
+  return { unresolved, unparsable, missing };
 }
 
 function declaredSpecifiers(federationInfo: FederationInfo): Set<string> {
@@ -139,10 +171,10 @@ function explain(
   return "Share it, or list it in 'externals' if the host page provides it.";
 }
 
-function formatImporters(importers: string[]): string {
-  const shown = importers
+function formatFiles(files: string[]): string {
+  const shown = files
     .slice(0, 3)
     .map(file => `'${file}'`)
     .join(', ');
-  return importers.length > 3 ? `${shown} and ${importers.length - 3} more` : shown;
+  return files.length > 3 ? `${shown} and ${files.length - 3} more` : shown;
 }

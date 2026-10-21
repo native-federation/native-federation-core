@@ -1,6 +1,5 @@
-import { initSync, parse } from 'es-module-lexer';
 import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
-import { logger } from './logger.js';
+import { lexImports } from './lex-imports.js';
 
 function isBare(specifier: string): boolean {
   if (specifier.startsWith('.') || specifier.startsWith('/')) return false;
@@ -22,16 +21,9 @@ export function matchesExternal(specifier: string, externals: readonly string[])
   });
 }
 
-// Static and dynamic imports alike; a file the lexer cannot parse yields none.
+// Static and dynamic imports alike; throws on a file the lexer cannot parse.
 export function readBareImports(io: FileReaderPort, filePath: string, fileName: string): string[] {
-  initSync();
-  try {
-    const [imports] = parse(io.readText(filePath), fileName);
-    return imports
-      .filter(imp => imp.d !== -2 && imp.n !== undefined && isBare(imp.n))
-      .map(imp => imp.n!);
-  } catch (e) {
-    logger.debug(`Could not scan the imports of '${fileName}': ${(e as Error).message}`);
-    return [];
-  }
+  return lexImports(io.readText(filePath), fileName)
+    .filter(imp => imp.d !== -2 && imp.n !== undefined && isBare(imp.n))
+    .map(imp => imp.n!);
 }

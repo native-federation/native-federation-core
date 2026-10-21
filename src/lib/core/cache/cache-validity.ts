@@ -17,6 +17,7 @@ export function externalImportsCore(
 ): string[] {
   const found = new Set<string>();
   for (const file of files.filter(isScript)) {
+    // No catch: rewriteImports parsed these already; skipping one could keep a stale entry.
     for (const specifier of readBareImports(io, path.join(dir, file), file)) {
       if (matchesExternal(specifier, external)) found.add(specifier);
     }

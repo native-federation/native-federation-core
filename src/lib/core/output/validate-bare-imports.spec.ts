@@ -77,6 +77,9 @@ const browser = (...fileNames: string[]): OutputFile[] =>
 const node = (...fileNames: string[]): OutputFile[] =>
   fileNames.map(fileName => ({ fileName, platform: 'node' }));
 
+const unresolvedImports = (...args: Parameters<typeof findUnresolvedImportsCore>) =>
+  findUnresolvedImportsCore(...args).unresolved;
+
 describe('findUnresolvedImportsCore', () => {
   // core#168 case 1: provideAnimationsAsync() lazily imports a secondary the scan pruned.
   it('reports a lazily imported secondary of a shared package that was not published', () => {
@@ -95,7 +98,7 @@ describe('findUnresolvedImportsCore', () => {
       },
     });
 
-    const result = findUnresolvedImportsCore(
+    const result = unresolvedImports(
       io,
       OUT,
       browser(
@@ -137,7 +140,7 @@ describe('findUnresolvedImportsCore', () => {
       skip: prepareSkipList(['@angular/common/http']),
     });
 
-    const [unresolved, ...rest] = findUnresolvedImportsCore(
+    const [unresolved, ...rest] = unresolvedImports(
       io,
       OUT,
       browser('_angular_platform_browser.js'),
@@ -163,7 +166,7 @@ describe('findUnresolvedImportsCore', () => {
       `import "@angular/common/http"; import "@angular/common";`
     );
 
-    const result = findUnresolvedImportsCore(
+    const result = unresolvedImports(
       io,
       OUT,
       browser('a.js'),
@@ -191,7 +194,7 @@ describe('findUnresolvedImportsCore', () => {
       `import "host-sdk"; import "host-sdk/events"; import "@icons/home.svg"; import "other";`
     );
 
-    const result = findUnresolvedImportsCore(
+    const result = unresolvedImports(
       io,
       OUT,
       browser('Component.js'),
@@ -209,7 +212,7 @@ describe('findUnresolvedImportsCore', () => {
       .setFile(out('chunk-A.js'), `export {};`)
       .setFile(out('chunk-B.js'), `export {};`);
 
-    const result = findUnresolvedImportsCore(
+    const result = unresolvedImports(
       io,
       OUT,
       browser('main.js', 'chunk-A.js', 'chunk-B.js'),
@@ -231,7 +234,7 @@ describe('findUnresolvedImportsCore', () => {
        const f = n => import(n); console.log(import.meta.url);`
     );
 
-    const result = findUnresolvedImportsCore(
+    const result = unresolvedImports(
       io,
       OUT,
       browser('main.js'),
@@ -251,7 +254,7 @@ describe('findUnresolvedImportsCore', () => {
       shared: { 'browser-lib': ext(), 'node-lib': ext({ platform: 'node' }) },
     });
 
-    const result = findUnresolvedImportsCore(
+    const result = unresolvedImports(
       io,
       OUT,
       [...browser('browser-lib.js'), ...node('node-lib.js', 'node-chunk.js')],
@@ -276,7 +279,7 @@ describe('findUnresolvedImportsCore', () => {
       .setFile(out('_my_org_ui.js'), `export * from "./chunk-UI.js";`)
       .setFile(out('chunk-UI.js'), `import "@angular/cdk/overlay";`);
 
-    const result = findUnresolvedImportsCore(
+    const result = unresolvedImports(
       io,
       OUT,
       browser('_my_org_ui.js', 'chunk-UI.js'),
@@ -294,7 +297,7 @@ describe('findUnresolvedImportsCore', () => {
       .setFile(out('chunk-N.js'), `import "crypto";`)
       .setFile(out('chunk-B.js'), `import "crypto";`);
 
-    const result = findUnresolvedImportsCore(
+    const result = unresolvedImports(
       io,
       OUT,
       [...node('chunk-N.js'), ...browser('chunk-B.js')],
@@ -309,7 +312,7 @@ describe('findUnresolvedImportsCore', () => {
   it('points a subpath of a shared mapping at the mapping', () => {
     const io = createMemoryIo().setFile(out('Component.js'), `import "@my-org/ui/button";`);
 
-    const [unresolved] = findUnresolvedImportsCore(
+    const [unresolved] = unresolvedImports(
       io,
       OUT,
       browser('Component.js'),
@@ -323,7 +326,7 @@ describe('findUnresolvedImportsCore', () => {
     expect(unresolved!.reason).toContain("subpath of the shared mapping '@my-org/ui'");
   });
 
-  it('lists every importer once and skips files that are missing or not JavaScript', () => {
+  it('lists every importer once and scans only JavaScript', () => {
     const io = createMemoryIo()
       .setFile(out('a.js'), `import "missing"; import "missing";`)
       .setFile(out('b.js'), `import "missing";`)
@@ -334,29 +337,57 @@ describe('findUnresolvedImportsCore', () => {
     const result = findUnresolvedImportsCore(
       io,
       OUT,
-      browser('a.js', 'b.js', 'c.js', 'styles.css', 'a.js.map'),
+      browser('a.js', 'b.js', 'styles.css', 'a.js.map'),
       makeConfig(),
       info({
-        shared: [
-          shared('a', 'a.js'),
-          shared('b', 'b.js'),
-          shared('c', 'c.js'),
-          shared('s', 'styles.css'),
-        ],
+        shared: [shared('a', 'a.js'), shared('b', 'b.js'), shared('s', 'styles.css')],
       })
     );
 
-    expect(result).toEqual([
-      expect.objectContaining({ specifier: 'missing', importers: ['a.js', 'b.js'] }),
-    ]);
+    expect(result).toEqual({
+      unresolved: [expect.objectContaining({ specifier: 'missing', importers: ['a.js', 'b.js'] })],
+      unparsable: [],
+      missing: [],
+    });
+  });
+
+  // An adapter that writes into a subfolder reports a basename that is not in the output folder;
+  // that file used to be skipped without a word.
+  it('reports a written script that is not in the output folder', () => {
+    const io = createMemoryIo().setFile(out('chunks/chunk-A.js'), `import "missing";`);
+
+    const result = findUnresolvedImportsCore(io, OUT, browser('chunk-A.js'), makeConfig(), info());
+
+    expect(result).toEqual({ unresolved: [], unparsable: [], missing: ['chunk-A.js'] });
+  });
+
+  // Valid JS the lexer misreads: '/' after a block starts a regex, not a division.
+  it('reports a script the lexer cannot parse instead of passing it', () => {
+    const io = createMemoryIo().setFile(out('a.js'), '{}/`/;import "missing";');
+
+    const { unresolved, unparsable } = findUnresolvedImportsCore(
+      io,
+      OUT,
+      browser('a.js'),
+      makeConfig(),
+      info()
+    );
+
+    expect(unresolved).toEqual([]);
+    expect(unparsable).toEqual([{ fileName: 'a.js', error: expect.any(String) }]);
   });
 });
 
 describe('validateBareImports', () => {
-  afterEach(() => vi.restoreAllMocks());
+  let workspaceRoot: string | undefined;
+  afterEach(() => {
+    vi.restoreAllMocks();
+    if (workspaceRoot) fs.rmSync(workspaceRoot, { recursive: true, force: true });
+    workspaceRoot = undefined;
+  });
 
   function setup(strictImports: boolean) {
-    const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-validate-'));
+    workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-validate-'));
     fs.mkdirSync(path.join(workspaceRoot, 'dist'));
     fs.writeFileSync(path.join(workspaceRoot, 'dist', 'a.js'), `import "@angular/common/http";`);
     const config = makeConfig({ shared: { '@angular/common': ext() } });
@@ -395,5 +426,94 @@ describe('validateBareImports', () => {
     expect(() =>
       validateBareImports(config, fedOptions, fedInfo, [...files, ...browser('chunk-X.js')])
     ).toThrow(/1 bare import/);
+  });
+
+  // Real files: the memory IO decodes with TextDecoder, which drops the BOM, while nodeIo keeps it
+  // and es-module-lexer then finds no import that follows it directly.
+  it('reads the imports of a script that starts with a BOM', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const { config, fedOptions, fedInfo, files } = setup(false);
+    fs.writeFileSync(
+      path.join(fedOptions.workspaceRoot, 'dist', 'a.js'),
+      '\uFEFFimport "@angular/common/http";'
+    );
+
+    validateBareImports(config, fedOptions, fedInfo, files);
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("'a.js' imports '@angular/common/http'")
+    );
+  });
+
+  it('warns about a file it could not scan, and fails the build on it with strictImports', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    const { config, fedOptions, fedInfo, files } = setup(false);
+    fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'a.js'), '{}/`/;import "x";');
+
+    expect(() => validateBareImports(config, fedOptions, fedInfo, files)).not.toThrow();
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("Could not scan the imports of 'a.js'")
+    );
+
+    config.features.strictImports = true;
+    expect(() => validateBareImports(config, fedOptions, fedInfo, files)).toThrow(
+      /^1 file\(s\) could not be scanned \(features.strictImports\)/
+    );
+  });
+
+  it('logs a file it could not scan as an error with strictImports', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    const { config, fedOptions, fedInfo, files } = setup(true);
+    fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'a.js'), '{}/`/;import "x";');
+
+    expect(() => validateBareImports(config, fedOptions, fedInfo, files)).toThrow();
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining("Could not scan the imports of 'a.js'")
+    );
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  // A missing file is the adapter breaking the outputFiles contract; failing strict builds on it
+  // would be new in a minor.
+  it('only warns about a reported file that is missing, even with strictImports', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const { config, fedOptions, fedInfo } = setup(true);
+    fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'a.js'), `export {};`);
+
+    expect(() =>
+      validateBareImports(config, fedOptions, fedInfo, browser('a.js', 'ghost.js'))
+    ).not.toThrow();
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringMatching(/^Reported as written but not in .*, so not scanned: 'ghost.js'\./)
+    );
+  });
+
+  // An adapter writing into a subfolder misses every script, so one line per file would flood
+  // each rebuild.
+  it('reports every missing file in one warning', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const { config, fedOptions, fedInfo } = setup(false);
+    fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'a.js'), `export {};`);
+
+    validateBareImports(config, fedOptions, fedInfo, browser('a.js', 'ghost.js', 'ghost2.js'));
+
+    const missingWarnings = warn.mock.calls.filter(([message]) =>
+      String(message).includes('Reported as written')
+    );
+    expect(missingWarnings).toEqual([
+      [expect.stringMatching(/so not scanned: 'ghost.js', 'ghost2.js'\./)],
+    ]);
+  });
+
+  it('names both problems when a strict build has an unresolved import and an unscanned file', () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    const { config, fedOptions, fedInfo } = setup(true);
+    fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'b.js'), '{}/`/;import "x";');
+
+    expect(() => validateBareImports(config, fedOptions, fedInfo, browser('a.js', 'b.js'))).toThrow(
+      /^1 bare import\(s\) cannot be resolved from remoteEntry.json and 1 file\(s\) could not be scanned/
+    );
   });
 });
