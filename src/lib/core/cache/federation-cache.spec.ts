@@ -79,8 +79,8 @@ describe('collectOutputFiles', () => {
     ]);
   });
 
-  // Derived on every read, so the list cannot go stale when a rebuild fails between the shared
-  // bundles and the mapping/exposed bundle.
+  // Derived on every read: after a rebuild that fails between the shared bundles and the
+  // mapping/exposed bundle, it pairs the newest shared files with the last artifact files.
   it('reflects external files replaced after the artifact files were recorded', () => {
     const cache = createFederationCache('/cache');
     cache.externalFiles = { shared: browser('a.old.js') };
