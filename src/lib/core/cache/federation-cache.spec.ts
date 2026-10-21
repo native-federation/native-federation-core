@@ -3,7 +3,6 @@ import {
   addExternalsToCache,
   collectOutputFiles,
   createFederationCache,
-  externalsAreStale,
   recordArtifactFiles,
   withStagedExternals,
 } from './federation-cache.js';
@@ -127,7 +126,7 @@ describe('withStagedExternals', () => {
 
     expect(cache.externals).toEqual([external('new')]);
     expect(cache.externalFiles).toEqual({ 'browser-shared': browser('new.js') });
-    expect(externalsAreStale(cache)).toBe(false);
+    expect(cache.sharedRunIncomplete).toBe(false);
   });
 
   it('keeps the last complete externals and marks the run incomplete when it throws', async () => {
@@ -145,7 +144,7 @@ describe('withStagedExternals', () => {
 
     expect(cache.externals).toEqual([external('old')]);
     expect(cache.externalFiles).toEqual({ 'browser-shared': browser('old.js') });
-    expect(externalsAreStale(cache)).toBe(true);
+    expect(cache.sharedRunIncomplete).toBe(true);
   });
 
   // The staged copy starts from the cache, so any field it does not reset explicitly would carry

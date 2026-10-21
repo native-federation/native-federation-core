@@ -208,8 +208,9 @@ the extension for scripts.
 - The shared bundles write into a staged copy of `externals`, `chunks`, `integrity` and
   `externalFiles`, which replaces the cached fields only once every plan ran
   (`withStagedExternals`). A failed or aborted run keeps the last complete set and leaves
-  the run marked incomplete, so the next rebuild re-runs every plan even when nothing shared
-  changed: the run that failed may already have cleared a bundle's disk cache.
+  the run marked incomplete (`sharedRunIncomplete`), so the next rebuild re-runs every plan even
+  when nothing shared changed: the run that failed may already have cleared a bundle's disk
+  cache.
 - A file the adapter writes into a subfolder is listed under a wrong name, and nothing notices:
   integrity and the bare import check both skip a listed file that is not in the output folder.
 - Exposed and mapping output is always listed as `browser`: built-ins are allowed only in shared
@@ -376,6 +377,10 @@ Native Federation uses an intelligent caching system to speed up builds:
 - Accumulates the externals, chunks and integrity hashes that go into `remoteEntry.json`, and the
   files each shared bundle wrote (`externalFiles`)
 - Holds `artifactFiles`, what the last mapping and exposed bundle wrote
+- State a build's correctness depends on lives on `FederationCache` itself, such as
+  `sharedRunIncomplete`, never in a module-private side table keyed by the cache object: a copy
+  of the cache (`{ ...cache }`) would silently lose it. Only state that controls how often a
+  warning repeats may sit in such a side table
 
 **Cache invalidation**:
 

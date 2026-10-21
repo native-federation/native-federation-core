@@ -31,8 +31,6 @@ export function addExternalsToCache(
   }
 }
 
-const staleExternals = new WeakSet<FederationCache>();
-
 type ExternalsState = Pick<FederationCache, 'externals' | 'chunks' | 'integrity' | 'externalFiles'>;
 
 const pickExternals = ({ externals, chunks, integrity, externalFiles }: ExternalsState) => ({
@@ -56,15 +54,11 @@ export async function withStagedExternals(
   cache: FederationCache,
   run: (staged: FederationCache) => Promise<void>
 ): Promise<void> {
-  staleExternals.add(cache);
+  cache.sharedRunIncomplete = true;
   const staged: FederationCache = { ...cache, ...emptyExternals() };
   await run(staged);
   Object.assign(cache, pickExternals(staged));
-  staleExternals.delete(cache);
-}
-
-export function externalsAreStale(cache: FederationCache): boolean {
-  return staleExternals.has(cache);
+  cache.sharedRunIncomplete = false;
 }
 
 // Replaced, never merged: a rebuild's chunks need not keep their names, and stale ones stay on disk.

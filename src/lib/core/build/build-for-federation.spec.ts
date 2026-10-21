@@ -62,7 +62,7 @@ const { buildForFederation } = await import('./build-for-federation.js');
 const { hintUnwatchedLinkedDeps } = await import('./resolve-shared-dirs.js');
 const { writeImportMap } = await import('../output/write-import-map.js');
 const { validateBareImports } = await import('../output/validate-bare-imports.js');
-const { collectOutputFiles, externalsAreStale } = await import('../cache/federation-cache.js');
+const { collectOutputFiles } = await import('../cache/federation-cache.js');
 const { writeFederationInfo } = await import('../output/write-federation-info.js');
 const { bundleExposedAndMappings } = await import('./bundle-exposed-and-mappings.js');
 
@@ -340,7 +340,7 @@ describe('buildForFederation — an aborted build', () => {
     );
 
     expect(slowFinished).toBe(true);
-    expect(externalsAreStale(fedOptions.federationCache)).toBe(true);
+    expect(fedOptions.federationCache.sharedRunIncomplete).toBe(true);
     expect(fedOptions.federationCache.externals).toEqual([]);
   });
 
@@ -352,7 +352,7 @@ describe('buildForFederation — an aborted build', () => {
     bundled = { 'browser-shared': { externals: [flat('react', 'react.js')], outputFiles: [] } };
     await buildForFederation(makeConfig(false), fedOptions, []);
 
-    expect(externalsAreStale(fedOptions.federationCache)).toBe(false);
+    expect(fedOptions.federationCache.sharedRunIncomplete).toBe(false);
     expect(fedOptions.federationCache.externals).toEqual([flat('react', 'react.js')]);
   });
 });

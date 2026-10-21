@@ -9,7 +9,6 @@ import { executeSharedBundlePlans } from './build-for-federation.js';
 import { finalizeFederationBuild } from './finalize-federation-build.js';
 import { affectedSharedKeys, resolveSharedPackageDirs } from './resolve-shared-dirs.js';
 import { cacheEntryCore } from '../cache/cache-persistence.js';
-import { externalsAreStale } from '../cache/federation-cache.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import type { IoPort } from '../../domain/utils/io-port.contract.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
@@ -58,7 +57,7 @@ export async function rebuildAffectedExternals(
 ): Promise<void> {
   const federationCache = fedOptions.federationCache;
   // The last run did not complete, so it is re-run whatever changed since.
-  const incomplete = externalsAreStale(federationCache);
+  const incomplete = federationCache.sharedRunIncomplete === true;
   if (modifiedFiles.length === 0 && !incomplete) return;
 
   const plans = planSharedBundles(config, externals);

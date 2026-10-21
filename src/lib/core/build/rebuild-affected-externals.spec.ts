@@ -122,4 +122,20 @@ describe('rebuildAffectedExternals — port-injected resolution + invalidation',
       planSharedBundles(config(), ['a'])
     );
   });
+
+  // A spread copy of the cache keeps its fields but not its identity, so the mark must be a field.
+  it('still re-runs every plan when the cache was copied after the failed run', async () => {
+    const fed = fedOptions([]);
+    await withStagedExternals(fed.federationCache, async () => {
+      throw new Error('aborted');
+    }).catch(() => undefined);
+    fed.federationCache = { ...fed.federationCache };
+
+    await rebuildAffectedExternals(config(), fed, ['a'], [], undefined, linkedIo(), repo());
+
+    expect(executeSharedBundlePlans).toHaveBeenCalledOnce();
+    expect(vi.mocked(executeSharedBundlePlans).mock.calls[0]![0]).toEqual(
+      planSharedBundles(config(), ['a'])
+    );
+  });
 });

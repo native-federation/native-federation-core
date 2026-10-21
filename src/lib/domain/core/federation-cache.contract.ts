@@ -13,6 +13,8 @@ export type FederationCache<TBundlerCache = unknown> = {
   externalFiles?: Record<string, OutputFile[]>;
   // Replaced on every build, never merged.
   artifactFiles?: OutputFile[];
+  // Core-owned: set while a shared bundle run is in flight, and left set when it fails.
+  sharedRunIncomplete?: boolean;
   bundlerCache: TBundlerCache;
   cachePath: string;
 };
