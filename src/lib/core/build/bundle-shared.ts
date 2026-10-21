@@ -10,6 +10,7 @@ import type { PackageJsonRepository } from '../../domain/utils/package-json.cont
 import type {
   ChunkInfo,
   IntegrityMap,
+  OutputFile,
   SharedInfo,
 } from '../../domain/core/federation-info.contract.js';
 import type { HashPort, IoPort } from '../../domain/utils/io-port.contract.js';
@@ -39,6 +40,8 @@ import {
 } from '../cache/cache-validity.js';
 import { linkedContentSignals } from './resolve-shared-dirs.js';
 import { computeIntegrityMapCore } from './compute-integrity.js';
+import { assertAbsoluteFileNames, toOutputFiles } from '../output/output-files.js';
+import { isScript } from '../../utils/script-file.js';
 import { resolveOutputPath } from '../../utils/output-path.js';
 import { fileURLToPath } from 'url';
 import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
@@ -51,7 +54,13 @@ import { getBuildAdapter } from './build-adapter.js';
 import { synthesizeCjsNamedExportsEntry, type ModuleEvaluator } from './synthesize-cjs-exports.js';
 import { createRequire } from 'module';
 import { inferPackageFromSecondary } from '../../utils/normalize.js';
-import { isScript } from '../../utils/script-file.js';
+
+export interface SharedBundleResult {
+  externals: SharedInfo[];
+  chunks?: ChunkInfo;
+  integrity?: IntegrityMap;
+  outputFiles: OutputFile[];
+}
 
 export async function bundleShared(
   sharedBundles: Record<string, NormalizedExternalConfig>,
@@ -59,11 +68,7 @@ export async function bundleShared(
   fedOptions: NormalizedFederationOptions,
   externals: string[],
   buildOptions: { platform: 'browser' | 'node'; bundleName: string; chunks: boolean }
-): Promise<{
-  externals: SharedInfo[];
-  chunks?: Record<string, string[]>;
-  integrity?: IntegrityMap;
-}> {
+): Promise<SharedBundleResult> {
   const requireFromWorkspace = createRequire(path.join(fedOptions.workspaceRoot, 'index.js'));
   return bundleSharedCore(
     {
@@ -99,11 +104,7 @@ export async function bundleSharedCore(
   fedOptions: NormalizedFederationOptions,
   externals: string[],
   buildOptions: { platform: 'browser' | 'node'; bundleName: string; chunks: boolean }
-): Promise<{
-  externals: SharedInfo[];
-  chunks?: Record<string, string[]>;
-  integrity?: IntegrityMap;
-}> {
+): Promise<SharedBundleResult> {
   const builderPackageJson = readBuilderPackageJson(deps.io, fileURLToPath(import.meta.url));
   const builderVersion = parseBuilderVersion(builderPackageJson);
 
@@ -172,6 +173,7 @@ export async function bundleSharedCore(
         externals: cacheMetadata.externals,
         chunks: cacheMetadata.chunks,
         integrity,
+        outputFiles: toOutputFiles(cacheMetadata.files, buildOptions.platform),
       };
     }
   }
@@ -236,6 +238,7 @@ export async function bundleSharedCore(
     bundleResult = await deps.adapter.build(buildOptions.bundleName);
 
     await deps.adapter.dispose(buildOptions.bundleName);
+    assertAbsoluteFileNames(bundleResult);
 
     const cachedFiles = bundleResult.map(br => path.basename(br.fileName));
     // Re-key entry files (version-based names) to a hash of their final content, so a
@@ -322,7 +325,12 @@ export async function bundleSharedCore(
 
   bundleCache.copyFiles(resolveOutputPath(fedOptions));
 
-  return { externals: result, chunks: exportedChunks, integrity };
+  return {
+    externals: result,
+    chunks: exportedChunks,
+    integrity,
+    outputFiles: toOutputFiles(persistedFiles, buildOptions.platform),
+  };
 }
 
 // Their secondaries are published whether or not anything imports them, so one that imports an

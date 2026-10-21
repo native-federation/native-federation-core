@@ -10,12 +10,14 @@ import type { PackageJsonRepository } from '../../domain/utils/package-json.cont
 // resolveSharedPackageDirs / affectedSharedKeys / cacheEntryCore all run for real
 // against the injected memory-io, so this exercises the actual resolution path.
 vi.mock('./build-for-federation.js', () => ({
-  executeSharedBundlePlans: vi.fn(async (_plans, _config, fedOptions: NormalizedFederationOptions) => {
-    fedOptions.federationCache.externals.push({
-      packageName: 'a',
-      outFileName: 'a.fresh.js',
-    } as SharedInfo);
-  }),
+  executeSharedBundlePlans: vi.fn(
+    async (_plans, _config, fedOptions: NormalizedFederationOptions) => {
+      fedOptions.federationCache.externals.push({
+        packageName: 'a',
+        outFileName: 'a.fresh.js',
+      } as SharedInfo);
+    }
+  ),
 }));
 
 const { rebuildAffectedExternals } = await import('./rebuild-for-federation.js');
@@ -43,8 +45,7 @@ function fedOptions(externals: SharedInfo[]): NormalizedFederationOptions {
 
 function repo(): PackageJsonRepository {
   return {
-    findDepPackageJson: (name: string) =>
-      name === 'a' ? '/ws/node_modules/a/package.json' : null,
+    findDepPackageJson: (name: string) => (name === 'a' ? '/ws/node_modules/a/package.json' : null),
     getPackageJsonFiles: () => [],
     readJson: () => ({}),
     exists: () => true,
@@ -52,8 +53,7 @@ function repo(): PackageJsonRepository {
 }
 
 // Symlinked (npm-linked) shared package `a` → dev checkout at /dev/a.
-const linkedIo = () =>
-  createMemoryIo().setSymlink('/ws/node_modules/a', '/dev/a').setDir('/cache');
+const linkedIo = () => createMemoryIo().setSymlink('/ws/node_modules/a', '/dev/a').setDir('/cache');
 
 describe('rebuildAffectedExternals — port-injected resolution + invalidation', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -61,17 +61,35 @@ describe('rebuildAffectedExternals — port-injected resolution + invalidation',
   it('re-bundles when a modified file resolves under a symlinked shared package', async () => {
     const fed = fedOptions([{ packageName: 'a', outFileName: 'a.stale.js' } as SharedInfo]);
 
-    await rebuildAffectedExternals(config(), fed, ['a'], ['/dev/a/src/x.ts'], undefined, linkedIo(), repo());
+    await rebuildAffectedExternals(
+      config(),
+      fed,
+      ['a'],
+      ['/dev/a/src/x.ts'],
+      undefined,
+      linkedIo(),
+      repo()
+    );
 
     expect(executeSharedBundlePlans).toHaveBeenCalledOnce();
-    expect(fed.federationCache.externals).toEqual([{ packageName: 'a', outFileName: 'a.fresh.js' }]);
+    expect(fed.federationCache.externals).toEqual([
+      { packageName: 'a', outFileName: 'a.fresh.js' },
+    ]);
   });
 
   it('reuses cached externals when the modified file is outside every shared dir', async () => {
     const cached: SharedInfo[] = [{ packageName: 'a', outFileName: 'a.cached.js' } as SharedInfo];
     const fed = fedOptions(cached);
 
-    await rebuildAffectedExternals(config(), fed, ['a'], ['/unrelated/x.ts'], undefined, linkedIo(), repo());
+    await rebuildAffectedExternals(
+      config(),
+      fed,
+      ['a'],
+      ['/unrelated/x.ts'],
+      undefined,
+      linkedIo(),
+      repo()
+    );
 
     expect(executeSharedBundlePlans).not.toHaveBeenCalled();
     expect(fed.federationCache.externals).toEqual(cached);

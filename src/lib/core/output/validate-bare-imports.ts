@@ -1,15 +1,15 @@
 import * as path from 'path';
 import { builtinModules } from 'module';
-import type { FederationInfo } from '../../domain/core/federation-info.contract.js';
+import type { FederationInfo, OutputFile } from '../../domain/core/federation-info.contract.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
 import type { FileReaderPort } from '../../domain/utils/io-port.contract.js';
 import { toChunkImport } from '../../domain/core/chunk.js';
+import { isScript } from '../../utils/script-file.js';
 import { isInSkipList } from '../../config/default-skip-list.js';
 import { inferPackageFromSecondary } from '../../utils/normalize.js';
 import { resolveOutputPath } from '../../utils/output-path.js';
 import { matchesExternal, readBareImports } from '../../utils/bare-specifier.js';
-import { isScript } from '../../utils/script-file.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import { logger } from '../../utils/logger.js';
 
@@ -19,20 +19,17 @@ export interface UnresolvedImport {
   reason: string;
 }
 
-interface PublishedFile {
-  fileName: string;
-  allowsBuiltins: boolean;
-}
-
 export function validateBareImports(
   config: NormalizedFederationConfig,
   fedOptions: NormalizedFederationOptions,
-  federationInfo: FederationInfo
+  federationInfo: FederationInfo,
+  files: OutputFile[]
 ): void {
   const start = process.hrtime();
   const unresolved = findUnresolvedImportsCore(
     nodeIo,
     resolveOutputPath(fedOptions),
+    files,
     config,
     federationInfo
   );
@@ -62,19 +59,20 @@ export function validateBareImports(
 export function findUnresolvedImportsCore(
   io: FileReaderPort,
   outputDir: string,
+  files: OutputFile[],
   config: NormalizedFederationConfig,
   federationInfo: FederationInfo
 ): UnresolvedImport[] {
   const declared = declaredSpecifiers(federationInfo);
   const importersBySpecifier = new Map<string, string[]>();
 
-  for (const file of publishedFiles(config, federationInfo)) {
+  for (const file of files.filter(f => isScript(f.fileName))) {
     const filePath = path.join(outputDir, file.fileName);
     if (!io.exists(filePath)) continue;
 
     for (const specifier of readBareImports(io, filePath, file.fileName)) {
       if (declared.has(specifier) || matchesExternal(specifier, config.externals)) continue;
-      if (file.allowsBuiltins && isNodeBuiltin(specifier)) continue;
+      if (file.platform === 'node' && isNodeBuiltin(specifier)) continue;
 
       const importers = importersBySpecifier.get(specifier) ?? [];
       if (!importers.includes(file.fileName)) importers.push(file.fileName);
@@ -101,42 +99,6 @@ function declaredSpecifiers(federationInfo: FederationInfo): Set<string> {
     chunks.forEach(chunk => declared.add(toChunkImport(chunk)));
   }
   return declared;
-}
-
-function publishedFiles(
-  config: NormalizedFederationConfig,
-  federationInfo: FederationInfo
-): PublishedFile[] {
-  const isNode = (key: string) => config.shared[key]?.platform === 'node';
-  // A chunk records which bundle it came from only when chunking is dense.
-  const anyNode = Object.keys(config.shared).some(isNode);
-
-  const files: PublishedFile[] = [];
-  for (const shared of federationInfo.shared) {
-    if ('entries' in shared) {
-      for (const [key, fileName] of Object.entries(shared.entries)) {
-        files.push({ fileName, allowsBuiltins: isNode(key) });
-      }
-    } else {
-      files.push({
-        fileName: shared.outFileName,
-        allowsBuiltins: isNode(shared.packageName) || (isChunk(shared.packageName) && anyNode),
-      });
-    }
-  }
-  for (const [bundle, chunks] of Object.entries(federationInfo.chunks ?? {})) {
-    for (const fileName of chunks) {
-      files.push({ fileName, allowsBuiltins: bundle.startsWith('node-') });
-    }
-  }
-  for (const exposed of federationInfo.exposes) {
-    files.push({ fileName: exposed.outFileName, allowsBuiltins: false });
-  }
-  return files.filter(file => isScript(file.fileName));
-}
-
-function isChunk(packageName: string): boolean {
-  return packageName.startsWith(toChunkImport(''));
 }
 
 function isNodeBuiltin(specifier: string): boolean {

@@ -1,14 +1,12 @@
 import type { FederationInfo } from '../../domain/core/federation-info.contract.js';
 import { bundleExposedAndMappings } from './bundle-exposed-and-mappings.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
-import { assembleFederationInfo } from './assemble-federation-info.js';
-import { writeFederationOutputs } from '../output/write-federation-outputs.js';
-import { validateBareImports } from '../output/validate-bare-imports.js';
 import { logger } from '../../utils/logger.js';
 import { AbortedError } from '../../utils/errors.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import { planSharedBundles } from './shared-bundle-plan.js';
 import { executeSharedBundlePlans } from './build-for-federation.js';
+import { finalizeFederationBuild } from './finalize-federation-build.js';
 import { affectedSharedKeys, resolveSharedPackageDirs } from './resolve-shared-dirs.js';
 import { cacheEntryCore } from '../cache/cache-persistence.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
@@ -40,11 +38,7 @@ export async function rebuildForFederation(
   if (signal?.aborted)
     throw new AbortedError('[rebuildForFederation] After exposed-and-mappings bundle');
 
-  const federationInfo = assembleFederationInfo(config, fedOptions, artifactInfo);
-  validateBareImports(config, fedOptions, federationInfo);
-  writeFederationOutputs(federationInfo, fedOptions);
-
-  return federationInfo;
+  return finalizeFederationBuild(config, fedOptions, artifactInfo);
 }
 
 /**
@@ -83,6 +77,7 @@ export async function rebuildAffectedExternals(
   federationCache.externals = [];
   federationCache.chunks = undefined;
   federationCache.integrity = undefined;
+  federationCache.externalFiles = undefined;
 
   await executeSharedBundlePlans(plans, config, fedOptions, signal);
 }

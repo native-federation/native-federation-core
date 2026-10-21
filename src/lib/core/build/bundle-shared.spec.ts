@@ -783,7 +783,12 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       mem: ReturnType<typeof createMemoryIo>,
       chunkText: string,
       denseChunking: boolean,
-      opts: { asset?: boolean } = {}
+      opts: {
+        integrityHashes?: boolean;
+        cache?: boolean;
+        platform?: 'browser' | 'node';
+        asset?: boolean;
+      } = {}
     ) => {
       const adapter: FakeBuildAdapter = createFakeBuildAdapter({
         results: name => {
@@ -793,25 +798,31 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
           mem.setFile(entry, `export * from './chunk-AAAAAAAA.js';\n`);
           mem.setFile(chunk, chunkText);
           mem.setFile(`${chunk}.map`, '{"version":3}');
-          const files = [{ fileName: entry }, { fileName: chunk }, { fileName: `${chunk}.map` }];
-          if (!opts.asset) return files;
+          if (!opts.asset) {
+            return [{ fileName: entry }, { fileName: chunk }, { fileName: `${chunk}.map` }];
+          }
           const asset = path.join(setup.options.outdir, 'foo.css');
           mem.setFile(asset, '.foo{}');
-          return [...files, { fileName: asset }];
+          return [
+            { fileName: entry },
+            { fileName: chunk },
+            { fileName: `${chunk}.map` },
+            { fileName: asset },
+          ];
         },
       });
       const config = makeConfig();
       config.features.denseChunking = denseChunking;
-      config.features.integrityHashes = true;
+      config.features.integrityHashes = !!opts.integrityHashes;
       const result = await bundleSharedCore(
         { io: mem, repo: repoAtVersion('2.0.0'), adapter },
         fooWith(),
         config,
-        makeFedOptions(),
+        makeFedOptions({ cacheExternalArtifacts: !!opts.cache }),
         [],
-        { ...BUILD_OPTIONS, chunks: true }
+        { ...BUILD_OPTIONS, chunks: true, platform: opts.platform ?? 'browser' }
       );
-      return result;
+      return Object.assign(result, { adapter });
     };
 
     it('publishes a chunk under a name derived from its content, scoped to this remote', async () => {
@@ -845,16 +856,99 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       expect(result.externals.some(e => e.packageName.startsWith('@nf-internal/'))).toBe(false);
     });
 
-    // A CSS import or a file-loader asset leaves a non-script output beside the chunks.
+    // core#177: the list adapters copy from, and the one integrity is computed over.
+    it('reports every written file with the platform of its bundle', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+
+      const result = await chunkedBuild(mem, 'export const a = 1;\n', false, { platform: 'node' });
+
+      const chunk = result.externals.find(e => e.packageName.startsWith('@nf-internal/'))!;
+      expect(result.outputFiles.map(f => f.fileName).sort()).toEqual(
+        [result.externals[0]!.outFileName, chunk.outFileName, `${chunk.outFileName}.map`].sort()
+      );
+      expect(result.outputFiles.every(f => f.platform === 'node')).toBe(true);
+      for (const { fileName } of result.outputFiles) {
+        expect(mem.isFile(path.join('/ws/dist', fileName))).toBe(true);
+      }
+    });
+
     it.each([false, true])(
-      'never publishes or hashes an emitted asset (denseChunking: %s)',
+      'keeps the integrity keys equal to the written scripts (denseChunking: %s)',
       async denseChunking => {
         const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
 
         const result = await chunkedBuild(mem, 'export const a = 1;\n', denseChunking, {
+          integrityHashes: true,
+        });
+
+        expect(Object.keys(result.integrity!).sort()).toEqual(
+          result.outputFiles
+            .map(f => f.fileName)
+            .filter(f => f.endsWith('.js'))
+            .sort()
+        );
+      }
+    );
+
+    // A warm build is the common case, so a node bundle's cache hit must not turn into browser:
+    // its built-ins would then be reported.
+    it.each(['browser', 'node'] as const)(
+      'reports the same files and integrity on a cache hit as on the fresh build (%s)',
+      async platform => {
+        const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+        const opts = { integrityHashes: true, cache: true, platform };
+
+        const fresh = await chunkedBuild(mem, 'export const a = 1;\n', false, opts);
+        const cached = await chunkedBuild(mem, 'export const a = 1;\n', false, opts);
+
+        expect(cached.adapter.calls.build).toHaveLength(0);
+        expect(cached.outputFiles).toEqual(fresh.outputFiles);
+        expect(cached.outputFiles.every(f => f.platform === platform)).toBe(true);
+        expect(cached.integrity).toEqual(fresh.integrity);
+      }
+    );
+
+    it('rejects a relative fileName from the adapter', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const adapter = createFakeBuildAdapter({ results: [{ fileName: 'foo.js' }] });
+
+      await expect(
+        bundleSharedCore(
+          { io: mem, repo: repoAtVersion('2.0.0'), adapter },
+          fooWith(),
+          makeConfig(),
+          makeFedOptions(),
+          [],
+          { ...BUILD_OPTIONS, chunks: true }
+        )
+      ).rejects.toThrow("NFBuildAdapter.build returned a relative fileName 'foo.js'");
+    });
+
+    it('recomputes the same integrity on a cache hit whose metadata has none', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const opts = { integrityHashes: true, cache: true };
+      const fresh = await chunkedBuild(mem, 'export const a = 1;\n', false, opts);
+      const metaFile = path.join('/cache', 'shared.meta.json');
+      const { integrity: _dropped, ...meta } = JSON.parse(mem.readText(metaFile));
+      mem.setFile(metaFile, JSON.stringify(meta));
+
+      const cached = await chunkedBuild(mem, 'export const a = 1;\n', false, opts);
+
+      expect(cached.adapter.calls.build).toHaveLength(0);
+      expect(cached.integrity).toEqual(fresh.integrity);
+    });
+
+    it.each([false, true])(
+      'copies an emitted asset but never publishes or hashes it (denseChunking: %s)',
+      async denseChunking => {
+        const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+
+        const result = await chunkedBuild(mem, 'export const a = 1;\n', denseChunking, {
+          integrityHashes: true,
           asset: true,
         });
 
+        expect(result.outputFiles.map(f => f.fileName)).toContain('foo.css');
         expect(mem.readText('/ws/dist/foo.css')).toBe('.foo{}');
         expect(result.externals.map(e => e.outFileName)).not.toContain('foo.css');
         expect(Object.values(result.chunks ?? {}).flat()).not.toContain('foo.css');

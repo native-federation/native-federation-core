@@ -20,6 +20,8 @@ export interface NFBuildAdapter {
 
   setup(name: string, options: NFBuildAdapterOptions): Promise<void>;
 
+  // Every file written for the bundle, on a rebuild too, not only the changed ones. Files go flat
+  // into `outdir` and `fileName` is their absolute path: core lists and hashes them by base name.
   build(
     name: string,
     opts?: {

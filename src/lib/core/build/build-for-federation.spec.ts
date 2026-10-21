@@ -1,16 +1,27 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import type { SharedInfo, DenseSharedInfo } from '../../domain/core/federation-info.contract.js';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import type {
+  SharedInfo,
+  DenseSharedInfo,
+  OutputFile,
+} from '../../domain/core/federation-info.contract.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
 import { prepareSkipList } from '../../config/default-skip-list.js';
+import { logger } from '../../utils/logger.js';
 import type * as sharedDirs from './resolve-shared-dirs.js';
+import type * as validation from '../output/validate-bare-imports.js';
 
 // Isolate the assembly logic in buildForFederation: no real FS writes, no build adapter.
 vi.mock('../output/write-federation-info.js', () => ({ writeFederationInfo: vi.fn() }));
 vi.mock('../output/write-import-map.js', () => ({ writeImportMap: vi.fn() }));
 vi.mock('./bundle-exposed-and-mappings.js', () => ({
-  bundleExposedAndMappings: vi.fn(async () => ({ mappings: [], exposes: [] })),
+  bundleExposedAndMappings: vi.fn(async () => ({ mappings: [], exposes: [], outputFiles: [] })),
 }));
+
+vi.mock('../output/validate-bare-imports.js', () => ({ validateBareImports: vi.fn() }));
 
 vi.mock('../cache/cache-persistence.js', async importActual => ({
   ...(await importActual<object>()),
@@ -25,6 +36,10 @@ vi.mock('./resolve-shared-dirs.js', async importActual => ({
 const { buildForFederation } = await import('./build-for-federation.js');
 const { hintUnwatchedLinkedDeps } = await import('./resolve-shared-dirs.js');
 const { writeImportMap } = await import('../output/write-import-map.js');
+const { validateBareImports } = await import('../output/validate-bare-imports.js');
+const { collectOutputFiles } = await import('../cache/federation-cache.js');
+const { writeFederationInfo } = await import('../output/write-federation-info.js');
+const { bundleExposedAndMappings } = await import('./bundle-exposed-and-mappings.js');
 
 function flat(
   packageName: string,
@@ -192,5 +207,68 @@ describe('buildForFederation — unwatched linked deps hint', () => {
 
     expect(hintUnwatchedLinkedDeps).toHaveBeenCalledTimes(1);
     expect(hintUnwatchedLinkedDeps).toHaveBeenCalledWith(config, fedOptions);
+  });
+});
+
+describe('buildForFederation — output files (core#177)', () => {
+  beforeEach(() => vi.clearAllMocks());
+  let workspaceRoot: string | undefined;
+  afterEach(() => {
+    vi.restoreAllMocks();
+    if (workspaceRoot) fs.rmSync(workspaceRoot, { recursive: true, force: true });
+    workspaceRoot = undefined;
+  });
+
+  it('hands validateBareImports every written file and records the same list', async () => {
+    const external: OutputFile[] = [
+      { fileName: 'tslib.js', platform: 'browser' },
+      { fileName: 'node-lib.js', platform: 'node' },
+    ];
+    const artifacts: OutputFile[] = [
+      { fileName: 'Comp.js', platform: 'browser' },
+      { fileName: 'chunk-X.js', platform: 'browser' },
+    ];
+    vi.mocked(bundleExposedAndMappings).mockResolvedValueOnce({
+      mappings: [],
+      exposes: [],
+      outputFiles: artifacts,
+    });
+    const config = makeConfig(false);
+    const fedOptions = makeFedOptions([]);
+    fedOptions.federationCache.externalFiles = {
+      'browser-shared': [external[0]!],
+      'node-lib': [external[1]!],
+    };
+
+    const info = await buildForFederation(config, fedOptions, []);
+
+    expect(validateBareImports).toHaveBeenCalledWith(config, fedOptions, info, [
+      ...external,
+      ...artifacts,
+    ]);
+    expect(collectOutputFiles(fedOptions.federationCache)).toEqual([...external, ...artifacts]);
+  });
+
+  // The validator runs unmocked here: a strict failure has to escape the build before
+  // remoteEntry.json is written, or the host would load a remote that cannot resolve.
+  it('fails with strictImports before remoteEntry.json is written', async () => {
+    const actual = await vi.importActual<typeof validation>('../output/validate-bare-imports.js');
+    vi.mocked(validateBareImports).mockImplementationOnce(actual.validateBareImports);
+    vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-strict-'));
+    fs.mkdirSync(path.join(workspaceRoot, 'dist'));
+    fs.writeFileSync(path.join(workspaceRoot, 'dist', 'Comp.js'), `import "@angular/common/http";`);
+    vi.mocked(bundleExposedAndMappings).mockResolvedValueOnce({
+      mappings: [],
+      exposes: [],
+      outputFiles: [{ fileName: 'Comp.js', platform: 'browser' }],
+    });
+    const config = makeConfig(false);
+    config.features.strictImports = true;
+
+    await expect(
+      buildForFederation(config, makeFedOptions([], { workspaceRoot }), [])
+    ).rejects.toThrow(/features\.strictImports/);
+    expect(writeFederationInfo).not.toHaveBeenCalled();
   });
 });

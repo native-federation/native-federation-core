@@ -23,9 +23,7 @@ function config(
 
 describe('planMappingBundles', () => {
   it('puts every unannotated mapping in one bundle, in declaration order', () => {
-    const plans = planMappingBundles(
-      config({ './libs/a': '@org/a', './libs/b': '@org/b' })
-    );
+    const plans = planMappingBundles(config({ './libs/a': '@org/a', './libs/b': '@org/b' }));
 
     expect(plans).toEqual([
       { bundleName: 'mapping-bundle', entries: { './libs/a': '@org/a', './libs/b': '@org/b' } },
