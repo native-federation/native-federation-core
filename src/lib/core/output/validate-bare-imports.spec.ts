@@ -189,7 +189,7 @@ describe('findUnresolvedImportsCore', () => {
   });
 
   // `externals` is the opt-out: kept as an import, never published, provided by someone else.
-  it('lets externals opt out, with the subpath and wildcard matching esbuild uses', () => {
+  it('lets externals opt out, with subpath and wildcard matching', () => {
     const io = createMemoryIo().setFile(
       out('Component.js'),
       `import "host-sdk"; import "host-sdk/events"; import "@icons/home.svg"; import "other";`

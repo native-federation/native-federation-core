@@ -43,8 +43,7 @@ export interface NFBuildAdapterOptions<TBundlerCache = unknown> {
   entryPoints: EntryPoint[];
   // Unresolved; a relative path is workspace-relative, not cwd-relative.
   tsConfigPath?: string;
-  // Read as matchesExternal does: a name also covers its subpaths, and one '*' is a wildcard.
-  // Every match stays the bare specifier in the output, never a resolved path.
+  // Read as matchesExternal does; every match must stay the bare specifier, never a resolved path.
   external: string[];
   outdir: string;
   mappedPaths: PathToImport;

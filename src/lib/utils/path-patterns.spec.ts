@@ -108,7 +108,7 @@ describe('matchesWildcard', () => {
 });
 
 describe('matchesExternal', () => {
-  // Each pattern with what esbuild 0.28 keeps external for it; measured, then pinned below.
+  // Core's rule: what each pattern must keep external, whatever the bundler.
   const table: [string, Record<string, boolean>][] = [
     [
       'host-sdk',
@@ -134,8 +134,8 @@ describe('matchesExternal', () => {
     }
   });
 
-  // The validator trusts that the adapter left exactly these imports bare; esbuild is the
-  // reference adapter, so the table must agree with it.
+  // esbuild reads `external` this way natively. The check belongs in the esbuild adapter; it stays
+  // here until that repo runs the table itself.
   it.each(table)('agrees with esbuild on %s', (pattern, expected) => {
     for (const specifier of Object.keys(expected)) {
       expect([specifier, keptExternalByEsbuild(specifier, pattern)]).toEqual([

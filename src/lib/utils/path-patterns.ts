@@ -34,9 +34,8 @@ export function matchesWildcard(value: string, pattern: string): boolean {
   return value.startsWith(prefix) && value.endsWith(suffix);
 }
 
-// How `externals` and an adapter's `external` are read (esbuild's rule): a name also covers its
-// subpaths, and the one '*' matches only where prefix and suffix do not overlap. Only the specifier
-// as written: esbuild also matches path patterns after resolution, but those never stay bare.
+// Core's reading of an external, for the specifier as written: a name also covers its subpaths,
+// and the one '*' matches only where prefix and suffix do not overlap. esbuild reads it this way.
 export function matchesExternal(specifier: string, pattern: string): boolean {
   const { prefix, suffix, hasWildcard } = parseWildcard(pattern);
   if (!hasWildcard) return specifier === pattern || specifier.startsWith(pattern + '/');
