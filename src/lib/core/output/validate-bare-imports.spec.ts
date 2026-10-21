@@ -361,6 +361,50 @@ describe('findUnresolvedImportsCore', () => {
     expect(result.map(r => [r.specifier, r.importers])).toEqual([['crypto', ['chunk-B.js']]]);
   });
 
+  // Only an exact built-in name passes in a node file: nothing resolves 'process/browser' there.
+  it('reports a node file import that only looks like a built-in', () => {
+    const io = createMemoryIo().setFile(
+      out('chunk-N.js'),
+      `import "fs/promises"; import "process/browser"; import "events/x"; import "node:nope";`
+    );
+
+    const result = unresolvedImports(io, OUT, node('chunk-N.js'), makeConfig(), info());
+
+    expect(result.map(r => r.specifier)).toEqual(['events/x', 'node:nope', 'process/browser']);
+  });
+
+  // 'buffer' is a built-in and also an npm polyfill; with 'buffer' shared, it is the polyfill.
+  it('names a shared package before the built-in reading', () => {
+    const io = createMemoryIo().setFile(out('chunk-B.js'), `import "buffer";`);
+
+    const [unresolved] = unresolvedImports(
+      io,
+      OUT,
+      browser('chunk-B.js'),
+      makeConfig({ shared: { buffer: ext() } }),
+      info()
+    );
+
+    expect(unresolved!.reason).toContain(
+      "'buffer' is shared, but this entry point was not published"
+    );
+  });
+
+  it('offers the npm polyfill reading only for an exact unprefixed built-in name', () => {
+    const io = createMemoryIo().setFile(
+      out('chunk-B.js'),
+      `import "buffer"; import "node:buffer"; import "fs/promises";`
+    );
+
+    const result = unresolvedImports(io, OUT, browser('chunk-B.js'), makeConfig(), info());
+
+    expect(result.map(r => [r.specifier, r.reason.includes('npm polyfill')])).toEqual([
+      ['buffer', true],
+      ['fs/promises', false],
+      ['node:buffer', false],
+    ]);
+  });
+
   it('points a subpath of a shared mapping at the mapping', () => {
     const io = createMemoryIo().setFile(out('Component.js'), `import "@my-org/ui/button";`);
 

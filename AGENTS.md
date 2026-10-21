@@ -185,10 +185,10 @@ non-dense chunks that `remoteEntry.json` never names are covered too, and report
 specifier that is neither declared, a published chunk, nor matched by `externals`
 (`matchesExternal`, core's rule: a name covers its subpaths, one `*` is a wildcard; esbuild reads
 `external` this way, Rollup-based bundlers need `external` as a function that calls it). Node
-built-ins pass only in files whose own bundle is `platform: 'node'`; a file that a node and a
-browser bundle both wrote counts as browser. It warns by default and throws with
-`features.strictImports`. It reads the files from the output directory, so cached bundles are
-covered too.
+built-ins (exact names, `module.isBuiltin`) pass only in files whose own bundle is `platform:
+'node'`; a file that a node and a browser bundle both wrote counts as browser. It warns by default
+and throws with `features.strictImports`. It reads the files from the output directory, so cached
+bundles are covered too.
 
 It never passes a file it did not read. A script the lexer cannot parse is reported (and fails a
 strict build); a reported file missing from the output folder, usually an adapter writing into a

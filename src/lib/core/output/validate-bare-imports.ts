@@ -1,5 +1,5 @@
 import * as path from 'path';
-import { builtinModules } from 'module';
+import { isBuiltin } from 'module';
 import type { FederationInfo, OutputFile } from '../../domain/core/federation-info.contract.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
@@ -105,7 +105,7 @@ export function findUnresolvedImportsCore(
     for (const specifier of specifiers) {
       if (declared.has(specifier) || config.externals.some(e => matchesExternal(specifier, e)))
         continue;
-      if (file.platform === 'node' && isNodeBuiltin(specifier)) continue;
+      if (file.platform === 'node' && isBuiltin(specifier)) continue;
 
       const importers = importersBySpecifier.get(specifier) ?? [];
       if (!importers.includes(file.fileName)) importers.push(file.fileName);
@@ -135,38 +135,36 @@ function declaredSpecifiers(federationInfo: FederationInfo): Set<string> {
   return declared;
 }
 
-function isNodeBuiltin(specifier: string): boolean {
-  return specifier.startsWith('node:') || builtinModules.includes(specifier.split('/')[0]!);
-}
-
+// A shared root decides first: 'process/browser' with 'process' shared is a pruned entry point, not
+// a built-in.
 function explain(
   specifier: string,
   config: NormalizedFederationConfig,
   declared: ReadonlySet<string>
 ): string {
-  if (isNodeBuiltin(specifier)) {
-    return (
-      'It is a Node.js built-in in a browser bundle: the package that imports it is probably ' +
-      "Node-only. Skip that package in your federation config, or build it with platform: 'node'."
-    );
-  }
-
   const mapping = Object.values(config.sharedMappings).find(m => specifier.startsWith(m + '/'));
   if (mapping) {
     return `It is a subpath of the shared mapping '${mapping}'. Import the mapping by its exact name.`;
   }
 
   const root = inferPackageFromSecondary(specifier);
-  const sharedRoot = declared.has(root) || root in config.shared;
-
-  if (isInSkipList(specifier, config.skip) && sharedRoot) {
-    return `It is skipped, but stays external because '${root}' is shared. Remove it from 'skip'.`;
+  if (declared.has(root) || root in config.shared) {
+    if (isInSkipList(specifier, config.skip)) {
+      return `It is skipped, but stays external because '${root}' is shared. Remove it from 'skip'.`;
+    }
+    return (
+      `'${root}' is shared, but this entry point was not published: 'ignoreUnusedDeps' pruned it, ` +
+      `or '${root}' does not export it. Set includeSecondaries: { keepAll: true } on '${root}', ` +
+      "or disable 'ignoreUnusedDeps'."
+    );
   }
 
-  if (sharedRoot) {
+  if (isBuiltin(specifier)) {
+    const polyfill = specifier === root && !specifier.startsWith('node:');
     return (
-      `'${root}' is shared, but this entry point was not published. Set ` +
-      `includeSecondaries: { keepAll: true } on '${root}', or disable 'ignoreUnusedDeps'.`
+      'It is a Node.js built-in in a browser bundle: the package that imports it is probably ' +
+      "Node-only. Skip that package in your federation config, or build it with platform: 'node'." +
+      (polyfill ? ` If it is the npm polyfill '${specifier}', share it.` : '')
     );
   }
 
