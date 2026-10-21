@@ -826,19 +826,16 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
   });
 
   it('skips setup and forwards modifiedFiles on a rebuild', async () => {
-    // setup() is skipped on a rebuild, so the fake cannot echo the entry points back.
     const adapter = createFakeBuildAdapter({ results: [{ fileName: '/ws/dist/Comp.js' }] });
+    const config = makeConfig({ exposes: { './Comp': { file: './src/comp.ts' } } });
+    const fedOptions = makeFedOptions();
 
-    await bundleExposedAndMappingsCore(
-      { adapter },
-      makeConfig({ exposes: { './Comp': { file: './src/comp.ts' } } }),
-      makeFedOptions(),
-      [],
-      ['/ws/src/x.ts']
-    );
+    // The full build sets the context up; the fake, like a real adapter, rejects a build without one.
+    await bundleExposedAndMappingsCore({ adapter }, config, fedOptions, []);
+    await bundleExposedAndMappingsCore({ adapter }, config, fedOptions, [], ['/ws/src/x.ts']);
 
-    expect(adapter.calls.setup).toHaveLength(0);
-    expect(adapter.calls.build[0]!.modifiedFiles).toEqual(['/ws/src/x.ts']);
+    expect(adapter.calls.setup).toHaveLength(1);
+    expect(adapter.calls.build.at(-1)!.modifiedFiles).toEqual(['/ws/src/x.ts']);
   });
 
   it('throws before invoking the adapter when the signal is already aborted', async () => {
