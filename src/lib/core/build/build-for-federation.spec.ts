@@ -268,10 +268,13 @@ describe('buildForFederation — output files (core#177)', () => {
 
     const info = await buildForFederation(config, fedOptions, []);
 
-    expect(validateBareImports).toHaveBeenCalledWith(config, fedOptions, info, [
-      ...external,
-      ...artifacts,
-    ]);
+    expect(validateBareImports).toHaveBeenCalledWith(
+      config,
+      fedOptions,
+      info,
+      [...external, ...artifacts],
+      { fullReport: true }
+    );
     expect(collectOutputFiles(fedOptions.federationCache)).toEqual([...external, ...artifacts]);
   });
 

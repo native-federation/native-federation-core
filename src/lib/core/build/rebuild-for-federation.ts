@@ -38,7 +38,7 @@ export async function rebuildForFederation(
   if (signal?.aborted)
     throw new AbortedError('[rebuildForFederation] After exposed-and-mappings bundle');
 
-  return finalizeFederationBuild(config, fedOptions, artifactInfo);
+  return finalizeFederationBuild(config, fedOptions, artifactInfo, { fullReport: false });
 }
 
 /**

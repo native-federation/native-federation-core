@@ -4,6 +4,7 @@ import type { FederationInfo, OutputFile } from '../../domain/core/federation-in
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
 import type { FileReaderPort } from '../../domain/utils/io-port.contract.js';
+import type { FederationCache } from '../../domain/core/federation-cache.contract.js';
 import { toChunkImport } from '../../domain/core/chunk.js';
 import { isScript } from '../../utils/script-file.js';
 import { isInSkipList } from '../../config/default-skip-list.js';
@@ -27,11 +28,14 @@ export interface BareImportScan {
   missing: string[];
 }
 
+const reportedSpecifiers = new WeakMap<FederationCache, string>();
+
 export function validateBareImports(
   config: NormalizedFederationConfig,
   fedOptions: NormalizedFederationOptions,
   federationInfo: FederationInfo,
-  files: OutputFile[]
+  files: OutputFile[],
+  { fullReport }: { fullReport: boolean }
 ): void {
   const start = process.hrtime();
   const outputDir = resolveOutputPath(fedOptions);
@@ -57,13 +61,29 @@ export function validateBareImports(
   for (const { fileName, error } of unparsable) {
     report(`Could not scan the imports of '${fileName}' (${error}), so they were not checked.`);
   }
-  for (const { specifier, importers, reason } of unresolved) {
-    report(
-      `${formatList(importers, 3)} import${importers.length === 1 ? 's' : ''} ` +
-        `'${specifier}', which remoteEntry.json does not declare, so it will not resolve at ` +
-        `runtime. ${reason}`
-    );
+
+  // A watch rebuild repeating unchanged warnings buries new ones. Only the specifiers are compared:
+  // chunks are named after their content, so an edit renames the importers. A strict build always
+  // reports, since it fails.
+  const key = unresolved.map(u => u.specifier).join('\n');
+  const previous = reportedSpecifiers.get(fedOptions.federationCache);
+  reportedSpecifiers.set(fedOptions.federationCache, key);
+  if (!strict && !fullReport && key === previous) {
+    if (unresolved.length > 0) {
+      logger.notice(
+        `${unresolved.length} bare import(s) still unresolved, unchanged since the last build.`
+      );
+    }
+  } else {
+    for (const { specifier, importers, reason } of unresolved) {
+      report(
+        `${formatList(importers, 3)} import${importers.length === 1 ? 's' : ''} ` +
+          `'${specifier}', which remoteEntry.json does not declare, so it will not resolve at ` +
+          `runtime. ${reason}`
+      );
+    }
   }
+  if (!fullReport && previous && !key) logger.info('All bare imports resolve again.');
 
   if (strict && (unresolved.length > 0 || unparsable.length > 0)) {
     const problems: string[] = [];

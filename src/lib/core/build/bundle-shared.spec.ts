@@ -293,9 +293,11 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       const { mem, run } = setup();
       expect(await run([])).toBe(1);
       const metaFile = path.join('/cache', 'browser-foo.meta.json');
-      const { builtExternals: _b, externalImports: _i, ...legacy } = JSON.parse(
-        mem.readText(metaFile)
-      );
+      const {
+        builtExternals: _b,
+        externalImports: _i,
+        ...legacy
+      } = JSON.parse(mem.readText(metaFile));
       mem.writeText(metaFile, JSON.stringify(legacy));
       expect(await run([])).toBe(1);
       expect(await run([])).toBe(0);

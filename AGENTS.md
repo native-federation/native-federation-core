@@ -188,7 +188,10 @@ specifier that is neither declared, a published chunk, nor matched by `externals
 built-ins (exact names, `module.isBuiltin`) pass only in files whose own bundle is `platform:
 'node'`; a file that a node and a browser bundle both wrote counts as browser. It warns by default
 and throws with `features.strictImports`. It reads the files from the output directory, so cached
-bundles are covered too.
+bundles are covered too. A watch rebuild repeats unresolved imports only when the set of specifiers
+changes (importers are left out: content-named chunks are renamed by any edit); otherwise it notes
+them in one line, and says when they are all resolved. A full build and every strict build report in
+full. The last set is kept per `FederationCache` in a module-private `WeakMap`.
 
 It never passes a file it did not read. A script the lexer cannot parse is reported (and fails a
 strict build); a reported file missing from the output folder, usually an adapter writing into a
