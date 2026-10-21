@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { buildSync, type BuildFailure } from 'esbuild';
 import {
   captureWildcard,
   isUnderAnyDir,
@@ -129,7 +128,7 @@ describe('matchesExternal', () => {
     ['lodash/', { lodash: false, 'lodash/fp': false }],
     // An empty capture is allowed, at either end.
     ['@scope/*', { '@scope/': true, '@scope/a': true, '@scope': false }],
-    // A wildcard also matches a relative import, which then stays relative (issue 04).
+    // A wildcard also matches a relative import, which the bundler then keeps relative.
     ['*.svg', { '.svg': true, 'a.svg': true, '@icons/a.svg': true, svg: false, './a.svg': true }],
     ['*.css', { './styles.css': true, './local.js': false }],
     ['*/local.js', { './local.js': true, '../local.js': true, './other.js': false }],
@@ -143,17 +142,6 @@ describe('matchesExternal', () => {
       expect([specifier, matchesExternal(specifier, pattern)]).toEqual([specifier, kept]);
     }
   });
-
-  // esbuild reads `external` this way natively. The check belongs in the esbuild adapter; it stays
-  // here until that repo runs the table itself.
-  it.each(table)('agrees with esbuild on %s', (pattern, expected) => {
-    for (const specifier of Object.keys(expected)) {
-      expect([specifier, keptExternalByEsbuild(specifier, pattern)]).toEqual([
-        specifier,
-        matchesExternal(specifier, pattern),
-      ]);
-    }
-  });
 });
 
 // Core's rule has one wildcard: everything after the first '*' is literal text.
@@ -162,33 +150,7 @@ describe('matchesExternal with more than one wildcard', () => {
     expect(matchesExternal('a-b*c', 'a*b*c')).toBe(true);
     expect(matchesExternal('abxc', 'a*b*c')).toBe(false);
   });
-
-  // So a config with one never reaches the bundle checks; moves to the esbuild adapter with the
-  // agreement test above.
-  it('is rejected by esbuild', () => {
-    expect(() => keptExternalByEsbuild('abc', 'a*b*c')).toThrow(/more than one "\*" wildcard/);
-  });
 });
-
-// Nothing is installed for these names, so an import esbuild does not keep external fails to
-// resolve; any other build error is a broken test and is rethrown.
-function keptExternalByEsbuild(specifier: string, pattern: string): boolean {
-  try {
-    const { outputFiles } = buildSync({
-      stdin: { contents: `import ${JSON.stringify(specifier)};` },
-      bundle: true,
-      write: false,
-      format: 'esm',
-      external: [pattern],
-      logLevel: 'silent',
-    });
-    return outputFiles[0]!.text.includes(JSON.stringify(specifier));
-  } catch (e) {
-    const { errors } = e as BuildFailure;
-    if (errors?.every(err => err.text.startsWith('Could not resolve'))) return false;
-    throw e;
-  }
-}
 
 describe('captureWildcard', () => {
   it('captures the segment for a suffix pattern (end-anchored, multi-segment)', () => {

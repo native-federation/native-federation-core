@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { buildSync } from 'esbuild';
 import type {
   FederationInfo,
   OutputFile,
@@ -225,24 +224,12 @@ describe('findUnresolvedImportsCore', () => {
     expect(result.map(r => r.specifier)).toEqual(['@host/sdk-extra']);
   });
 
-  // Hand-written fixtures are spaced and quoted the readable way; minified output is not.
+  // Hand-written fixtures are spaced and quoted the readable way; minified output is not. Real
+  // esbuild 0.28.2 output, captured once so the spec runs no bundler.
   it('reads real minified esbuild output, re-exports and dynamic imports included', () => {
-    const [bundle] = buildSync({
-      stdin: {
-        contents: `export * from "@angular/common/http";
-          export { a } from "@angular/common/testing";
-          export const l = () => import("@angular/common/locales/de");
-          import "@angular/common";`,
-        resolveDir: OUT,
-      },
-      bundle: true,
-      minify: true,
-      write: false,
-      format: 'esm',
-      external: ['@angular/common'],
-      logLevel: 'silent',
-    }).outputFiles;
-    const io = createMemoryIo().setFile(out('main.js'), bundle!.text);
+    const bundle =
+      'export*from"@angular/common/http";import{a as e}from"@angular/common/testing";import"@angular/common";var o=()=>import("@angular/common/locales/de");export{e as a,o as l};';
+    const io = createMemoryIo().setFile(out('main.js'), bundle);
 
     const result = unresolvedImports(
       io,
