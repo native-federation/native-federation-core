@@ -224,8 +224,7 @@ describe('findUnresolvedImportsCore', () => {
     expect(result.map(r => r.specifier)).toEqual(['@host/sdk-extra']);
   });
 
-  // Hand-written fixtures are spaced and quoted the readable way; minified output is not. Real
-  // esbuild 0.28.2 output, captured once so the spec runs no bundler.
+  // Captured esbuild 0.28.2 output: hand-written fixtures are not minified.
   it('reads real minified esbuild output, re-exports and dynamic imports included', () => {
     const bundle =
       'export*from"@angular/common/http";import{a as e}from"@angular/common/testing";import"@angular/common";var o=()=>import("@angular/common/locales/de");export{e as a,o as l};';

@@ -12,13 +12,8 @@ export interface SpecifierEdit {
   text: string;
 }
 
-/**
- * Every `./x` specifier of a static import, an export-from or a dynamic `import()` whose `x` is
- * one of `chunks`, as an edit that swaps the specifier text for its `@nf-internal/x` form. The
- * edits are the only change the rewrite makes, so the source map esbuild wrote next to the file
- * stays valid apart from the columns after an edit on the same line, which `shiftSourceMap`
- * moves along.
- */
+// The edits are the only change, so the bundler's source map stays valid once `shiftSourceMap`
+// moves the columns after an edit on the same line.
 export function collectSpecifierEdits(
   sourceCode: string,
   fileName: string,
@@ -28,11 +23,10 @@ export function collectSpecifierEdits(
   const edits: SpecifierEdit[] = [];
 
   for (const imp of imports) {
-    // import.meta, a non-literal dynamic argument, or not a chunk reference: a wildcard external
-    // also keeps a relative import such as `./styles.css`, which has to stay relative.
+    // A wildcard external also keeps relative imports such as `./styles.css`.
     if (imp.d === -2 || !imp.n?.startsWith('./') || !chunks.has(imp.n.slice(2))) continue;
 
-    // A dynamic import's span includes its quotes or backticks; `n` is only set for a plain literal.
+    // A dynamic import's span includes its quotes or backticks.
     const delimiter = imp.d > -1 ? 1 : 0;
     edits.push({ start: imp.s + delimiter, end: imp.e - delimiter, text: toChunkImport(imp.n) });
   }

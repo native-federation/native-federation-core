@@ -519,7 +519,6 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     });
   });
 
-  // The second form is Rolldown's minified dynamic import.
   it.each([
     ["export * from './chunk-AAAAAAAA.js';\n"],
     ['export const l=()=>import(`./chunk-AAAAAAAA.js`);\n'],
@@ -783,7 +782,6 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         expect(Object.values(result.chunks ?? {}).flat()).not.toContain('Comp.css');
         expect(Object.keys(result.integrity!)).not.toContain('Comp.css');
         expect(io.readText('/ws/dist/Comp.css')).toBe('.a{}');
-        // Only chunks become `@nf-internal/*`; nothing would resolve `@nf-internal/Comp.css`.
         expect(io.readText('/ws/dist/Comp.js')).toContain("import './Comp.css';");
       }
     );

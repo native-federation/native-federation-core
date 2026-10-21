@@ -847,7 +847,6 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       expect(entry).not.toContain('AAAAAAAA');
     });
 
-    // Rolldown's minifier prints the dynamic import with backticks; `*.css` keeps the CSS import.
     it('follows a backtick chunk import and leaves a relative CSS import as written', async () => {
       const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
 

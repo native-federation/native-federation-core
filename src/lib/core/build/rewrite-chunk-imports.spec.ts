@@ -7,7 +7,6 @@ import {
 } from './rewrite-chunk-imports.js';
 import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
 
-// The chunks the adapter reported next to the rewritten file; only these are rewritten.
 const CHUNKS = new Set(['dep.js', 'side.js']);
 
 const rewrite = (source: string): string => {
@@ -46,8 +45,7 @@ describe('rewriteChunkImportsCore', () => {
     expect(rewrite(source)).toBe(source);
   });
 
-  // A wildcard external (`*.css`, `*/local.js`) keeps a relative import external, and the file is
-  // then served next to the importer; `@nf-internal/*` would resolve through no import-map key.
+  // A wildcard external (`*.css`, `*/local.js`) keeps these; no import map maps them.
   it.each([
     ['a non-script import', `import './styles.css';`],
     ['a script the adapter did not report', `import './local.js';`],

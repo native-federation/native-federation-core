@@ -37,7 +37,6 @@ describe('renameChunksByContentCore', () => {
     expect(fromA.get('chunk-SAMENAME.js')).not.toBe(fromB.get('chunk-SAMENAME.js'));
   });
 
-  // Rolldown's minifier quotes a dynamic import with backticks.
   it.each(["'", '`'])(
     'renames dependencies first and updates both specifier forms in the importers (%s)',
     q => {
