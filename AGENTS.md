@@ -98,6 +98,11 @@ to follow a few rules that `build-adapter.contract.ts` states where they apply:
 - `build` returns every file it wrote, chunks, source maps and assets included, on a rebuild too:
   `outputFiles`, integrity and `validateBareImports` all read that list, and a file left out is
   neither hashed nor scanned.
+- An entry is written as its `outName`, a flat file name core keeps unique (`./a/Cmp` and `./b/Cmp`
+  become `Cmp.js` and `Cmp_2.js`), or as `<name>-<hash><ext>` when hashed. Core matches an exact
+  name first, then the longest stem, and throws when one stem matches several files (an exposed
+  `./chunk` next to esbuild's `chunk-<hash>` chunks). Setting `entry` (the `outName`, verbatim) on
+  the entry's own result makes core skip the name matching altogether.
 - Imports the adapter adds itself (a dev client, a polyfill) go in `NFBuildAdapter.externals`, so
   users do not have to list them in `externals`. `normalizeFederationOptions` merges them into the
   normalized `config.externals` (a new, de-duplicated list; the user's array is never mutated), but

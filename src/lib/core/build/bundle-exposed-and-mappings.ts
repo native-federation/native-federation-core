@@ -71,12 +71,12 @@ export async function bundleExposedAndMappingsCore(
       key: mappedImport,
     })),
   }));
+  const outNames = flatOutNames(Object.keys(config.exposes));
   const exposes: Array<EntryPoint & { element?: string }> = Object.entries(config.exposes).map(
-    ([key, expose]) => {
-      const outFilePath = key + '.js';
+    ([key, expose], i) => {
       // Absolute because adapters resolve a relative entry against cwd, not workspaceRoot.
       const fileName = path.resolve(fedOptions.workspaceRoot, expose.file);
-      return { fileName, outName: outFilePath, key, element: expose.element };
+      return { fileName, outName: outNames[i]!, key, element: expose.element };
     }
   );
 
@@ -209,6 +209,23 @@ export async function bundleExposedAndMappingsCore(
     integrity,
     outputFiles: toOutputFiles(outputPaths, 'browser'),
   };
+}
+
+// Only a second key with the same last segment gets a suffix, so no other published name changes.
+function flatOutNames(keys: string[]): string[] {
+  const stems = keys.map(key => path.posix.basename(key));
+  const reserved = new Set(stems);
+  const emitted = new Set<string>();
+  return stems.map(stem => {
+    if (!emitted.has(stem)) {
+      emitted.add(stem);
+      return `${stem}.js`;
+    }
+    let i = 2;
+    while (reserved.has(`${stem}_${i}`)) i++;
+    reserved.add(`${stem}_${i}`);
+    return `${stem}_${i}.js`;
+  });
 }
 
 // `resultMap` holds what is left once the entries were popped from it: chunks, maps and assets.

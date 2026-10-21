@@ -39,6 +39,8 @@ export interface NFBuildAdapter {
 
 export interface EntryPoint {
   fileName: string;
+  // A flat file name, unique within the bundle: emit it as given, or as `<name>-<hash><ext>` when
+  // hashed.
   outName: string;
   key?: string;
 }
@@ -63,6 +65,9 @@ export interface NFBuildAdapterOptions<TBundlerCache = unknown> {
 
 export interface NFBuildAdapterResult {
   fileName: string;
+  // The EntryPoint.outName this file was built from, verbatim, on the entry's own script only. Once
+  // any result sets it, core stops matching entries by file name.
+  entry?: string;
 }
 
 export interface NFAdapterInput {
