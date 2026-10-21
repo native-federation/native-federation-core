@@ -86,6 +86,28 @@ write into `dist/` with `rootDir: src`, so JS and types land side by side.
 **Build Adapter Pattern**:
 The core library is build-tool agnostic. It expects a `NFBuildAdapter` that implements bundling logic. Reference implementations use esbuild (see `@softarc/native-federation-esbuild` package, separate repo).
 
+**Writing an adapter**: core post-processes and scans what the adapter writes, so the output has
+to follow a few rules that `build-adapter.contract.ts` states where they apply:
+
+- ESM, written flat into `outdir`. `.js`/`.mjs`/`.cjs` are all treated as scripts (scanned, hashed,
+  chunk candidates), but only ESM syntax is read, so a CommonJS `.cjs` file's `require`s go
+  unchecked. Core rewrites a chunk import to `@nf-internal/*` only when it starts with `./`.
+- `external` is read the way `matchesExternal` reads it: a name also covers its subpaths and `*` is
+  one wildcard, on the unresolved specifier. A bundler with exact-match externals has to widen
+  them, and every match stays the bare specifier, never a resolved path.
+- `build` returns every file it wrote, chunks, source maps and assets included, on a rebuild too:
+  `outputFiles`, integrity and `validateBareImports` all read that list, and a file left out is
+  neither hashed nor scanned.
+- Imports the adapter adds itself (a dev client, a polyfill) go in `NFBuildAdapter.externals`, so
+  users do not have to list them in `externals`. `normalizeFederationOptions` merges them into the
+  normalized `config.externals` (a new, de-duplicated list; the user's array is never mutated), but
+  only when they are passed in: the adapter registry is process-global, so core never reads them
+  from it. `federationBuilder.init` passes them; an adapter that normalizes itself passes its own
+  in the third argument, `NFAdapterInput`: `normalizeFederationOptions(options, cache,
+  { externals: adapter.externals })`. The cache moves into `NFAdapterInput` in v5. From there they
+  are ordinary externals: every bundle's `external`, the bare import check, `matchesExternal`. Keep
+  them exact or scoped: one that covers a shared package would hide its pruned entry points.
+
 `outputPath` is resolved against `workspaceRoot` (`resolveOutputPath`) and may be absolute. Every
 writer goes through that helper, and the adapter receives the resolved `outdir`, so all output
 lands in one directory whatever `process.cwd()` is (core#156). Inputs follow the same rule:
@@ -172,6 +194,7 @@ export default withNativeFederation({
 - **`build: 'package'`**: Bundle a shared dependency in isolation (not in the shared bundle)
 - **`externals`**: Opt-out specifiers. They reach the bundler as external, so they stay bare imports,
   but are never published in `remoteEntry.json`: the host page or another loader provides them.
+  The normalized list also holds the build adapter's own `externals`.
   Adapters must read every `external` the way `matchesExternal` (exported from `./internal`) does
   for the unresolved specifier.
 
