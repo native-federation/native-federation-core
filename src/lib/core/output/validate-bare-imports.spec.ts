@@ -379,10 +379,15 @@ describe('findUnresolvedImportsCore', () => {
 });
 
 describe('validateBareImports', () => {
-  afterEach(() => vi.restoreAllMocks());
+  let workspaceRoot: string | undefined;
+  afterEach(() => {
+    vi.restoreAllMocks();
+    if (workspaceRoot) fs.rmSync(workspaceRoot, { recursive: true, force: true });
+    workspaceRoot = undefined;
+  });
 
   function setup(strictImports: boolean) {
-    const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-validate-'));
+    workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-validate-'));
     fs.mkdirSync(path.join(workspaceRoot, 'dist'));
     fs.writeFileSync(path.join(workspaceRoot, 'dist', 'a.js'), `import "@angular/common/http";`);
     const config = makeConfig({ shared: { '@angular/common': ext() } });
@@ -455,6 +460,19 @@ describe('validateBareImports', () => {
     expect(() => validateBareImports(config, fedOptions, fedInfo, files)).toThrow(
       /^1 file\(s\) could not be scanned \(features.strictImports\)/
     );
+  });
+
+  it('logs a file it could not scan as an error with strictImports', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    const { config, fedOptions, fedInfo, files } = setup(true);
+    fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'a.js'), '{}/`/;import "x";');
+
+    expect(() => validateBareImports(config, fedOptions, fedInfo, files)).toThrow();
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining("Could not scan the imports of 'a.js'")
+    );
+    expect(warn).not.toHaveBeenCalled();
   });
 
   // A missing file is the adapter breaking the outputFiles contract; failing strict builds on it
