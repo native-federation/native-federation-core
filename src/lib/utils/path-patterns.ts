@@ -31,22 +31,19 @@ export function parseWildcard(pattern: string): WildcardPattern {
 export function matchesWildcard(value: string, pattern: string): boolean {
   const { prefix, suffix, hasWildcard } = parseWildcard(pattern);
   if (!hasWildcard) return value === pattern;
-  return value.startsWith(prefix) && (suffix === '' || value.endsWith(suffix));
+  return value.startsWith(prefix) && value.endsWith(suffix);
 }
 
 // How `externals` and an adapter's `external` are read (esbuild's rule): a name also covers its
-// subpaths, and the one '*' matches only where prefix and suffix do not overlap.
+// subpaths, and the one '*' matches only where prefix and suffix do not overlap. Only the specifier
+// as written: esbuild also matches path patterns after resolution, but those never stay bare.
 export function matchesExternal(specifier: string, pattern: string): boolean {
-  const parsed = parseWildcard(pattern);
-  if (!parsed.hasWildcard) return specifier === pattern || specifier.startsWith(pattern + '/');
-  return fitsWildcard(specifier, parsed);
-}
-
-function fitsWildcard(value: string, { prefix, suffix }: WildcardPattern): boolean {
+  const { prefix, suffix, hasWildcard } = parseWildcard(pattern);
+  if (!hasWildcard) return specifier === pattern || specifier.startsWith(pattern + '/');
   return (
-    value.length >= prefix.length + suffix.length &&
-    value.startsWith(prefix) &&
-    value.endsWith(suffix)
+    specifier.length >= prefix.length + suffix.length &&
+    specifier.startsWith(prefix) &&
+    specifier.endsWith(suffix)
   );
 }
 
