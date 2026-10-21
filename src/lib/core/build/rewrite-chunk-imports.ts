@@ -12,33 +12,23 @@ export interface SpecifierEdit {
   text: string;
 }
 
-/**
- * Every `./x.js` specifier of a static import, an export-from or a dynamic `import()`, as
- * an edit that swaps the specifier text for its `@nf-internal/x` form. The edits are the
- * only change the rewrite makes, so the source map esbuild wrote next to the file stays
- * valid apart from the columns after an edit on the same line, which `shiftSourceMap`
- * moves along.
- */
-export function collectSpecifierEdits(sourceCode: string, fileName: string): SpecifierEdit[] {
+// The edits are the only change, so the bundler's source map stays valid once `shiftSourceMap`
+// moves the columns after an edit on the same line.
+export function collectSpecifierEdits(
+  sourceCode: string,
+  fileName: string,
+  chunkNames: ReadonlySet<string>
+): SpecifierEdit[] {
   const imports = lexImports(sourceCode, fileName);
   const edits: SpecifierEdit[] = [];
 
   for (const imp of imports) {
-    // import.meta, a non-literal dynamic argument, or not a chunk reference
-    if (imp.d === -2 || imp.n === undefined || !imp.n.startsWith('./')) continue;
+    // A wildcard external also keeps relative imports such as `./styles.css`.
+    if (!imp.n?.startsWith('./') || !chunkNames.has(imp.n.slice(2))) continue;
 
-    let start = imp.s;
-    let end = imp.e;
-
-    if (imp.d > -1) {
-      // dynamic import: s/e include the quotes, step inside them
-      const quote = sourceCode[start];
-      if (quote !== '"' && quote !== "'") continue;
-      start += 1;
-      end -= 1;
-    }
-
-    edits.push({ start, end, text: toChunkImport(imp.n) });
+    // A dynamic import's span includes its quotes or backticks.
+    const delimiter = imp.d > -1 ? 1 : 0;
+    edits.push({ start: imp.s + delimiter, end: imp.e - delimiter, text: toChunkImport(imp.n) });
   }
 
   return edits.sort((a, b) => a.start - b.start);
@@ -121,10 +111,11 @@ export function shiftSourceMap(
 
 export function rewriteChunkImportsCore(
   io: FileReaderPort & FileWriterPort,
-  filePath: string
+  filePath: string,
+  chunkNames: ReadonlySet<string>
 ): void {
   const sourceCode = io.readText(filePath);
-  const edits = collectSpecifierEdits(sourceCode, path.basename(filePath));
+  const edits = collectSpecifierEdits(sourceCode, path.basename(filePath), chunkNames);
   if (edits.length === 0) return;
 
   io.writeText(filePath, applyEdits(sourceCode, edits));

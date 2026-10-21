@@ -239,7 +239,8 @@ function finalizeBundleOutputs(
   if (!dense || entries.length === 0) return { files: [...entries, ...outputs] };
 
   const chunks = outputs.filter(file => isScript(file));
-  for (const entryFile of entries) rewriteChunkImportsCore(io, entryFile);
+  const chunkNames = new Set(chunks.map(chunk => path.basename(chunk)));
+  for (const entryFile of entries) rewriteChunkImportsCore(io, entryFile, chunkNames);
   const renamed = renameChunks(io, chunks, entries);
   return {
     files: [...entries, ...outputs.map(file => renamedPath(file, renamed))],

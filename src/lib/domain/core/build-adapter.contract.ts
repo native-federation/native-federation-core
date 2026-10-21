@@ -26,6 +26,7 @@ export interface NFBuildAdapter {
 
   // Every file written for the bundle, on a rebuild too, not only the changed ones. Files go flat
   // into `outdir` and `fileName` is their absolute path: core lists and hashes them by base name.
+  // Core rewrites `./x` to `@nf-internal/x` only when `x` is a non-entry script listed here.
   build(
     name: string,
     opts?: {
@@ -49,7 +50,7 @@ export interface NFBuildAdapterOptions<TBundlerCache = unknown> {
   entryPoints: EntryPoint[];
   // Unresolved; a relative path is workspace-relative, not cwd-relative.
   tsConfigPath?: string;
-  // Read as matchesExternal does; every match must stay the bare specifier, never a resolved path.
+  // Read as matchesExternal does, relative imports too; a match stays as written, never resolved.
   external: string[];
   outdir: string;
   mappedPaths: PathToImport;

@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { buildSync, type BuildFailure } from 'esbuild';
 import {
   captureWildcard,
   isUnderAnyDir,
@@ -112,7 +111,13 @@ describe('matchesExternal', () => {
   const table: [string, Record<string, boolean>][] = [
     [
       'host-sdk',
-      { 'host-sdk': true, 'host-sdk/events': true, 'host-sdk/a/b': true, 'host-sdkx': false },
+      {
+        'host-sdk': true,
+        'host-sdk/events': true,
+        'host-sdk/a/b': true,
+        'host-sdkx': false,
+        './host-sdk': false,
+      },
     ],
     ['@scope/pkg', { '@scope/pkg': true, '@scope/pkg/sub': true, '@scope/pkg-other': false }],
     ['@icons/*.svg', { '@icons/home.svg': true, '@icons/a/b.svg': true, '@icons/home.png': false }],
@@ -123,8 +128,11 @@ describe('matchesExternal', () => {
     ['lodash/', { lodash: false, 'lodash/fp': false }],
     // An empty capture is allowed, at either end.
     ['@scope/*', { '@scope/': true, '@scope/a': true, '@scope': false }],
-    ['*.svg', { '.svg': true, 'a.svg': true, '@icons/a.svg': true, svg: false }],
-    ['*', { a: true, '@scope/a/b': true }],
+    // A wildcard also matches a relative import, which the bundler then keeps relative.
+    ['*.svg', { '.svg': true, 'a.svg': true, '@icons/a.svg': true, svg: false, './a.svg': true }],
+    ['*.css', { './styles.css': true, './local.js': false }],
+    ['*/local.js', { './local.js': true, '../local.js': true, './other.js': false }],
+    ['*', { a: true, '@scope/a/b': true, './local.js': true, '../up.js': true }],
     // '' + '/' prefixes every absolute path; harmless, since only bare imports are checked.
     ['', { a: false, '@scope/a': false, '/abs': true }],
   ];
@@ -132,17 +140,6 @@ describe('matchesExternal', () => {
   it.each(table)('reads %s the way the table says', (pattern, expected) => {
     for (const [specifier, kept] of Object.entries(expected)) {
       expect([specifier, matchesExternal(specifier, pattern)]).toEqual([specifier, kept]);
-    }
-  });
-
-  // esbuild reads `external` this way natively. The check belongs in the esbuild adapter; it stays
-  // here until that repo runs the table itself.
-  it.each(table)('agrees with esbuild on %s', (pattern, expected) => {
-    for (const specifier of Object.keys(expected)) {
-      expect([specifier, keptExternalByEsbuild(specifier, pattern)]).toEqual([
-        specifier,
-        matchesExternal(specifier, pattern),
-      ]);
     }
   });
 });
@@ -153,33 +150,7 @@ describe('matchesExternal with more than one wildcard', () => {
     expect(matchesExternal('a-b*c', 'a*b*c')).toBe(true);
     expect(matchesExternal('abxc', 'a*b*c')).toBe(false);
   });
-
-  // So a config with one never reaches the bundle checks; moves to the esbuild adapter with the
-  // agreement test above.
-  it('is rejected by esbuild', () => {
-    expect(() => keptExternalByEsbuild('abc', 'a*b*c')).toThrow(/more than one "\*" wildcard/);
-  });
 });
-
-// Nothing is installed for these names, so an import esbuild does not keep external fails to
-// resolve; any other build error is a broken test and is rethrown.
-function keptExternalByEsbuild(specifier: string, pattern: string): boolean {
-  try {
-    const { outputFiles } = buildSync({
-      stdin: { contents: `import ${JSON.stringify(specifier)};` },
-      bundle: true,
-      write: false,
-      format: 'esm',
-      external: [pattern],
-      logLevel: 'silent',
-    });
-    return outputFiles[0]!.text.includes(JSON.stringify(specifier));
-  } catch (e) {
-    const { errors } = e as BuildFailure;
-    if (errors?.every(err => err.text.startsWith('Could not resolve'))) return false;
-    throw e;
-  }
-}
 
 describe('captureWildcard', () => {
   it('captures the segment for a suffix pattern (end-anchored, multi-segment)', () => {

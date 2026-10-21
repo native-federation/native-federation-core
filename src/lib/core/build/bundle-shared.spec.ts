@@ -790,6 +790,7 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
         cache?: boolean;
         platform?: 'browser' | 'node';
         asset?: boolean;
+        entryText?: string;
       } = {}
     ) => {
       const adapter: FakeBuildAdapter = createFakeBuildAdapter({
@@ -797,7 +798,7 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
           const setup = [...adapter.calls.setup].reverse().find(s => s.name === name)!;
           const entry = path.join(setup.options.outdir, setup.options.entryPoints[0]!.outName);
           const chunk = path.join(setup.options.outdir, 'chunk-AAAAAAAA.js');
-          mem.setFile(entry, `export * from './chunk-AAAAAAAA.js';\n`);
+          mem.setFile(entry, opts.entryText ?? `export * from './chunk-AAAAAAAA.js';\n`);
           mem.setFile(chunk, chunkText);
           mem.setFile(`${chunk}.map`, '{"version":3}');
           if (!opts.asset) {
@@ -843,6 +844,20 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
 
       const entry = mem.readText(path.join('/ws/dist', result.externals[0]!.outFileName));
       expect(entry).toContain(chunk.packageName);
+      expect(entry).not.toContain('AAAAAAAA');
+    });
+
+    it('follows a backtick chunk import and leaves a relative CSS import as written', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+
+      const result = await chunkedBuild(mem, 'export const a = 1;\n', false, {
+        entryText: "import'./foo.css';export const l=()=>import(`./chunk-AAAAAAAA.js`);\n",
+      });
+
+      const chunk = result.externals.find(e => e.packageName.startsWith('@nf-internal/'))!;
+      const entry = mem.readText(path.join('/ws/dist', result.externals[0]!.outFileName));
+      expect(entry).toContain(`import(\`${chunk.packageName}\`)`);
+      expect(entry).toContain("import'./foo.css'");
       expect(entry).not.toContain('AAAAAAAA');
     });
 

@@ -37,31 +37,37 @@ describe('renameChunksByContentCore', () => {
     expect(fromA.get('chunk-SAMENAME.js')).not.toBe(fromB.get('chunk-SAMENAME.js'));
   });
 
-  it('renames dependencies first and updates both specifier forms in the importers', () => {
-    const io = createMemoryIo()
-      .setFile('/out/chunk-LEAFLEAF.js', 'export const leaf = 1;\n')
-      .setFile(
-        '/out/chunk-TRUNKTRU.js',
-        "import { leaf } from './chunk-LEAFLEAF.js';\nexport { leaf };\n"
-      )
-      .setFile('/out/entry.js', "export * from '@nf-internal/chunk-TRUNKTRU';\n");
+  it.each(["'", '`'])(
+    'renames dependencies first and updates both specifier forms in the importers (%s)',
+    q => {
+      const io = createMemoryIo()
+        .setFile('/out/chunk-LEAFLEAF.js', 'export const leaf = 1;\n')
+        .setFile(
+          '/out/chunk-TRUNKTRU.js',
+          `export const leaf = () => import(${q}./chunk-LEAFLEAF.js${q});\n`
+        )
+        .setFile(
+          '/out/entry.js',
+          `export const trunk = () => import(${q}@nf-internal/chunk-TRUNKTRU${q});\n`
+        );
 
-    const renamed = renameChunksByContentCore(
-      io,
-      '/out',
-      ['chunk-TRUNKTRU.js', 'chunk-LEAFLEAF.js'],
-      ['entry.js']
-    );
+      const renamed = renameChunksByContentCore(
+        io,
+        '/out',
+        ['chunk-TRUNKTRU.js', 'chunk-LEAFLEAF.js'],
+        ['entry.js']
+      );
 
-    const leaf = renamed.get('chunk-LEAFLEAF.js')!;
-    const trunk = renamed.get('chunk-TRUNKTRU.js')!;
-    expect(io.readText(`/out/${trunk}`)).toBe(
-      `import { leaf } from './${leaf}';\nexport { leaf };\n`
-    );
-    expect(io.readText('/out/entry.js')).toBe(
-      `export * from '@nf-internal/${trunk.replace(/\.js$/, '')}';\n`
-    );
-  });
+      const leaf = renamed.get('chunk-LEAFLEAF.js')!;
+      const trunk = renamed.get('chunk-TRUNKTRU.js')!;
+      expect(io.readText(`/out/${trunk}`)).toBe(
+        `export const leaf = () => import(${q}./${leaf}${q});\n`
+      );
+      expect(io.readText('/out/entry.js')).toBe(
+        `export const trunk = () => import(${q}@nf-internal/${trunk.replace(/\.js$/, '')}${q});\n`
+      );
+    }
+  );
 
   it('derives the importer name from the renamed dependency, so a changed leaf renames the trunk', () => {
     const build = (leaf: string) =>

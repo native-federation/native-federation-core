@@ -519,37 +519,74 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     });
   });
 
-  it('names dense chunks after their content and points the rewritten entries at them', async () => {
-    const io = createMemoryIo();
+  it.each([
+    ["export * from './chunk-AAAAAAAA.js';\n"],
+    ['export const l=()=>import(`./chunk-AAAAAAAA.js`);\n'],
+  ])(
+    'names dense chunks after their content and points the rewritten entries at them: %s',
+    async entryText => {
+      const io = createMemoryIo();
+      const config = makeConfig({
+        exposes: { './Comp': { file: './src/comp.ts' } },
+        chunks: true,
+        features: { ...makeConfig().features, denseChunking: true },
+      });
+      const adapter = createFakeBuildAdapter({
+        results: () => {
+          io.setFile('/ws/dist/Comp.js', entryText);
+          io.setFile('/ws/dist/chunk-AAAAAAAA.js', 'export const a = 1;\n');
+          return [{ fileName: '/ws/dist/Comp.js' }, { fileName: '/ws/dist/chunk-AAAAAAAA.js' }];
+        },
+      });
+
+      const result = await bundleExposedAndMappingsCore(
+        { adapter, io },
+        config,
+        makeFedOptions(),
+        []
+      );
+
+      const [chunk] = result.chunks!['mapping-or-exposed']!;
+      expect(chunk).toMatch(/^chunk-[A-Z2-7]{8}\.js$/);
+      expect(chunk).not.toBe('chunk-AAAAAAAA.js');
+      expect(io.isFile(`/ws/dist/${chunk}`)).toBe(true);
+      expect(io.isFile('/ws/dist/chunk-AAAAAAAA.js')).toBe(false);
+      expect(io.readText('/ws/dist/Comp.js')).toContain(
+        `@nf-internal/${chunk!.replace(/\.js$/, '')}`
+      );
+      expect(io.readText('/ws/dist/Comp.js')).not.toContain('AAAAAAAA');
+    }
+  );
+
+  // A chunk is a non-entry script the adapter reported: an entry, or a file left in the folder by
+  // an earlier build, is no chunk and keeps its relative import.
+  it('rewrites only the reported chunks of a dense bundle', async () => {
+    const io = createMemoryIo().setFile('/ws/dist/stale-AAAAAAAA.js', 'export const s = 1;\n');
     const config = makeConfig({
-      exposes: { './Comp': { file: './src/comp.ts' } },
+      exposes: { './Comp': { file: './src/comp.ts' }, './Other': { file: './src/other.ts' } },
       chunks: true,
       features: { ...makeConfig().features, denseChunking: true },
     });
     const adapter = createFakeBuildAdapter({
       results: () => {
-        io.setFile('/ws/dist/Comp.js', "export * from './chunk-AAAAAAAA.js';\n");
+        io.setFile(
+          '/ws/dist/Comp.js',
+          "import './Other.js';\nimport './stale-AAAAAAAA.js';\nexport * from './chunk-AAAAAAAA.js';\n"
+        );
+        io.setFile('/ws/dist/Other.js', 'export const o = 1;\n');
         io.setFile('/ws/dist/chunk-AAAAAAAA.js', 'export const a = 1;\n');
-        return [{ fileName: '/ws/dist/Comp.js' }, { fileName: '/ws/dist/chunk-AAAAAAAA.js' }];
+        return ['Comp.js', 'Other.js', 'chunk-AAAAAAAA.js'].map(f => ({
+          fileName: `/ws/dist/${f}`,
+        }));
       },
     });
 
-    const result = await bundleExposedAndMappingsCore(
-      { adapter, io },
-      config,
-      makeFedOptions(),
-      []
-    );
+    await bundleExposedAndMappingsCore({ adapter, io }, config, makeFedOptions(), []);
 
-    const [chunk] = result.chunks!['mapping-or-exposed']!;
-    expect(chunk).toMatch(/^chunk-[A-Z2-7]{8}\.js$/);
-    expect(chunk).not.toBe('chunk-AAAAAAAA.js');
-    expect(io.isFile(`/ws/dist/${chunk}`)).toBe(true);
-    expect(io.isFile('/ws/dist/chunk-AAAAAAAA.js')).toBe(false);
-    expect(io.readText('/ws/dist/Comp.js')).toContain(
-      `@nf-internal/${chunk!.replace(/\.js$/, '')}`
-    );
-    expect(io.readText('/ws/dist/Comp.js')).not.toContain('AAAAAAAA');
+    const comp = io.readText('/ws/dist/Comp.js');
+    expect(comp).toContain("import './Other.js';");
+    expect(comp).toContain("import './stale-AAAAAAAA.js';");
+    expect(comp).toMatch(/from '@nf-internal\/chunk-[A-Z2-7]{8}'/);
   });
 
   it('builds a mapping that asked for its own bundle apart from the rest', async () => {
@@ -776,6 +813,7 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         expect(Object.values(result.chunks ?? {}).flat()).not.toContain('Comp.css');
         expect(Object.keys(result.integrity!)).not.toContain('Comp.css');
         expect(io.readText('/ws/dist/Comp.css')).toBe('.a{}');
+        expect(io.readText('/ws/dist/Comp.js')).toContain("import './Comp.css';");
       }
     );
 

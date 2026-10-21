@@ -4,10 +4,10 @@ import type {
   FileWriterPort,
   HashPort,
 } from '../../domain/utils/io-port.contract.js';
-import { CHUNK_PREFIX } from '../../domain/core/chunk.js';
+import { CHUNK_PREFIX, SCRIPT_EXTENSION } from '../../domain/core/chunk.js';
 import { DEFAULT_HASH_LENGTH, hashChunkContent } from '../../utils/hash.js';
 import { SOURCE_MAP_COMMENT } from './rewrite-chunk-imports.js';
-import { isScript, SCRIPT_EXTENSION } from '../../utils/script-file.js';
+import { isScript } from '../../utils/script-file.js';
 
 type RenameDeps = FileReaderPort & FileWriterPort & HashPort;
 
@@ -15,8 +15,13 @@ type RenameDeps = FileReaderPort & FileWriterPort & HashPort;
 // least as long as the 8 characters both bundlers write: a trailing word like `-vendor` is not one.
 const HASH_SEGMENT = /-([A-Za-z0-9_$]{8,})$/;
 
-// `'./chunk-x.js'` as the bundler wrote it, or `'@nf-internal/chunk-x'` after the import rewrite.
-const CHUNK_REFERENCE = new RegExp(`(['"])(?:\\.\\/([^'"/]+)|${CHUNK_PREFIX}\\/([^'"/]+))\\1`, 'g');
+// `'./chunk-x.js'` as the bundler wrote it, or `'@nf-internal/chunk-x'` after the rewrite, in
+// quotes or backticks (Rolldown's minified dynamic import).
+const CHUNK_NAME = `[^'"\`/]+`;
+const CHUNK_REFERENCE = new RegExp(
+  `(['"\`])(?:\\.\\/(${CHUNK_NAME})|${CHUNK_PREFIX}\\/(${CHUNK_NAME}))\\1`,
+  'g'
+);
 
 /**
  * The bundler names a chunk after the build graph it belongs to, so the same bytes can land under
