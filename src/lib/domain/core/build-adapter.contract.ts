@@ -22,14 +22,19 @@ export interface NFBuildAdapter {
   // pass it to normalizeFederationOptions in `NFAdapterInput`. Keep entries exact or scoped.
   readonly externals?: readonly string[];
 
+  // Replaces a context already set up under `name`. Bundles under different names may be set up
+  // and built concurrently.
   setup(name: string, options: NFBuildAdapterOptions): Promise<void>;
 
   // Every file written for the bundle, on a rebuild too, not only the changed ones. Files go flat
   // into `outdir` and `fileName` is their absolute path: core lists and hashes them by base name.
   // Core rewrites `./x` to `@nf-internal/x` only when `x` is a non-entry script listed here.
+  // Every listed file is on disk with this build's bytes when the promise resolves: core renames
+  // and deletes them next. A watch rebuild of a mapping or exposed bundle calls build without setup.
   build(
     name: string,
     opts?: {
+      // Authoritative: hand it to the bundler, whose own change detection may see nothing.
       modifiedFiles?: string[];
       signal?: AbortSignal;
     }
@@ -47,6 +52,7 @@ export interface EntryPoint {
 }
 
 export interface NFBuildAdapterOptions<TBundlerCache = unknown> {
+  // Keep the order: it decides how shared code is split into chunks.
   entryPoints: EntryPoint[];
   // Unresolved; a relative path is workspace-relative, not cwd-relative.
   tsConfigPath?: string;
