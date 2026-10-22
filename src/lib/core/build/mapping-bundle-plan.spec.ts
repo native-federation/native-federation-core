@@ -12,11 +12,13 @@ function mappingCfg(overrides: Partial<NormalizedMappingConfig> = {}): Normalize
 
 function config(
   sharedMappings: PathToImport,
-  sharedMappingsConfig: Record<string, NormalizedMappingConfig> = {}
+  sharedMappingsConfig: Record<string, NormalizedMappingConfig> = {},
+  chunks = true
 ): NormalizedFederationConfig {
   return {
     sharedMappings,
     sharedMappingsConfig,
+    chunks,
     features: { mappingVersion: false },
   } as NormalizedFederationConfig;
 }
@@ -26,7 +28,11 @@ describe('planMappingBundles', () => {
     const plans = planMappingBundles(config({ './libs/a': '@org/a', './libs/b': '@org/b' }));
 
     expect(plans).toEqual([
-      { bundleName: 'mapping-bundle', entries: { './libs/a': '@org/a', './libs/b': '@org/b' } },
+      {
+        bundleName: 'mapping-bundle',
+        chunks: true,
+        entries: { './libs/a': '@org/a', './libs/b': '@org/b' },
+      },
     ]);
   });
 
@@ -39,8 +45,8 @@ describe('planMappingBundles', () => {
     );
 
     expect(plans).toEqual([
-      { bundleName: 'mapping-org_a', entries: { './libs/a': '@org/a' } },
-      { bundleName: 'mapping-bundle', entries: { './libs/b': '@org/b' } },
+      { bundleName: 'mapping-org_a', chunks: true, entries: { './libs/a': '@org/a' } },
+      { bundleName: 'mapping-bundle', chunks: true, entries: { './libs/b': '@org/b' } },
     ]);
   });
 
