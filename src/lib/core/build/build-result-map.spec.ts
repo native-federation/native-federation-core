@@ -15,13 +15,20 @@ describe('createBuildResultMap', () => {
   });
 
   it('keeps the hashed name when it is not in the expected list', () => {
-    const map = createBuildResultMap([r('dist/chunk-AB12CD.js')], true, ['main.js']);
-    expect(map).toEqual({ 'chunk-AB12CD.js': 'dist/chunk-AB12CD.js' });
+    const map = createBuildResultMap([r('dist/main-XYZ.js'), r('dist/chunk-AB12CD.js')], true, [
+      'main.js',
+    ]);
+    expect(map).toEqual({
+      'main.js': 'dist/main-XYZ.js',
+      'chunk-AB12CD.js': 'dist/chunk-AB12CD.js',
+    });
   });
 
-  it('does not strip hashes when isHashed is false even if expected', () => {
-    const map = createBuildResultMap([r('dist/main-AB12CD.js')], false, ['main.js']);
-    expect(map).toEqual({ 'main-AB12CD.js': 'dist/main-AB12CD.js' });
+  // Shared bundles build unhashed: an entry the adapter named itself (Bun) is not found by name.
+  it('does not strip hashes when isHashed is false, so the expected name is missing', () => {
+    expect(() => createBuildResultMap([r('dist/main-AB12CD.js')], false, ['main.js'])).toThrow(
+      "No build result found for 'main.js'."
+    );
   });
 
   it('leaves names without a hash separator unchanged', () => {
@@ -36,7 +43,7 @@ describe('createBuildResultMap with entry set by the adapter', () => {
     const map = createBuildResultMap(
       [r('/d/chunk-AAAA1111.js', 'chunk.js'), r('/d/chunk-BBBB2222.js'), r('/d/my-CCCC3333.js')],
       true,
-      ['chunk.js', 'my.js']
+      ['chunk.js']
     );
     expect(map).toEqual({
       'chunk.js': '/d/chunk-AAAA1111.js',
@@ -57,6 +64,12 @@ describe('createBuildResultMap with entry set by the adapter', () => {
     ).toThrow(
       "NFBuildAdapter.build returned two results for entry 'Cmp.js': '/d/Cmp-AAAA1111.js' and '/d/Cmp-BBBB2222.css'."
     );
+  });
+
+  it('throws for an expected entry no result sets', () => {
+    expect(() =>
+      createBuildResultMap([r('/d/rxjs-AAAA1111.js', 'other.js')], false, ['rxjs.js'])
+    ).toThrow("No build result found for 'rxjs.js'.");
   });
 
   // Rollup and Rolldown hashes can contain '-', which the name match cuts at.

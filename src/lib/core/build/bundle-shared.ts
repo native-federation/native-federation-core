@@ -36,6 +36,7 @@ import {
 import { linkedContentSignals } from './resolve-shared-dirs.js';
 import { computeIntegrityMapCore } from './compute-integrity.js';
 import { assertAbsoluteFileNames, toOutputFiles } from '../output/output-files.js';
+import { createBuildResultMap } from './build-result-map.js';
 import { isScript } from '../../utils/script-file.js';
 import { resolveOutputPath } from '../../utils/output-path.js';
 import { fileURLToPath } from 'url';
@@ -235,22 +236,6 @@ export async function bundleSharedCore(
     } finally {
       await deps.adapter.dispose(buildOptions.bundleName);
     }
-    assertAbsoluteFileNames(bundleResult);
-
-    const cachedFiles = bundleResult.map(br => path.basename(br.fileName));
-    // Re-key entry files (version-based names) to a hash of their final content, so a
-    // changed bundle always gets a new name and never reuses a stale cached one.
-    const hashEntries = fedOptions.dev
-      ? new Set<string>()
-      : new Set(entryPoints.map(ep => ep.outName));
-    const renamed = finalizeSharedOutputs(
-      deps.io,
-      cachedFiles,
-      bundleCache.dir,
-      new Set(entryPoints.map(ep => ep.outName)),
-      hashEntries
-    );
-    applyRenames(bundleResult, entryPoints, renamed);
   } catch (e) {
     logger.error('Error bundling shared npm package');
     if (e instanceof Error) {
@@ -277,6 +262,29 @@ export async function bundleSharedCore(
     logger.verbose(e);
     throw e;
   }
+
+  // Past the catch: what the adapter wrote is not the package's fault, so no 'skip' hint.
+  assertAbsoluteFileNames(bundleResult);
+  createBuildResultMap(
+    bundleResult,
+    false,
+    entryPoints.map(ep => ep.outName)
+  );
+
+  const cachedFiles = bundleResult.map(br => path.basename(br.fileName));
+  // Re-key entry files (version-based names) to a hash of their final content, so a
+  // changed bundle always gets a new name and never reuses a stale cached one.
+  const hashEntries = fedOptions.dev
+    ? new Set<string>()
+    : new Set(entryPoints.map(ep => ep.outName));
+  const renamed = finalizeSharedOutputs(
+    deps.io,
+    cachedFiles,
+    bundleCache.dir,
+    new Set(entryPoints.map(ep => ep.outName)),
+    hashEntries
+  );
+  applyRenames(bundleResult, entryPoints, renamed);
 
   const outFileNames = entryPoints.map(ep => path.join(fullOutputPath, ep.outName));
 

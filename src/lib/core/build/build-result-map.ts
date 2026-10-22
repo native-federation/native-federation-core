@@ -29,6 +29,7 @@ export function createBuildResultMap(
     }
     map[requestName] = item.fileName;
   }
+  for (const name of expected) requireEntry(map, name);
   return map;
 }
 

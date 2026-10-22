@@ -990,6 +990,33 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       ).rejects.toThrow("NFBuildAdapter.build returned a relative fileName 'foo.js'");
     });
 
+    // Bun names entries itself: taken for a chunk, the entry was renamed by content and published
+    // under `chunks`, while remoteEntry.json and the cache pointed at a file never written.
+    it('rejects an entry the adapter did not write under its outName', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const notice = vi.spyOn(logger, 'notice').mockImplementation(() => undefined);
+      const adapter = createFakeBuildAdapter({
+        io: mem,
+        results: () => [
+          { fileName: path.join(adapter.calls.setup[0]!.options.outdir, 'foo-abc123.js') },
+        ],
+      });
+
+      await expect(
+        bundleSharedCore(
+          { io: mem, repo: repoAtVersion('2.0.0'), adapter },
+          fooWith(),
+          makeConfig(),
+          makeFedOptions(),
+          [],
+          { ...BUILD_OPTIONS, chunks: true }
+        )
+      ).rejects.toThrow(/No build result found for 'foo\..*\.js'/);
+      expect(mem.exists('/cache/shared.meta.json')).toBe(false);
+      expect(notice).not.toHaveBeenCalled();
+      vi.restoreAllMocks();
+    });
+
     it('recomputes the same integrity on a cache hit whose metadata has none', async () => {
       const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
       const opts = { integrityHashes: true, cache: true };
