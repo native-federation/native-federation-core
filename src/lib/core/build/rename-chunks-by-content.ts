@@ -6,7 +6,12 @@ import type {
 } from '../../domain/utils/io-port.contract.js';
 import { CHUNK_PREFIX, SCRIPT_EXTENSION } from '../../domain/core/chunk.js';
 import { DEFAULT_HASH_LENGTH, hashChunkContent } from '../../utils/hash.js';
-import { SOURCE_MAP_COMMENT } from './rewrite-chunk-imports.js';
+import {
+  applyEdits,
+  shiftSourceMap,
+  SOURCE_MAP_COMMENT,
+  type SpecifierEdit,
+} from './rewrite-chunk-imports.js';
 import { isScript } from '../../utils/script-file.js';
 
 type RenameDeps = FileReaderPort & FileWriterPort & HashPort;
@@ -23,16 +28,10 @@ const CHUNK_REFERENCE = new RegExp(
   'g'
 );
 
-/**
- * The bundler names a chunk after the build graph it belongs to, so the same bytes can land under
- * two names and different bytes under one. The hash segment is therefore replaced by a hash of the
- * bytes that will be served, dependencies first, because renaming a chunk changes the text of
- * everything that imports it.
- *
- * `chunks` and `referrers` are file names inside `dir`; only the former are renamed, the latter
- * have their references updated. Files that are not scripts are left alone. Returns the renames
- * as old name → new name.
- */
+// The bundler names a chunk after the build graph it belongs to, so the same bytes can land under
+// two names and different bytes under one. The hash segment is therefore replaced by a hash of the
+// bytes that will be served, dependencies first, because renaming a chunk changes the text of
+// everything that imports it. Only `chunks` are renamed; `referrers` get their references updated.
 export function renameChunksByContentCore(
   io: RenameDeps,
   dir: string,
@@ -69,15 +68,23 @@ export function renameChunksByContentCore(
     return found;
   };
 
-  const withRenames = (text: string): string =>
-    text.replace(CHUNK_REFERENCE, (match, quote: string, relative?: string, bare?: string) => {
+  // Spans exclude the quotes, like the import rewriter's, so `shiftSourceMap` can move the map.
+  const renameEdits = (text: string): SpecifierEdit[] => {
+    const edits: SpecifierEdit[] = [];
+    for (const { 0: match, 2: relative, 3: bare, index } of text.matchAll(CHUNK_REFERENCE)) {
       const file = chunkOf(relative, bare);
       const target = file && renamed.get(file);
-      if (!target) return match;
-      return relative !== undefined
-        ? `${quote}./${target}${quote}`
-        : `${quote}${CHUNK_PREFIX}/${stemOf(target)}${quote}`;
-    });
+      if (!target) continue;
+      edits.push({
+        start: index + 1,
+        end: index + match.length - 1,
+        text: relative !== undefined ? `./${target}` : `${CHUNK_PREFIX}/${stemOf(target)}`,
+      });
+    }
+    return edits;
+  };
+
+  const withRenames = (text: string): string => applyEdits(text, renameEdits(text));
 
   const bodyOf = (file: string): string =>
     withRenames(textOf(file)).replace(SOURCE_MAP_COMMENT, '');
@@ -124,8 +131,13 @@ export function renameChunksByContentCore(
   for (const file of scripts) {
     const target = renamed.get(file)!;
     const source = path.join(dir, file);
-    const text = withRenames(textOf(file)).split(`${file}.map`).join(`${target}.map`);
-    io.writeText(path.join(dir, target), text);
+    const text = textOf(file);
+    const edits = renameEdits(text);
+    shiftSourceMap(io, `${source}.map`, text, edits);
+    io.writeText(
+      path.join(dir, target),
+      applyEdits(text, edits).split(`${file}.map`).join(`${target}.map`)
+    );
     if (target === file) continue;
     io.remove(source);
     if (io.exists(`${source}.map`)) {
@@ -137,8 +149,10 @@ export function renameChunksByContentCore(
   for (const file of referrers) {
     const filePath = path.join(dir, file);
     const text = io.readText(filePath);
-    const updated = withRenames(text);
-    if (updated !== text) io.writeText(filePath, updated);
+    const edits = renameEdits(text);
+    if (edits.length === 0) continue;
+    io.writeText(filePath, applyEdits(text, edits));
+    shiftSourceMap(io, `${filePath}.map`, text, edits);
   }
 
   for (const [file, target] of renamed) {
@@ -147,7 +161,7 @@ export function renameChunksByContentCore(
   return renamed;
 }
 
-/** Tarjan's algorithm; a component is emitted after every component it references. */
+// Tarjan's algorithm; a component is emitted after every component it references.
 function stronglyConnected(nodes: string[], edges: (node: string) => string[]): string[][] {
   const index = new Map<string, number>();
   const low = new Map<string, number>();

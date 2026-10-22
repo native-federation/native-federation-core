@@ -1,8 +1,35 @@
 import { describe, expect, it } from 'vitest';
 import { renameChunksByContentCore } from './rename-chunks-by-content.js';
 import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
+import { decode, encode, type SourceMapSegment } from '@jridgewell/sourcemap-codec';
 
 const CHUNK = /^chunk-[A-Z2-7]{8}\.js$/;
+
+// A map with one segment per occurrence of each name, named after it, so a test can check that
+// every segment still starts at its own text without computing a single column by hand.
+function mapOf(code: string, names: string[]): string {
+  const mappings = code.split('\n').map((line, at) => {
+    const segments: SourceMapSegment[] = [];
+    names.forEach((name, index) => {
+      for (const { index: column } of line.matchAll(new RegExp(`\\b${name}\\b`, 'g'))) {
+        segments.push([column, 0, at, column, index]);
+      }
+    });
+    return segments.sort((a, b) => a[0] - b[0]);
+  });
+  return JSON.stringify({ version: 3, sources: ['src.ts'], names, mappings: encode(mappings) });
+}
+
+function misplacedSegments(code: string, map: string): string[] {
+  const { names, mappings } = JSON.parse(map) as { names: string[]; mappings: string };
+  const lines = code.split('\n');
+  return decode(mappings).flatMap((segments, at) =>
+    segments
+      .map(([column, , , , name]) => [column, names[name!]!] as const)
+      .filter(([column, name]) => !lines[at]!.startsWith(name, column))
+      .map(([column, name]) => `${at}:${column} ${name}`)
+  );
+}
 
 describe('renameChunksByContentCore', () => {
   it('names a chunk after its content, keeping the shape of the bundler name', () => {
@@ -122,6 +149,42 @@ describe('renameChunksByContentCore', () => {
     );
     expect(io.readText(`/out/${target}.map`)).toBe('{"version":3}');
     expect(io.exists('/out/chunk-AAAAAAAA.js.map')).toBe(false);
+  });
+
+  // Rspack names split chunks `576.js` with `hash: false`, so core appends a segment and every
+  // reference grows; esbuild's `chunk-<hash>` keeps its length and would prove nothing here.
+  it.each([
+    ['relative', (name: string) => `./${name}.js`],
+    ['@nf-internal', (name: string) => `@nf-internal/${name}`],
+  ])('shifts the map of a referrer whose references grow (%s)', (_, specifier) => {
+    const code = `import('${specifier('576')}');import('${specifier('577')}');go(log);\n`;
+    const io = createMemoryIo()
+      .setFile('/out/576.js', 'export const a = 1;\n')
+      .setFile('/out/577.js', 'export const b = 2;\n')
+      .setFile('/out/entry.js', code)
+      .setFile('/out/entry.js.map', mapOf(code, ['import', 'go', 'log']));
+
+    renameChunksByContentCore(io, '/out', ['576.js', '577.js'], ['entry.js']);
+
+    const updated = io.readText('/out/entry.js');
+    expect(updated).not.toBe(code);
+    expect(misplacedSegments(updated, io.readText('/out/entry.js.map'))).toEqual([]);
+  });
+
+  it('shifts the map of a chunk that imports a renamed chunk, and moves it along', () => {
+    const code = `export const lazy = () => import('./576.js');go(log);\n`;
+    const io = createMemoryIo()
+      .setFile('/out/576.js', 'export const a = 1;\n')
+      .setFile('/out/577.js', code)
+      .setFile('/out/577.js.map', mapOf(code, ['export', 'lazy', 'import', 'go', 'log']));
+
+    const renamed = renameChunksByContentCore(io, '/out', ['576.js', '577.js'], []);
+
+    const target = renamed.get('577.js')!;
+    expect(io.exists('/out/577.js.map')).toBe(false);
+    expect(
+      misplacedSegments(io.readText(`/out/${target}`), io.readText(`/out/${target}.map`))
+    ).toEqual([]);
   });
 
   it('does not let the sourceMappingURL comment shape the hash', () => {
