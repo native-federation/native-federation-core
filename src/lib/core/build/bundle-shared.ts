@@ -274,11 +274,13 @@ export async function bundleSharedCore(
     bundleResult.map(br => br.fileName),
     bundleCache.dir
   );
-  createBuildResultMap(
+  const entryFiles = createBuildResultMap(
     bundleResult,
     false,
     entryPoints.map(ep => ep.outName)
   );
+  // An adapter that names an entry itself marks it with `entry`; from here on it goes by that name.
+  for (const ep of entryPoints) ep.outName = path.basename(entryFiles[ep.outName]!);
 
   const cachedFiles = bundleResult.map(br => path.basename(br.fileName));
   // Re-key entry files (version-based names) to a hash of their final content, so a

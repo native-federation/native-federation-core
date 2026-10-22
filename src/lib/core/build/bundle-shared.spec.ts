@@ -1085,6 +1085,38 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       vi.restoreAllMocks();
     });
 
+    // Bun names entries itself; an adapter says which file is which entry through `entry`.
+    it.each([true, false])(
+      'publishes an entry the adapter named itself and marked with entry (dev: %s)',
+      async dev => {
+        const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+        const adapter: FakeBuildAdapter = createFakeBuildAdapter({
+          io: mem,
+          results: () => {
+            const { outdir, entryPoints } = adapter.calls.setup[0]!.options;
+            return [
+              { fileName: path.join(outdir, 'foo-abc123.js'), entry: entryPoints[0]!.outName },
+            ];
+          },
+        });
+
+        const result = await bundleSharedCore(
+          { io: mem, repo: repoAtVersion('2.0.0'), adapter },
+          fooWith(),
+          makeConfig(),
+          makeFedOptions({ dev }),
+          [],
+          { ...BUILD_OPTIONS, chunks: true }
+        );
+
+        expect(result.externals).toHaveLength(1);
+        const { outFileName } = result.externals[0]!;
+        expect(outFileName).toMatch(dev ? /^foo-abc123\.js$/ : /^foo-abc123\.[^.]+\.js$/);
+        expect(result.chunks).toBeUndefined();
+        expect(mem.isFile(path.join('/ws/dist', outFileName))).toBe(true);
+      }
+    );
+
     it('recomputes the same integrity on a cache hit whose metadata has none', async () => {
       const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
       const opts = { integrityHashes: true, cache: true };
