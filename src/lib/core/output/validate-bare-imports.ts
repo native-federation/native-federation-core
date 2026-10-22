@@ -25,7 +25,6 @@ interface UnresolvedImport {
 export interface BareImportScan {
   unresolved: UnresolvedImport[];
   unparsable: { fileName: string; error: string }[];
-  missing: string[];
 }
 
 const reportedSpecifiers = new WeakMap<FederationCache, string>();
@@ -39,7 +38,7 @@ export function validateBareImports(
 ): void {
   const start = process.hrtime();
   const outputDir = resolveOutputPath(fedOptions);
-  const { unresolved, unparsable, missing } = findUnresolvedImportsCore(
+  const { unresolved, unparsable } = findUnresolvedImportsCore(
     nodeIo,
     outputDir,
     files,
@@ -47,14 +46,6 @@ export function validateBareImports(
     federationInfo
   );
   logger.measure(start, 'Validated the bare imports of the published files.');
-
-  // An adapter that breaks the outputFiles contract is its bug, not the build's: never fatal.
-  if (missing.length > 0) {
-    logger.warn(
-      `Not in '${outputDir}', so not scanned: ${formatList(missing, 3)}. ` +
-        'The adapter must write its files flat into outdir.'
-    );
-  }
 
   const strict = config.features.strictImports;
   const report = strict ? logger.error : logger.warn;
@@ -105,14 +96,11 @@ export function findUnresolvedImportsCore(
   const declared = declaredSpecifiers(federationInfo);
   const importersBySpecifier = new Map<string, string[]>();
   const unparsable: BareImportScan['unparsable'] = [];
-  const missing: string[] = [];
 
   for (const file of files.filter(f => isScript(f.fileName))) {
     const filePath = path.join(outputDir, file.fileName);
-    if (!io.exists(filePath)) {
-      missing.push(file.fileName);
-      continue;
-    }
+    // validateOutputFiles has reported it.
+    if (!io.exists(filePath)) continue;
 
     let specifiers: string[];
     try {
@@ -139,7 +127,7 @@ export function findUnresolvedImportsCore(
       importers,
       reason: explain(specifier, config, declared),
     }));
-  return { unresolved, unparsable, missing };
+  return { unresolved, unparsable };
 }
 
 function declaredSpecifiers(federationInfo: FederationInfo): Set<string> {

@@ -428,18 +428,16 @@ describe('findUnresolvedImportsCore', () => {
     expect(result).toEqual({
       unresolved: [expect.objectContaining({ specifier: 'missing', importers: ['a.js', 'b.js'] })],
       unparsable: [],
-      missing: [],
     });
   });
 
-  // An adapter that writes into a subfolder reports a basename that is not in the output folder;
-  // that file used to be skipped without a word.
-  it('reports a written script that is not in the output folder', () => {
+  // validateOutputFiles reports it; scanning a same-named file elsewhere would check other bytes.
+  it('skips a reported script that is not in the output folder', () => {
     const io = createMemoryIo().setFile(out('chunks/chunk-A.js'), `import "missing";`);
 
     const result = findUnresolvedImportsCore(io, OUT, browser('chunk-A.js'), makeConfig(), info());
 
-    expect(result).toEqual({ unresolved: [], unparsable: [], missing: ['chunk-A.js'] });
+    expect(result).toEqual({ unresolved: [], unparsable: [] });
   });
 
   // Valid JS the lexer misreads: '/' after a block starts a regex, not a division.
@@ -561,44 +559,6 @@ describe('validateBareImports', () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
-  // A missing file is the adapter breaking the outputFiles contract; failing strict builds on it
-  // would be new in a minor.
-  it('only warns about a reported file that is missing, even with strictImports', () => {
-    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-    const { config, fedOptions, fedInfo } = setup(true);
-    fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'a.js'), `export {};`);
-
-    expect(() =>
-      validateBareImports(config, fedOptions, fedInfo, browser('a.js', 'ghost.js'), FULL)
-    ).not.toThrow();
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringMatching(/^Not in .*, so not scanned: 'ghost.js'\./)
-    );
-  });
-
-  // An adapter writing into a subfolder misses every script, so one line per file would flood
-  // each rebuild.
-  it('reports every missing file in one warning', () => {
-    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-    const { config, fedOptions, fedInfo } = setup(false);
-    fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'a.js'), `export {};`);
-
-    validateBareImports(
-      config,
-      fedOptions,
-      fedInfo,
-      browser('a.js', 'ghost.js', 'ghost2.js'),
-      FULL
-    );
-
-    const missingWarnings = warn.mock.calls.filter(([message]) =>
-      String(message).includes('so not scanned')
-    );
-    expect(missingWarnings).toEqual([
-      [expect.stringMatching(/so not scanned: 'ghost.js', 'ghost2.js'\./)],
-    ]);
-  });
-
   it('names both problems when a strict build has an unresolved import and an unscanned file', () => {
     vi.spyOn(logger, 'error').mockImplementation(() => undefined);
     const { config, fedOptions, fedInfo } = setup(true);
@@ -705,19 +665,6 @@ describe('validateBareImports', () => {
       validateBareImports(second.config, second.fedOptions, second.fedInfo, second.files, REBUILD);
 
       expect(warn).toHaveBeenCalledTimes(2);
-    });
-
-    // Rare, and the adapter's or the lexer's problem: no reason to hide them.
-    it('repeats a missing file on every rebuild', () => {
-      const { warn } = quiet();
-      const { config, fedOptions, fedInfo } = setup(false);
-      const files = browser('a.js', 'ghost.js');
-
-      validateBareImports(config, fedOptions, fedInfo, files, FULL);
-      validateBareImports(config, fedOptions, fedInfo, files, REBUILD);
-
-      const missing = warn.mock.calls.filter(([m]) => String(m).includes('so not scanned'));
-      expect(missing).toHaveLength(2);
     });
   });
 });
