@@ -18,12 +18,7 @@ import { type NormalizedFederationOptions } from '../../domain/core/federation-o
 import { logger } from '../../utils/logger.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import { DEFAULT_EXTERNAL_LIST } from './default-external-list.js';
-import {
-  applyEdits,
-  collectSpecifierEdits,
-  shiftSourceMap,
-  SOURCE_MAP_COMMENT,
-} from './rewrite-chunk-imports.js';
+import { rewriteChunkImportsCore, SOURCE_MAP_COMMENT } from './rewrite-chunk-imports.js';
 import { renameChunksByContentCore } from './rename-chunks-by-content.js';
 import { hashBuildMetadata, hashEntryContent } from '../../utils/hash.js';
 import { toChunkImport } from '../../domain/core/chunk.js';
@@ -246,7 +241,7 @@ export async function bundleSharedCore(
     const hashEntries = fedOptions.dev
       ? new Set<string>()
       : new Set(entryPoints.map(ep => ep.outName));
-    const renamed = rewriteImports(
+    const renamed = finalizeSharedOutputs(
       deps.io,
       cachedFiles,
       bundleCache.dir,
@@ -306,7 +301,7 @@ export async function bundleSharedCore(
 
   const persistedFiles = bundleResult.map(r => r.fileName.split(path.sep).pop() ?? r.fileName);
 
-  // Must run after rewriteImports so SRI matches the bytes copied to dist.
+  // Must run after finalizeSharedOutputs so SRI matches the bytes copied to dist.
   const integrity = config.features.integrityHashes
     ? computeIntegrityMapCore(deps.io, persistedFiles, bundleCache.dir)
     : undefined;
@@ -346,7 +341,7 @@ function packagesKeepingAllSecondaries(
   return [...new Set(roots)];
 }
 
-function rewriteImports(
+function finalizeSharedOutputs(
   io: IoPort,
   cachedFiles: string[],
   bundleDir: string,
@@ -358,12 +353,7 @@ function rewriteImports(
   const chunkNames = new Set(chunks);
 
   for (const file of sourceFiles) {
-    const filePath = path.join(bundleDir, file);
-    const sourceCode = io.readText(filePath);
-    const edits = collectSpecifierEdits(sourceCode, file, chunkNames);
-    io.writeText(filePath, applyEdits(sourceCode, edits));
-    // The map esbuild wrote describes the text before the edits; move its columns along.
-    shiftSourceMap(io, `${filePath}.map`, sourceCode, edits);
+    rewriteChunkImportsCore(io, path.join(bundleDir, file), chunkNames);
   }
 
   // Chunks are published under their file name, so the name has to say what the bytes are;

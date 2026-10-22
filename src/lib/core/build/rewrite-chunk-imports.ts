@@ -14,7 +14,7 @@ export interface SpecifierEdit {
 
 // The edits are the only change, so the bundler's source map stays valid once `shiftSourceMap`
 // moves the columns after an edit on the same line.
-export function collectSpecifierEdits(
+export function collectChunkImportEdits(
   sourceCode: string,
   fileName: string,
   chunkNames: ReadonlySet<string>
@@ -115,7 +115,7 @@ export function rewriteChunkImportsCore(
   chunkNames: ReadonlySet<string>
 ): void {
   const sourceCode = io.readText(filePath);
-  const edits = collectSpecifierEdits(sourceCode, path.basename(filePath), chunkNames);
+  const edits = collectChunkImportEdits(sourceCode, path.basename(filePath), chunkNames);
   if (edits.length === 0) return;
 
   io.writeText(filePath, applyEdits(sourceCode, edits));

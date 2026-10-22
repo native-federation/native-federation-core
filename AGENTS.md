@@ -449,8 +449,8 @@ Native Federation uses an intelligent caching system to speed up builds:
   (reachable only through hoisting) is not seen; that case still needs something else to
   invalidate the entry. The walk only runs when something was added. Metadata without these fields
   misses once
-- Never on a file the lexer cannot parse: a shared bundle with one fails in `rewriteImports`
-  before it is persisted, so the cache never holds one
+- Never on a file the lexer cannot parse: a shared bundle with one fails in
+  `finalizeSharedOutputs` before it is persisted, so the cache never holds one
 - Based on the adapter's `externalsCacheKey` (core#152): `builderVersion` is core's own version,
   but the adapter produces the bytes, so it declares its identity and every option that changes
   shared externals. Core reads it before `setup()`, sorts the option keys and JSON-encodes each
