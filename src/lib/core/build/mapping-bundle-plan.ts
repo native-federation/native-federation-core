@@ -1,4 +1,7 @@
-import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
+import type {
+  NormalizedFederationConfig,
+  NormalizedMappingConfig,
+} from '../../domain/config/federation-config.contract.js';
 import type { PathToImport } from '../../domain/utils/mapped-path.contract.js';
 import { resolveMappingConfig } from '../../config/mapping-utils.js';
 import { inferPackageFromSecondary, normalizePackageName } from '../../utils/normalize.js';
@@ -7,6 +10,7 @@ const DEFAULT_MAPPING_BUNDLE = 'mapping-bundle';
 
 export interface MappingBundlePlan {
   bundleName: string;
+  chunks: boolean;
   entries: PathToImport;
 }
 
@@ -23,16 +27,22 @@ export function planMappingBundles(config: NormalizedFederationConfig): MappingB
       config.features.mappingVersion
     );
 
-    const bundleName = !build
-      ? DEFAULT_MAPPING_BUNDLE
-      : `mapping-${normalizePackageName(
-          build === 'separate' ? mappedImport : inferPackageFromSecondary(mappedImport)
-        )}`;
-
+    const bundleName = bundleNameFor(build, mappedImport);
     const entries = grouped.get(bundleName) ?? {};
     entries[mappedPath] = mappedImport;
     grouped.set(bundleName, entries);
   }
 
-  return [...grouped].map(([bundleName, entries]) => ({ bundleName, entries }));
+  return [...grouped].map(([bundleName, entries]) => ({
+    bundleName,
+    chunks: config.chunks,
+    entries,
+  }));
+}
+
+function bundleNameFor(build: NormalizedMappingConfig['build'], mappedImport: string): string {
+  if (!build) return DEFAULT_MAPPING_BUNDLE;
+  return `mapping-${normalizePackageName(
+    build === 'separate' ? mappedImport : inferPackageFromSecondary(mappedImport)
+  )}`;
 }

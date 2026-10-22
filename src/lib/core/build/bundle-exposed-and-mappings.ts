@@ -69,6 +69,7 @@ export async function bundleExposedAndMappingsCore(
 
   const mappingPlans = planMappingBundles(config).map(plan => ({
     bundleName: plan.bundleName,
+    chunks: plan.chunks,
     entryPoints: Object.entries(plan.entries).map(([entryPoint, mappedImport]) => ({
       fileName: entryPoint,
       outName: mappedImport.replace(/[^A-Za-z0-9]/g, '_') + '.js',
@@ -88,7 +89,8 @@ export async function bundleExposedAndMappingsCore(
 
   const runBuild = async (
     bundleName: string,
-    entryPoints: EntryPoint[]
+    entryPoints: EntryPoint[],
+    chunks: boolean
   ): Promise<Record<string, string>> => {
     if (entryPoints.length === 0) return {};
 
@@ -103,7 +105,7 @@ export async function bundleExposedAndMappingsCore(
           dev: !!fedOptions.dev,
           watch: fedOptions.watch,
           mappedPaths: config.sharedMappings,
-          chunks: config.chunks,
+          chunks,
           hash,
           optimizedMappings: config.features.ignoreUnusedDeps,
           isMappingOrExposed: true,
@@ -155,7 +157,7 @@ export async function bundleExposedAndMappingsCore(
   for (const plan of mappingPlans) {
     logger.info(`Bundling shared mappings with bundle type '${plan.bundleName}'`);
     const start = process.hrtime();
-    const results = await runBuild(plan.bundleName, plan.entryPoints);
+    const results = await runBuild(plan.bundleName, plan.entryPoints, plan.chunks);
     const files: string[] = [];
 
     for (const item of plan.entryPoints) {
@@ -178,7 +180,7 @@ export async function bundleExposedAndMappingsCore(
 
   if (exposes.length > 0) logger.info('Bundling exposed modules');
   const exposedStart = process.hrtime();
-  const exposedResults = await runBuild(EXPOSED_BUNDLE, exposes);
+  const exposedResults = await runBuild(EXPOSED_BUNDLE, exposes, config.chunks);
 
   const exposedResult: Array<ExposesInfo> = [];
   const exposedFiles: string[] = [];
