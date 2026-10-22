@@ -689,6 +689,55 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     });
   });
 
+  describe('adapter lifecycle', () => {
+    it('disposes the bundle when its build fails, and rethrows the build error', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const adapter = createFakeBuildAdapter({
+        results: () => {
+          throw new Error('boom');
+        },
+      });
+
+      await expect(
+        bundleSharedCore(
+          { io: mem, repo: repoAtVersion('2.0.0'), adapter },
+          fooWith(),
+          makeConfig(),
+          makeFedOptions(),
+          [],
+          BUILD_OPTIONS
+        )
+      ).rejects.toThrow('boom');
+      // By name: a bare dispose() would tear down every other bundle's context too.
+      expect(adapter.calls.dispose).toEqual([BUILD_OPTIONS.bundleName]);
+    });
+
+    // A failed setup leaves no context, and the angular-adapter's dispose throws on an unknown
+    // name, which would hide the setup error.
+    it('does not dispose a bundle whose setup failed', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const fake = createFakeBuildAdapter();
+      const adapter = {
+        ...fake,
+        setup: async () => {
+          throw new Error('setup failed');
+        },
+      };
+
+      await expect(
+        bundleSharedCore(
+          { io: mem, repo: repoAtVersion('2.0.0'), adapter },
+          fooWith(),
+          makeConfig(),
+          makeFedOptions(),
+          [],
+          BUILD_OPTIONS
+        )
+      ).rejects.toThrow('setup failed');
+      expect(fake.calls.dispose).toEqual([]);
+    });
+  });
+
   // A linked lib rebuilds under a fixed version, so the installed version cannot invalidate
   // it — the content signal is the only thing standing between an edit and a stale bundle.
   // Independent of watchLinkedDeps: that option only decides whether the edit is noticed

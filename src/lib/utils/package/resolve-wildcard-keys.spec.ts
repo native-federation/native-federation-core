@@ -30,6 +30,21 @@ describe('resolvePackageJsonExportsWildcardCore', () => {
     ]);
   });
 
+  it('returns keys in file path order, whatever order the port returns', () => {
+    const io = createMemoryIo()
+      .setFile(path.join(CWD, 'src/features/b.js'), '')
+      .setFile(path.join(CWD, 'src/features/a.js'), '');
+
+    const result = resolvePackageJsonExportsWildcardCore(
+      io,
+      './features/*',
+      './src/features/*.js',
+      CWD
+    );
+
+    expect(result.map(r => r.key)).toEqual(['./features/a', './features/b']);
+  });
+
   it('strips a leading "./" from the value pattern before globbing', () => {
     const io = createMemoryIo().setFile(path.join(CWD, 'lib/x.mjs'), '');
     const result = resolvePackageJsonExportsWildcardCore(io, './*', './lib/*.mjs', CWD);

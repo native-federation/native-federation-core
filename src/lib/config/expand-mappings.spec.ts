@@ -130,16 +130,29 @@ describe('expandWildcardMapping', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('no entry points'));
   });
 
+  // Inserted out of order: the memory port returns insertion order, so the winner is only
+  // stable if expandWildcardMapping sorts ('.' sorts before '/').
   it('keeps the first of two files resolving to the same import, and warns', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     const io = createMemoryIo()
-      .setFile(abs('libs/ui/button.ts'), '')
-      .setFile(abs('libs/ui/button/index.ts'), '');
+      .setFile(abs('libs/ui/button/index.ts'), '')
+      .setFile(abs('libs/ui/button.ts'), '');
 
     const result = expandWildcardMapping(abs('libs/ui/*'), '@org/ui/*', { io, workspaceRoot: WS });
 
-    expect(Object.values(result)).toEqual(['@org/ui/button']);
+    expect(result).toEqual({ [abs('libs/ui/button.ts')]: '@org/ui/button' });
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('duplicate imports'));
+  });
+
+  // File paths, not import names: 'a-b/index.ts' < 'a/index.ts', but '@org/ui/a' < '@org/ui/a-b'.
+  it('returns entries in file path order, whatever order the port returns', () => {
+    const io = createMemoryIo()
+      .setFile(abs('libs/ui/a/index.ts'), '')
+      .setFile(abs('libs/ui/a-b/index.ts'), '');
+
+    const result = expandWildcardMapping(abs('libs/ui/*'), '@org/ui/*', { io, workspaceRoot: WS });
+
+    expect(Object.values(result)).toEqual(['@org/ui/a-b', '@org/ui/a']);
   });
 
   it('warns when the mapped path holds no wildcard to expand', () => {

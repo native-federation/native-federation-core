@@ -230,9 +230,11 @@ export async function bundleSharedCore(
       cache: fedOptions.federationCache,
     });
 
-    bundleResult = await deps.adapter.build(buildOptions.bundleName);
-
-    await deps.adapter.dispose(buildOptions.bundleName);
+    try {
+      bundleResult = await deps.adapter.build(buildOptions.bundleName);
+    } finally {
+      await deps.adapter.dispose(buildOptions.bundleName);
+    }
     assertAbsoluteFileNames(bundleResult);
 
     const cachedFiles = bundleResult.map(br => path.basename(br.fileName));
