@@ -16,8 +16,8 @@ import { isScript } from '../../utils/script-file.js';
 
 type RenameDeps = FileReaderPort & FileWriterPort & HashPort;
 
-// The bundler's hash segment: 8 or more name characters after the last `-`, or 8 characters
-// after a `-` that may hold a `-` themselves (base64url). A trailing word like `-vendor` is not one.
+// The bundler's hash segment: 8 or more name characters after the last `-`, or exactly 8 after a
+// `-`, `-` included (base64url). A trailing word like `-vendor` is not one.
 const HASH_SEGMENT = /-([\w$]{8,}|[\w$-]{8})$/;
 
 // `'./chunk-x.js'` as the bundler wrote it, or `'@nf-internal/chunk-x'` after the rewrite, in
@@ -68,7 +68,6 @@ export function renameChunksByContentCore(
     return found;
   };
 
-  // Spans exclude the quotes, like the import rewriter's, so `shiftSourceMap` can move the map.
   const renameEdits = (text: string): SpecifierEdit[] => {
     const edits: SpecifierEdit[] = [];
     for (const { 0: match, 2: relative, 3: bare, index } of text.matchAll(CHUNK_REFERENCE)) {

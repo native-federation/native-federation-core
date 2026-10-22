@@ -171,6 +171,21 @@ describe('renameChunksByContentCore', () => {
     expect(misplacedSegments(updated, io.readText('/out/entry.js.map'))).toEqual([]);
   });
 
+  // esbuild pretty-prints its maps; re-serializing one that nothing moved would still rewrite it.
+  it('leaves the map of a referrer alone when every reference keeps its length', () => {
+    const code = `import('./chunk-AAAAAAAA.js');go(log);\n`;
+    const map = JSON.stringify(JSON.parse(mapOf(code, ['import', 'go', 'log'])), null, 2);
+    const io = createMemoryIo()
+      .setFile('/out/chunk-AAAAAAAA.js', 'export const a = 1;\n')
+      .setFile('/out/entry.js', code)
+      .setFile('/out/entry.js.map', map);
+
+    renameChunksByContentCore(io, '/out', ['chunk-AAAAAAAA.js'], ['entry.js']);
+
+    expect(io.readText('/out/entry.js')).not.toBe(code);
+    expect(io.readText('/out/entry.js.map')).toBe(map);
+  });
+
   it('shifts the map of a chunk that imports a renamed chunk, and moves it along', () => {
     const code = `export const lazy = () => import('./576.js');go(log);\n`;
     const io = createMemoryIo()
@@ -335,6 +350,8 @@ describe('renameChunksByContentCore', () => {
     ['m30-BuAdLpD-', 'm30'],
     ['576', '576'],
     ['my-lazy-panel', 'my-lazy-panel'],
+    // Accepted misread: a hashless name whose ninth character from the end is a `-`.
+    ['app-my-panel', 'app'],
   ])('reads the hash segment of %s', (stem, base) => {
     const io = createMemoryIo()
       .setFile(`/a/${stem}.js`, 'export const a = 1;\n')

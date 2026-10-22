@@ -93,14 +93,14 @@ function shiftMappings(mappings: string, code: string, edits: SpecifierEdit[]): 
   return encode(decoded);
 }
 
-/** Shifts the map at `mapPath`, if there is one, for the edits made to `sourceCode`. */
+// Rewriting a map re-serializes it, so one that no edit moves is left as the bundler wrote it.
 export function shiftSourceMap(
   io: FileReaderPort & FileWriterPort,
   mapPath: string,
   sourceCode: string,
   edits: SpecifierEdit[]
 ): void {
-  if (edits.length === 0 || !io.exists(mapPath)) return;
+  if (!edits.some(e => e.text.length !== e.end - e.start) || !io.exists(mapPath)) return;
 
   const map = JSON.parse(io.readText(mapPath)) as { mappings?: string };
   if (!map.mappings) return;
