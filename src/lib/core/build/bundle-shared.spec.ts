@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { bundleSharedCore } from './bundle-shared.js';
@@ -828,6 +828,8 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
   });
 
   describe('bundler chunks', () => {
+    afterEach(() => vi.restoreAllMocks());
+
     // The adapter emits the entry plus a chunk it imports; the entry keeps its pre-hash name so
     // the chunk rename shows up in the text the entry hash is then taken from.
     const chunkedBuild = async (
@@ -1082,7 +1084,6 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       ).rejects.toThrow(/No build result found for 'foo\..*\.js'/);
       expect(mem.exists('/cache/shared.meta.json')).toBe(false);
       expect(notice).not.toHaveBeenCalled();
-      vi.restoreAllMocks();
     });
 
     // Bun names entries itself; an adapter says which file is which entry through `entry`.

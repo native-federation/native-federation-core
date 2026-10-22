@@ -919,8 +919,8 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
       features: { ...makeConfig().features, denseChunking: true },
     });
 
-    // Vite's default assetsDir: the chunk import would become @nf-internal/assets/chunk-…, which
-    // no import map key resolves.
+    // Vite's default assetsDir: the chunk would be renamed in assets/ and published under `chunks`
+    // by a name that is not in the output folder.
     it('rejects a dense chunk written into a subfolder of outdir', async () => {
       const io = createMemoryIo()
         .setFile('/ws/dist/Comp.js', "export * from './assets/chunk-AAAAAAAA.js';\n")
@@ -931,7 +931,6 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
           { fileName: '/ws/dist/assets/chunk-AAAAAAAA.js' },
         ],
       });
-      vi.spyOn(logger, 'error').mockImplementation(() => undefined);
 
       await expect(
         bundleExposedAndMappingsCore({ adapter, io }, denseComp, makeFedOptions(), [])
