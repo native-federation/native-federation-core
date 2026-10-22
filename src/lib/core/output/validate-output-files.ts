@@ -15,8 +15,8 @@ export function validateOutputFiles(
   validateOutputFilesCore(nodeIo, resolveOutputPath(fedOptions), federationInfo, files);
 }
 
-// Runs after every bundle: one deleting another's files (Vite's emptyOutDir, Rspack's output.clean)
-// is invisible to a per-bundle check.
+// Runs after every bundle: one that empties the output folder deletes another's files, which a
+// per-bundle check cannot see.
 export function validateOutputFilesCore(
   io: FileReaderPort,
   outputDir: string,
@@ -30,7 +30,7 @@ export function validateOutputFilesCore(
 
   const cause =
     `missing from '${outputDir}': written into a subfolder, or deleted after it was written ` +
-    "(e.g. by Vite's emptyOutDir).";
+    '(e.g. by a bundle that empties the output folder).';
   const published = publishedFileNames(federationInfo);
   const broken = missing.filter(fileName => published.has(fileName));
   if (broken.length > 0) {

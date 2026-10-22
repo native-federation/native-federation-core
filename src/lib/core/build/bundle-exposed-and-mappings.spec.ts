@@ -919,8 +919,8 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
       features: { ...makeConfig().features, denseChunking: true },
     });
 
-    // Vite's default assetsDir: the chunk would be renamed in assets/ and published under `chunks`
-    // by a name that is not in the output folder.
+    // A chunk in assets/ would be renamed there and published under `chunks` by a name that is not
+    // in the output folder.
     it('rejects a dense chunk written into a subfolder of outdir', async () => {
       const io = createMemoryIo()
         .setFile('/ws/dist/Comp.js', "export * from './assets/chunk-AAAAAAAA.js';\n")
@@ -939,8 +939,8 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
       );
     });
 
-    // Rspack does not re-emit an unchanged chunk, but still reports it; core already renamed it by
-    // content, so the rewrite used to fail with a bare ENOENT.
+    // An adapter may skip re-emitting an unchanged chunk but still report it; core already renamed
+    // it by content, so the rewrite used to fail with a bare ENOENT.
     it('rejects a rebuild that reports a chunk it did not write', async () => {
       const io = createMemoryIo();
       let builds = 0;

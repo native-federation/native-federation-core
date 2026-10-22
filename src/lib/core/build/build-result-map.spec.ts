@@ -24,7 +24,7 @@ describe('createBuildResultMap', () => {
     });
   });
 
-  // Shared bundles build unhashed: an entry the adapter named itself (Bun) is not found by name.
+  // Shared bundles build unhashed: an entry the adapter named itself is not found by name.
   it('does not strip hashes when isHashed is false, so the expected name is missing', () => {
     expect(() => createBuildResultMap([r('dist/main-AB12CD.js')], false, ['main.js'])).toThrow(
       "No build result found for 'main.js'; NFBuildAdapter.build returned 'main-AB12CD.js'."

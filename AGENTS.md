@@ -264,9 +264,9 @@ the extension for scripts.
   file of a shared bundle, the scripts of a dense exposed or mapping build. A shared entry not
   written as its `outName` throws too (`createBuildResultMap` with the expected names).
 - Before `remoteEntry.json` is written, `validateOutputFiles` checks every `outputFiles` entry is
-  still there, which also catches a later bundle deleting an earlier one's files (Vite's
-  `emptyOutDir`). It throws for a file `remoteEntry.json` names and warns once for the rest (a
-  source map, a stylesheet), which were never fatal.
+  still there, which also catches a later bundle deleting an earlier one's files (one that
+  empties the output folder). It throws for a file `remoteEntry.json` names and warns once for the
+  rest (a source map, a stylesheet), which were never fatal.
 - Exposed and mapping output is always listed as `browser`: built-ins are allowed only in shared
   bundles built with `platform: 'node'`.
 - Integrity is computed over the same files, so the two cannot drift.

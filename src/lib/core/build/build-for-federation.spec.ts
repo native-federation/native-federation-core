@@ -304,7 +304,7 @@ describe('buildForFederation — output files (core#177)', () => {
     expect(writeFederationInfo).not.toHaveBeenCalled();
   });
 
-  // Vite's emptyOutDir on the exposed build wipes the shared files already in the output folder,
+  // An exposed build that empties the output folder wipes the shared files already in it,
   // which no per-bundle check can see. remoteEntry.json must not be written pointing at them.
   it('fails before remoteEntry.json is written when a published file is gone', async () => {
     const actual = await vi.importActual<typeof outputValidation>(

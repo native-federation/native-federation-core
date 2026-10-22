@@ -924,8 +924,8 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       expect(result.externals.some(e => e.packageName.startsWith('@nf-internal/'))).toBe(false);
     });
 
-    // Rollup imports one entry from another. Only reported chunks become @nf-internal/*: an entry
-    // is published under its own name, so it is never a chunk.
+    // A bundler may import one entry from another. Only reported chunks become @nf-internal/*: an
+    // entry is published under its own name, so it is never a chunk.
     it.each([false, true])(
       'leaves an import of another entry relative and unlisted (denseChunking: %s)',
       async denseChunking => {
@@ -1027,7 +1027,7 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     });
 
     // Core reads every file from the bundle's folder by base name, renames and copies it: a file
-    // never written, or written into a subfolder (Vite's assetsDir), used to end in a bare ENOENT.
+    // never written, or written into a subfolder, used to end in a bare ENOENT.
     it.each([
       ['not written', (outdir: string) => path.join(outdir, 'chunk-AAAAAAAA.js'), false],
       [
@@ -1060,8 +1060,8 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       expect(mem.exists('/cache/shared.meta.json')).toBe(false);
     });
 
-    // Bun names entries itself: taken for a chunk, the entry was renamed by content and published
-    // under `chunks`, while remoteEntry.json and the cache pointed at a file never written.
+    // An adapter that names entries itself: taken for a chunk, the entry was renamed by content and
+    // published under `chunks`, while remoteEntry.json and the cache pointed at a file never written.
     it('rejects an entry the adapter did not write under its outName', async () => {
       const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
       const notice = vi.spyOn(logger, 'notice').mockImplementation(() => undefined);
@@ -1086,7 +1086,7 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       expect(notice).not.toHaveBeenCalled();
     });
 
-    // Bun names entries itself; an adapter says which file is which entry through `entry`.
+    // An adapter that names entries itself says which file is which entry through `entry`.
     it.each([true, false])(
       'publishes an entry the adapter named itself and marked with entry (dev: %s)',
       async dev => {

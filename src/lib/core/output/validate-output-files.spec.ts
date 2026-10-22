@@ -60,7 +60,7 @@ describe('validateOutputFilesCore', () => {
     fileName => {
       expect(() => validateOutputFilesCore(createMemoryIo(), OUT, INFO, browser(fileName))).toThrow(
         `remoteEntry.json names '${fileName}', missing from '${OUT}': written into a subfolder, ` +
-          "or deleted after it was written (e.g. by Vite's emptyOutDir)."
+          'or deleted after it was written (e.g. by a bundle that empties the output folder).'
       );
     }
   );
