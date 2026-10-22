@@ -16,9 +16,9 @@ import { isScript } from '../../utils/script-file.js';
 
 type RenameDeps = FileReaderPort & FileWriterPort & HashPort;
 
-// The hash segment of a bundler's output name, in esbuild's, Rollup's or a hex alphabet, and at
-// least as long as the 8 characters both bundlers write: a trailing word like `-vendor` is not one.
-const HASH_SEGMENT = /-([A-Za-z0-9_$]{8,})$/;
+// The bundler's hash segment: 8 or more name characters after the last `-`, or 8 characters
+// after a `-` that may hold a `-` themselves (base64url). A trailing word like `-vendor` is not one.
+const HASH_SEGMENT = /-([\w$]{8,}|[\w$-]{8})$/;
 
 // `'./chunk-x.js'` as the bundler wrote it, or `'@nf-internal/chunk-x'` after the rewrite, in
 // quotes or backticks (Rolldown's minified dynamic import).

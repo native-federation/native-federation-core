@@ -327,6 +327,26 @@ describe('renameChunksByContentCore', () => {
     ).toThrow(/same name/);
   });
 
+  // Names as bundlers write them: esbuild (base32), Rollup 4 and Rolldown (base64url, so a hash
+  // can hold a `-`), and Rspack with `hash: false` (no hash at all).
+  it.each([
+    ['chunk-AAAAAAAA', 'chunk'],
+    ['m24-BbE26-FZ', 'm24'],
+    ['m30-BuAdLpD-', 'm30'],
+    ['576', '576'],
+    ['my-lazy-panel', 'my-lazy-panel'],
+  ])('reads the hash segment of %s', (stem, base) => {
+    const io = createMemoryIo()
+      .setFile(`/a/${stem}.js`, 'export const a = 1;\n')
+      .setFile(`/b/${base}-AAAAAAAA.js`, 'export const a = 1;\n');
+
+    const renamed = renameChunksByContentCore(io, '/a', [`${stem}.js`], []);
+    const sibling = renameChunksByContentCore(io, '/b', [`${base}-AAAAAAAA.js`], []);
+
+    expect(renamed.get(`${stem}.js`)).toMatch(new RegExp(`^${base}-[A-Z2-7]{8}\\.js$`));
+    expect(renamed.get(`${stem}.js`)).toBe(sibling.get(`${base}-AAAAAAAA.js`));
+  });
+
   it('appends a hash segment to a name that carries none', () => {
     const io = createMemoryIo().setFile('/out/lazy.js', 'export const a = 1;\n');
 
