@@ -912,6 +912,63 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         ).rejects.toThrow("NFBuildAdapter.build returned a relative fileName 'Comp.js'");
       }
     );
+
+    const denseComp = makeConfig({
+      exposes: { './Comp': { file: './src/comp.ts' } },
+      chunks: true,
+      features: { ...makeConfig().features, denseChunking: true },
+    });
+
+    // Vite's default assetsDir: the chunk import would become @nf-internal/assets/chunk-…, which
+    // no import map key resolves.
+    it('rejects a dense chunk written into a subfolder of outdir', async () => {
+      const io = createMemoryIo()
+        .setFile('/ws/dist/Comp.js', "export * from './assets/chunk-AAAAAAAA.js';\n")
+        .setFile('/ws/dist/assets/chunk-AAAAAAAA.js', 'export const a = 1;\n');
+      const adapter = createFakeBuildAdapter({
+        results: [
+          { fileName: '/ws/dist/Comp.js' },
+          { fileName: '/ws/dist/assets/chunk-AAAAAAAA.js' },
+        ],
+      });
+      vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+
+      await expect(
+        bundleExposedAndMappingsCore({ adapter, io }, denseComp, makeFedOptions(), [])
+      ).rejects.toThrow(
+        "NFBuildAdapter.build returned '/ws/dist/assets/chunk-AAAAAAAA.js', missing from outdir '/ws/dist'"
+      );
+    });
+
+    // Rspack does not re-emit an unchanged chunk, but still reports it; core already renamed it by
+    // content, so the rewrite used to fail with a bare ENOENT.
+    it('rejects a rebuild that reports a chunk it did not write', async () => {
+      const io = createMemoryIo();
+      let builds = 0;
+      const adapter = createFakeBuildAdapter({
+        results: () => {
+          if (builds++ === 0) {
+            io.setFile('/ws/dist/Comp.js', "export * from './chunk-AAAAAAAA.js';\n");
+            io.setFile('/ws/dist/chunk-AAAAAAAA.js', 'export const a = 1;\n');
+          }
+          return [{ fileName: '/ws/dist/Comp.js' }, { fileName: '/ws/dist/chunk-AAAAAAAA.js' }];
+        },
+      });
+      const fedOptions = makeFedOptions();
+
+      await bundleExposedAndMappingsCore({ adapter, io }, denseComp, fedOptions, []);
+      await expect(
+        bundleExposedAndMappingsCore(
+          { adapter, io },
+          denseComp,
+          fedOptions,
+          [],
+          ['/ws/src/comp.ts']
+        )
+      ).rejects.toThrow(
+        "NFBuildAdapter.build returned '/ws/dist/chunk-AAAAAAAA.js', missing from outdir '/ws/dist'"
+      );
+    });
   });
 
   it('skips setup and forwards modifiedFiles on a rebuild', async () => {

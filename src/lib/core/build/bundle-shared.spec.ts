@@ -1024,6 +1024,40 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       ).rejects.toThrow("NFBuildAdapter.build returned a relative fileName 'foo.js'");
     });
 
+    // Core reads every file from the bundle's folder by base name, renames and copies it: a file
+    // never written, or written into a subfolder (Vite's assetsDir), used to end in a bare ENOENT.
+    it.each([
+      ['not written', (outdir: string) => path.join(outdir, 'chunk-AAAAAAAA.js'), false],
+      [
+        'in a subfolder',
+        (outdir: string) => path.join(outdir, 'assets', 'chunk-AAAAAAAA.js'),
+        true,
+      ],
+    ])('rejects a reported file %s', async (_case, chunkPath, write) => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const adapter: FakeBuildAdapter = createFakeBuildAdapter({
+        results: () => {
+          const { outdir, entryPoints } = adapter.calls.setup[0]!.options;
+          const entry = path.join(outdir, entryPoints[0]!.outName);
+          mem.setFile(entry, "export * from './chunk-AAAAAAAA.js';\n");
+          if (write) mem.setFile(chunkPath(outdir), 'export const a = 1;\n');
+          return [{ fileName: entry }, { fileName: chunkPath(outdir) }];
+        },
+      });
+
+      await expect(
+        bundleSharedCore(
+          { io: mem, repo: repoAtVersion('2.0.0'), adapter },
+          fooWith(),
+          makeConfig(),
+          makeFedOptions(),
+          [],
+          { ...BUILD_OPTIONS, chunks: true }
+        )
+      ).rejects.toThrow(/chunk-AAAAAAAA\.js', missing from outdir/);
+      expect(mem.exists('/cache/shared.meta.json')).toBe(false);
+    });
+
     // Bun names entries itself: taken for a chunk, the entry was renamed by content and published
     // under `chunks`, while remoteEntry.json and the cache pointed at a file never written.
     it('rejects an entry the adapter did not write under its outName', async () => {

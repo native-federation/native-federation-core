@@ -25,7 +25,11 @@ import { resolveMappingConfig } from '../../config/mapping-utils.js';
 import { applyAutoRequiredOptions } from '../../config/version-lookup.js';
 import type { AutoRequiredOptions } from '../../domain/config/external-config.contract.js';
 import { planMappingBundles } from './mapping-bundle-plan.js';
-import { assertAbsoluteFileNames, toOutputFiles } from '../output/output-files.js';
+import {
+  assertAbsoluteFileNames,
+  assertWrittenToOutdir,
+  toOutputFiles,
+} from '../output/output-files.js';
 import { isScript } from '../../utils/script-file.js';
 
 // Shared mappings and exposed modules build separately so the bundler cannot factor one chunk out
@@ -137,7 +141,10 @@ export async function bundleExposedAndMappingsCore(
     resultMap: Record<string, string>,
     entries: string[]
   ) => {
-    const { files, chunks } = finalizeBundleOutputs(io, resultMap, entries, { dense });
+    const { files, chunks } = finalizeBundleOutputs(io, resultMap, entries, {
+      dense,
+      outdir: resolveOutputPath(fedOptions),
+    });
     written.push(...files);
     if (chunks) exportedChunks[bundleName] = chunks;
   };
@@ -233,12 +240,13 @@ function finalizeBundleOutputs(
   io: IoPort,
   resultMap: Record<string, string>,
   entries: string[],
-  { dense }: { dense: boolean }
+  { dense, outdir }: { dense: boolean; outdir: string }
 ): { files: string[]; chunks?: string[] } {
   const outputs = Object.values(resultMap);
   if (!dense || entries.length === 0) return { files: [...entries, ...outputs] };
 
   const chunks = outputs.filter(file => isScript(file));
+  assertWrittenToOutdir(io, [...entries, ...chunks], outdir);
   const chunkNames = new Set(chunks.map(chunk => path.basename(chunk)));
   for (const entryFile of entries) rewriteChunkImportsCore(io, entryFile, chunkNames);
   const renamed = renameChunks(io, chunks, entries);

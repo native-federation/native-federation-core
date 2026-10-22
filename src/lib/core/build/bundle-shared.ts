@@ -35,7 +35,11 @@ import {
 } from '../cache/cache-validity.js';
 import { linkedContentSignals } from './resolve-shared-dirs.js';
 import { computeIntegrityMapCore } from './compute-integrity.js';
-import { assertAbsoluteFileNames, toOutputFiles } from '../output/output-files.js';
+import {
+  assertAbsoluteFileNames,
+  assertWrittenToOutdir,
+  toOutputFiles,
+} from '../output/output-files.js';
 import { createBuildResultMap } from './build-result-map.js';
 import { isScript } from '../../utils/script-file.js';
 import { resolveOutputPath } from '../../utils/output-path.js';
@@ -265,6 +269,11 @@ export async function bundleSharedCore(
 
   // Past the catch: what the adapter wrote is not the package's fault, so no 'skip' hint.
   assertAbsoluteFileNames(bundleResult);
+  assertWrittenToOutdir(
+    deps.io,
+    bundleResult.map(br => br.fileName),
+    bundleCache.dir
+  );
   createBuildResultMap(
     bundleResult,
     false,
