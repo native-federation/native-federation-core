@@ -27,7 +27,7 @@ describe('createBuildResultMap', () => {
   // Shared bundles build unhashed: an entry the adapter named itself (Bun) is not found by name.
   it('does not strip hashes when isHashed is false, so the expected name is missing', () => {
     expect(() => createBuildResultMap([r('dist/main-AB12CD.js')], false, ['main.js'])).toThrow(
-      "No build result found for 'main.js'."
+      "No build result found for 'main.js'; NFBuildAdapter.build returned 'main-AB12CD.js'."
     );
   });
 
@@ -69,7 +69,9 @@ describe('createBuildResultMap with entry set by the adapter', () => {
   it('throws for an expected entry no result sets', () => {
     expect(() =>
       createBuildResultMap([r('/d/rxjs-AAAA1111.js', 'other.js')], false, ['rxjs.js'])
-    ).toThrow("No build result found for 'rxjs.js'.");
+    ).toThrow(
+      "No build result found for 'rxjs.js'; NFBuildAdapter.build returned 'rxjs-AAAA1111.js'."
+    );
   });
 
   // Rollup and Rolldown hashes can contain '-', which the name match cuts at.
