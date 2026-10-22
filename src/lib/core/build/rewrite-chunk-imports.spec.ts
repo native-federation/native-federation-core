@@ -2,7 +2,7 @@ import { decode, encode } from '@jridgewell/sourcemap-codec';
 import { describe, expect, it } from 'vitest';
 import {
   applyEdits,
-  collectSpecifierEdits,
+  collectChunkImportEdits,
   rewriteChunkImportsCore,
 } from './rewrite-chunk-imports.js';
 import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
@@ -69,7 +69,7 @@ describe('rewriteChunkImportsCore', () => {
   // es-module-lexer finds no import that directly follows one.
   it('rewrites a chunk import that directly follows a BOM, and keeps the BOM', () => {
     const source = `\uFEFFimport './dep.js';`;
-    expect(applyEdits(source, collectSpecifierEdits(source, 'chunk.js', CHUNKS))).toBe(
+    expect(applyEdits(source, collectChunkImportEdits(source, 'chunk.js', CHUNKS))).toBe(
       `\uFEFFimport '@nf-internal/dep';`
     );
   });

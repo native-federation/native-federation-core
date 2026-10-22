@@ -33,8 +33,8 @@ describe('externalImportsCore', () => {
     expect(externalImportsCore(mem, '/b', ['entry.js'], ['rxjs'])).toEqual(['rxjs']);
   });
 
-  // Skipping the file would drop its imports and let a stale cache entry through. rewriteImports
-  // parses every file first, so a bundle like this fails before it is cached.
+  // Skipping the file would drop its imports and let a stale cache entry through.
+  // finalizeSharedOutputs parses every file first, so a bundle like this fails before it is cached.
   it('throws on a file the lexer cannot parse', () => {
     const io = createMemoryIo().setFile('/b/bad.js', '{}/`/;import "rxjs";');
     expect(() => externalImportsCore(io, '/b', ['bad.js'], ['rxjs'])).toThrow();
