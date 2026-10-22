@@ -27,6 +27,16 @@ describe('mappingsFromWorkspace', () => {
     ]);
   });
 
+  // The usage core#198 documents for discussion #176.
+  it('carries a package declaration from a patch into its entry', () => {
+    expect(
+      mappingsFromWorkspace(BASE).patch(['@shared/components/*'], { package: true }).get()
+    ).toEqual([
+      [['@shared/components/*'], { ...BASE, package: true }],
+      [['*'], BASE],
+    ]);
+  });
+
   it('defaults the base config to an empty object', () => {
     expect(mappingsFromWorkspace().get()).toEqual([[['*'], {}]]);
   });

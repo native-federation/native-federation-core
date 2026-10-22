@@ -20,7 +20,11 @@ vi.mock('./mapped-paths.js', () => ({
 
 import { withNativeFederation } from './with-native-federation.js';
 import { logger } from '../utils/logger.js';
-import type { FederationConfig } from '../domain/config/federation-config.contract.js';
+import type {
+  FederationConfig,
+  MappingConfigInput,
+} from '../domain/config/federation-config.contract.js';
+import type { ExternalConfig } from '../domain/config/external-config.contract.js';
 
 describe('withNativeFederation', () => {
   beforeEach(() => {
@@ -312,5 +316,114 @@ describe('withNativeFederation', () => {
 
     expect(result.name).toBe('mfe1');
     expect(result.externals).toEqual(['rxjs']);
+  });
+
+  // core#198: a declared package may never be coarser than the name rule, so consumers that ignore
+  // the declaration (orchestrator 4.8.0) still group safely.
+  describe('package declarations', () => {
+    const load = (
+      configs: Record<string, MappingConfigInput>,
+      features: FederationConfig['features'] = { denseExternals: true }
+    ) => {
+      getRawMappedPaths.mockReturnValue({ paths: {}, configs });
+      return withNativeFederation({ sharedMappings: [], features });
+    };
+
+    it.each([
+      ['@shared/forms', '@shared/forms'],
+      ['@shared/forms/input', '@shared/forms'],
+      ['@shared/forms/*', '@shared/forms'],
+      ['@shared/components/table', '@shared/components/table'],
+      ['ui/table', 'ui'],
+    ])("accepts '%s' declaring '%s'", (pattern, packageName) => {
+      const result = load({ [pattern]: { package: packageName } });
+
+      expect(result.sharedMappingsConfig[pattern]).toMatchObject({ package: packageName });
+    });
+
+    it.each([
+      ['@shared/forms', '@shared', 'shallower than @scope/name'],
+      ['@shared/forms', '@shared/form', "not '/'-aligned"],
+      ['@shared/*', '@shared/forms', 'the pattern also matches other packages'],
+      ['@shared/forms*', '@shared/forms', "the wildcard also matches '@shared/forms-x'"],
+      ['@shared/forms', 'rxjs', 'another package'],
+      ['@shared/forms', '@shared/forms/', 'a trailing slash'],
+      ['*', '@shared/forms', 'the catch-all matches every package'],
+      ['@shared/forms/*', '@shared/forms/input', 'deeper than the wildcard prefix'],
+      ['@shared/forms/*', '@shared/forms/*', 'a wildcard in the name'],
+    ])("rejects '%s' declaring '%s' (%s)", (pattern, packageName) => {
+      expect(() => load({ [pattern]: { package: packageName } })).toThrow(
+        `Mapping '${pattern}' declares package '${packageName}'`
+      );
+    });
+
+    // A JS config is not type-checked.
+    it.each([false, null, 1, ''])('rejects package: %j', value => {
+      expect(() =>
+        load({ '@shared/forms': { package: value as unknown as string, build: 'package' } })
+      ).toThrow(`Mapping '@shared/forms' sets 'package' to ${JSON.stringify(value)}`);
+    });
+
+    it('accepts package: true on any pattern, since a mapping is never coarser than itself', () => {
+      const result = load({ '*': { package: true } });
+
+      expect(result.sharedMappingsConfig['*']).toMatchObject({ package: true });
+    });
+
+    it.each(['separate', 'package'] as const)('rejects package together with build: %s', build => {
+      expect(() => load({ '@shared/forms': { package: true, build } })).toThrow(
+        `Mapping '@shared/forms' sets both 'package' and 'build: ${build}'`
+      );
+    });
+
+    it('rejects package on a shared npm package', () => {
+      expect(() =>
+        withNativeFederation({
+          shared: { react: { singleton: true, package: true } as ExternalConfig },
+        })
+      ).toThrow("Shared external 'react' sets 'package'");
+    });
+
+    // A spread of a mapping config can carry the key without a value.
+    it('accepts a shared npm package whose package is undefined', () => {
+      const result = withNativeFederation({
+        shared: { react: { singleton: true, package: undefined } as ExternalConfig },
+      });
+
+      expect(Object.keys(result.shared)).toEqual(['react']);
+    });
+
+    // Flat output has no group to put the package name in.
+    it('warns once and drops the declaration when denseExternals is off', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      const result = load(
+        { '@shared/forms': { package: true }, '@shared/table': { package: '@shared/table' } },
+        {}
+      );
+
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("'@shared/forms', '@shared/table' declare a 'package'")
+      );
+      expect(result.sharedMappingsConfig['@shared/forms']).not.toHaveProperty('package');
+      expect(result.sharedMappingsConfig['@shared/table']).not.toHaveProperty('package');
+    });
+
+    it('still rejects an invalid declaration when denseExternals is off', () => {
+      vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      expect(() => load({ '@shared/forms': { package: '@shared' } }, {})).toThrow(
+        "declares package '@shared'"
+      );
+    });
+
+    it('does not warn without a declaration', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      load({ '@shared/forms': {} }, {});
+
+      expect(warn).not.toHaveBeenCalled();
+    });
   });
 });

@@ -12,5 +12,9 @@ export type {
   PackageJsonExternalsBuilder,
   WorkspaceMappingsBuilder,
 } from './config-builders.contract.js';
-export type { FederationConfig, SharedMappingEntry } from './federation-config.contract.js';
+export type {
+  FederationConfig,
+  MappingConfigInput,
+  SharedMappingEntry,
+} from './federation-config.contract.js';
 export type { PreparedSkipList, SkipFn, SkipList, SkipListEntry } from './skip-list.contract.js';

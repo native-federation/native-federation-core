@@ -10,14 +10,18 @@ import type { ConfigBuilder } from './config-builders.contract.js';
 
 export type ExposeEntry = { file: string; element?: string };
 
-export type SharedMappingEntry = string | [string[], ExternalConfigInput];
+// `package`: true makes every matched mapping its own package, a name groups them under it.
+export type MappingConfigInput = ExternalConfigInput & { package?: true | string };
+
+export type SharedMappingEntry = string | [string[], MappingConfigInput];
 
 /** Selection pattern -> config, kept in declaration order: first match wins. */
-export type SharedMappingConfigs = Record<string, ExternalConfigInput>;
+export type SharedMappingConfigs = Record<string, MappingConfigInput>;
 
 /**
- * Only the subset of `ExternalConfig` a mapping can act on — `build` picks a bundle of its own,
- * but `platform`/`chunks`/`packageInfo` have nothing to select. `requiredVersion` and `version` stay optional because their
+ * Only the subset of `ExternalConfig` a mapping can act on — `build` picks a bundle of its own and
+ * `package` the package it is published under, but `platform`/`chunks`/`packageInfo` have nothing
+ * to select: the planner sets each bundle's `chunks`. `requiredVersion` and `version` stay optional because their
  * defaults are read from the mapped lib's package.json at build time, which is also why an
  * `AutoRequiredOptions` reaches this far unresolved.
  *
@@ -35,6 +39,7 @@ export interface NormalizedMappingConfig {
   pool?: string;
   includeSecondaries?: boolean;
   resolveGlob?: boolean;
+  package?: true | string;
 }
 
 export type NormalizedSharedMappingConfigs = Record<string, NormalizedMappingConfig>;
