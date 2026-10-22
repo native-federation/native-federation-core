@@ -14,6 +14,7 @@ vi.mock('./bundle-exposed-and-mappings.js', () => ({
   bundleExposedAndMappings: vi.fn(async () => ({ mappings: [], exposes: [], outputFiles: [] })),
 }));
 vi.mock('../output/validate-bare-imports.js', () => ({ validateBareImports: vi.fn() }));
+vi.mock('../output/validate-output-files.js', () => ({ validateOutputFiles: vi.fn() }));
 vi.mock('../cache/cache-persistence.js', () => ({
   cacheEntryCore: vi.fn(() => ({ clear: vi.fn() })),
 }));

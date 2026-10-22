@@ -225,8 +225,8 @@ them in one line, and says when they are all resolved. A full build and every st
 full. The last set is kept per `FederationCache` in a module-private `WeakMap`.
 
 It never passes a file it did not read. A script the lexer cannot parse is reported (and fails a
-strict build); a reported file missing from the output folder, usually an adapter writing into a
-subfolder, only warns, since that is the adapter breaking the `outputFiles` contract. Only ESM
+strict build); a reported file missing from the output folder is skipped, since
+`validateOutputFiles` has already reported it (see Output files). Only ESM
 `import`/`export`/`import()` with a literal specifier is checked: a CommonJS `require` of an
 external (esbuild's `__require` shim), `import.meta.resolve` and `new URL()` are not.
 
@@ -259,8 +259,14 @@ the extension for scripts.
   cache. In a dev build with `integrityHashes`, the bundles that finished before the failure have
   already overwritten their files in the output folder, so the served bytes may not match the kept
   integrity until that re-run.
-- A file the adapter writes into a subfolder is listed under a wrong name: the bare import check
-  warns about a missing script (integrity skips it silently), but nothing notices a missing asset.
+- Core knows every file by its base name in the output folder, so one written into a subfolder
+  counts as missing. Where core reads a bundle's files it throws (`assertWrittenToOutdir`): every
+  file of a shared bundle, the scripts of a dense exposed or mapping build. A shared entry not
+  written as its `outName` throws too (`createBuildResultMap` with the expected names).
+- Before `remoteEntry.json` is written, `validateOutputFiles` checks every `outputFiles` entry is
+  still there, which also catches a later bundle deleting an earlier one's files (one that
+  empties the output folder). It throws for a file `remoteEntry.json` names and warns once for the
+  rest (a source map, a stylesheet), which were never fatal.
 - Exposed and mapping output is always listed as `browser`: built-ins are allowed only in shared
   bundles built with `platform: 'node'`.
 - Integrity is computed over the same files, so the two cannot drift.

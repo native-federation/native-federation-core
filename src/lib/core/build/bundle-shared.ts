@@ -35,7 +35,12 @@ import {
 } from '../cache/cache-validity.js';
 import { linkedContentSignals } from './resolve-shared-dirs.js';
 import { computeIntegrityMapCore } from './compute-integrity.js';
-import { assertAbsoluteFileNames, toOutputFiles } from '../output/output-files.js';
+import {
+  assertAbsoluteFileNames,
+  assertWrittenToOutdir,
+  toOutputFiles,
+} from '../output/output-files.js';
+import { createBuildResultMap } from './build-result-map.js';
 import { isScript } from '../../utils/script-file.js';
 import { resolveOutputPath } from '../../utils/output-path.js';
 import { fileURLToPath } from 'url';
@@ -235,22 +240,6 @@ export async function bundleSharedCore(
     } finally {
       await deps.adapter.dispose(buildOptions.bundleName);
     }
-    assertAbsoluteFileNames(bundleResult);
-
-    const cachedFiles = bundleResult.map(br => path.basename(br.fileName));
-    // Re-key entry files (version-based names) to a hash of their final content, so a
-    // changed bundle always gets a new name and never reuses a stale cached one.
-    const hashEntries = fedOptions.dev
-      ? new Set<string>()
-      : new Set(entryPoints.map(ep => ep.outName));
-    const renamed = finalizeSharedOutputs(
-      deps.io,
-      cachedFiles,
-      bundleCache.dir,
-      new Set(entryPoints.map(ep => ep.outName)),
-      hashEntries
-    );
-    applyRenames(bundleResult, entryPoints, renamed);
   } catch (e) {
     logger.error('Error bundling shared npm package');
     if (e instanceof Error) {
@@ -278,13 +267,39 @@ export async function bundleSharedCore(
     throw e;
   }
 
+  // Past the catch: what the adapter wrote is not the package's fault, so no 'skip' hint.
+  assertAbsoluteFileNames(bundleResult);
+  assertWrittenToOutdir(
+    deps.io,
+    bundleResult.map(br => br.fileName),
+    bundleCache.dir
+  );
+  const entryFiles = createBuildResultMap(
+    bundleResult,
+    false,
+    entryPoints.map(ep => ep.outName)
+  );
+  // An adapter that names an entry itself marks it with `entry`; from here on it goes by that name.
+  for (const ep of entryPoints) ep.outName = path.basename(entryFiles[ep.outName]!);
+
+  const cachedFiles = bundleResult.map(br => path.basename(br.fileName));
+  // Re-key entry files (version-based names) to a hash of their final content, so a
+  // changed bundle always gets a new name and never reuses a stale cached one.
+  const hashEntries = fedOptions.dev
+    ? new Set<string>()
+    : new Set(entryPoints.map(ep => ep.outName));
+  const { renamed, chunks } = finalizeSharedOutputs(
+    deps.io,
+    cachedFiles,
+    bundleCache.dir,
+    new Set(entryPoints.map(ep => ep.outName)),
+    hashEntries
+  );
+  applyRenames(bundleResult, entryPoints, renamed);
+
   const outFileNames = entryPoints.map(ep => path.join(fullOutputPath, ep.outName));
 
   const result = buildResult(packageInfos, sharedBundles, outFileNames);
-
-  const chunks = bundleResult.filter(
-    br => isScript(br.fileName) && !result.find(r => r.outFileName === path.basename(br.fileName))
-  );
 
   /**
    * Chunking
@@ -295,7 +310,7 @@ export async function bundleSharedCore(
       external.bundle = buildOptions.bundleName;
     });
     if (chunks.length > 0) {
-      exportedChunks = { [buildOptions.bundleName]: getChunkFileNames(chunks) };
+      exportedChunks = { [buildOptions.bundleName]: chunks };
     }
   } else {
     addChunksToResult(chunks, result);
@@ -349,7 +364,7 @@ function finalizeSharedOutputs(
   bundleDir: string,
   entries: Set<string>,
   hashEntries: Set<string>
-): Map<string, string> {
+): { renamed: Map<string, string>; chunks: string[] } {
   const sourceFiles = cachedFiles.filter(isScript);
   const chunks = sourceFiles.filter(file => !entries.has(file));
   const chunkNames = new Set(chunks);
@@ -393,7 +408,7 @@ function finalizeSharedOutputs(
     }
   }
 
-  return renamed;
+  return { renamed, chunks: chunks.map(chunk => renamed.get(chunk) ?? chunk) };
 }
 
 function applyRenames(
@@ -455,16 +470,11 @@ function buildResult(
   });
 }
 
-function getChunkFileNames(chunks: NFBuildAdapterResult[]): string[] {
-  return chunks.map(chunk => path.basename(chunk.fileName));
-}
-
 // Never a singleton: a chunk belongs to a build, not to a dependency, so nothing downstream can
 // tell whether the external it was split out of asked for `singleton: false` or a share scope.
 // Its name says what its bytes are, but a name is not enough to share state on.
-function addChunksToResult(chunks: NFBuildAdapterResult[], result: SharedInfo[]) {
-  for (const item of chunks) {
-    const fileName = path.basename(item.fileName);
+function addChunksToResult(chunks: string[], result: SharedInfo[]) {
+  for (const fileName of chunks) {
     result.push({
       singleton: false,
       strictVersion: false,

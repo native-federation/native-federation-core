@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { bundleSharedCore } from './bundle-shared.js';
@@ -828,6 +828,8 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
   });
 
   describe('bundler chunks', () => {
+    afterEach(() => vi.restoreAllMocks());
+
     // The adapter emits the entry plus a chunk it imports; the entry keeps its pre-hash name so
     // the chunk rename shows up in the text the entry hash is then taken from.
     const chunkedBuild = async (
@@ -922,6 +924,40 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       expect(result.externals.some(e => e.packageName.startsWith('@nf-internal/'))).toBe(false);
     });
 
+    // A bundler may import one entry from another. Only reported chunks become @nf-internal/*: an
+    // entry is published under its own name, so it is never a chunk.
+    it.each([false, true])(
+      'leaves an import of another entry relative and unlisted (denseChunking: %s)',
+      async denseChunking => {
+        const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+        const adapter: FakeBuildAdapter = createFakeBuildAdapter({
+          results: name => {
+            const { options } = [...adapter.calls.setup].reverse().find(s => s.name === name)!;
+            const [a, b] = options.entryPoints.map(ep => path.join(options.outdir, ep.outName));
+            mem.setFile(a!, `export * from './${path.basename(b!)}';\n`);
+            mem.setFile(b!, 'export const b = 1;\n');
+            return [{ fileName: a! }, { fileName: b! }];
+          },
+        });
+        const config = makeConfig();
+        config.features.denseChunking = denseChunking;
+
+        const result = await bundleSharedCore(
+          { io: mem, repo: repoAtVersion('2.0.0'), adapter },
+          { ...fooWith(), bar: fooWith().foo! },
+          config,
+          makeFedOptions({ dev: true }),
+          [],
+          { ...BUILD_OPTIONS, chunks: true }
+        );
+
+        const [a, b] = result.externals.map(e => e.outFileName);
+        expect(result.externals.map(e => e.packageName)).toEqual(['foo', 'bar']);
+        expect(result.chunks).toBeUndefined();
+        expect(mem.readText(path.join('/ws/dist', a!))).toBe(`export * from './${b}';\n`);
+      }
+    );
+
     // core#177: the list adapters copy from, and the one integrity is computed over.
     it('reports every written file with the platform of its bundle', async () => {
       const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
@@ -989,6 +1025,98 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
         )
       ).rejects.toThrow("NFBuildAdapter.build returned a relative fileName 'foo.js'");
     });
+
+    // Core reads every file from the bundle's folder by base name, renames and copies it: a file
+    // never written, or written into a subfolder, used to end in a bare ENOENT.
+    it.each([
+      ['not written', (outdir: string) => path.join(outdir, 'chunk-AAAAAAAA.js'), false],
+      [
+        'in a subfolder',
+        (outdir: string) => path.join(outdir, 'assets', 'chunk-AAAAAAAA.js'),
+        true,
+      ],
+    ])('rejects a reported file %s', async (_case, chunkPath, write) => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const adapter: FakeBuildAdapter = createFakeBuildAdapter({
+        results: () => {
+          const { outdir, entryPoints } = adapter.calls.setup[0]!.options;
+          const entry = path.join(outdir, entryPoints[0]!.outName);
+          mem.setFile(entry, "export * from './chunk-AAAAAAAA.js';\n");
+          if (write) mem.setFile(chunkPath(outdir), 'export const a = 1;\n');
+          return [{ fileName: entry }, { fileName: chunkPath(outdir) }];
+        },
+      });
+
+      await expect(
+        bundleSharedCore(
+          { io: mem, repo: repoAtVersion('2.0.0'), adapter },
+          fooWith(),
+          makeConfig(),
+          makeFedOptions(),
+          [],
+          { ...BUILD_OPTIONS, chunks: true }
+        )
+      ).rejects.toThrow(/chunk-AAAAAAAA\.js', missing from outdir/);
+      expect(mem.exists('/cache/shared.meta.json')).toBe(false);
+    });
+
+    // An adapter that names entries itself: taken for a chunk, the entry was renamed by content and
+    // published under `chunks`, while remoteEntry.json and the cache pointed at a file never written.
+    it('rejects an entry the adapter did not write under its outName', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const notice = vi.spyOn(logger, 'notice').mockImplementation(() => undefined);
+      const adapter = createFakeBuildAdapter({
+        io: mem,
+        results: () => [
+          { fileName: path.join(adapter.calls.setup[0]!.options.outdir, 'foo-abc123.js') },
+        ],
+      });
+
+      await expect(
+        bundleSharedCore(
+          { io: mem, repo: repoAtVersion('2.0.0'), adapter },
+          fooWith(),
+          makeConfig(),
+          makeFedOptions(),
+          [],
+          { ...BUILD_OPTIONS, chunks: true }
+        )
+      ).rejects.toThrow(/No build result found for 'foo\..*\.js'/);
+      expect(mem.exists('/cache/shared.meta.json')).toBe(false);
+      expect(notice).not.toHaveBeenCalled();
+    });
+
+    // An adapter that names entries itself says which file is which entry through `entry`.
+    it.each([true, false])(
+      'publishes an entry the adapter named itself and marked with entry (dev: %s)',
+      async dev => {
+        const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+        const adapter: FakeBuildAdapter = createFakeBuildAdapter({
+          io: mem,
+          results: () => {
+            const { outdir, entryPoints } = adapter.calls.setup[0]!.options;
+            return [
+              { fileName: path.join(outdir, 'foo-abc123.js'), entry: entryPoints[0]!.outName },
+            ];
+          },
+        });
+
+        const result = await bundleSharedCore(
+          { io: mem, repo: repoAtVersion('2.0.0'), adapter },
+          fooWith(),
+          makeConfig(),
+          makeFedOptions({ dev }),
+          [],
+          { ...BUILD_OPTIONS, chunks: true }
+        );
+
+        expect(result.externals).toHaveLength(1);
+        const { outFileName } = result.externals[0]!;
+        expect(outFileName).toMatch(dev ? /^foo-abc123\.js$/ : /^foo-abc123\.[^.]+\.js$/);
+        expect(result.chunks).toBeUndefined();
+        expect(mem.isFile(path.join('/ws/dist', outFileName))).toBe(true);
+      }
+    );
 
     it('recomputes the same integrity on a cache hit whose metadata has none', async () => {
       const mem = createMemoryIo().setFile(ROOT_PKG, '{}');

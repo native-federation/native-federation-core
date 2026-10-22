@@ -1,5 +1,6 @@
 import path from 'path';
 import type { NFBuildAdapterResult } from '../../domain/core/build-adapter.contract.js';
+import { formatList } from '../../utils/format-list.js';
 
 function stripHash(fileName: string): string {
   const start = fileName.lastIndexOf('-');
@@ -28,6 +29,14 @@ export function createBuildResultMap(
       );
     }
     map[requestName] = item.fileName;
+  }
+  const missing = [...expected].filter(name => map[name] === undefined);
+  if (missing.length > 0) {
+    const returned = buildResult.map(item => path.basename(item.fileName));
+    throw new Error(
+      `No build result found for ${formatList(missing, 3)}; NFBuildAdapter.build returned ` +
+        `${returned.length > 0 ? formatList(returned, 3) : 'nothing'}.`
+    );
   }
   return map;
 }

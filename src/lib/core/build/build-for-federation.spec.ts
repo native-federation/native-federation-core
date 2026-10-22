@@ -13,6 +13,7 @@ import { prepareSkipList } from '../../config/default-skip-list.js';
 import { logger } from '../../utils/logger.js';
 import type * as sharedDirs from './resolve-shared-dirs.js';
 import type * as validation from '../output/validate-bare-imports.js';
+import type * as outputValidation from '../output/validate-output-files.js';
 import type { SharedBundleResult } from './bundle-shared.js';
 
 // Isolate the assembly logic in buildForFederation: no real FS writes, no build adapter.
@@ -23,6 +24,7 @@ vi.mock('./bundle-exposed-and-mappings.js', () => ({
 }));
 
 vi.mock('../output/validate-bare-imports.js', () => ({ validateBareImports: vi.fn() }));
+vi.mock('../output/validate-output-files.js', () => ({ validateOutputFiles: vi.fn() }));
 
 // A full build replaces the cached externals with what its plans bundled, so each test seeds
 // `bundled` (one plan per entry; a name starting with 'separate-' is a separate plan) instead of
@@ -62,6 +64,7 @@ const { buildForFederation } = await import('./build-for-federation.js');
 const { hintUnwatchedLinkedDeps } = await import('./resolve-shared-dirs.js');
 const { writeImportMap } = await import('../output/write-import-map.js');
 const { validateBareImports } = await import('../output/validate-bare-imports.js');
+const { validateOutputFiles } = await import('../output/validate-output-files.js');
 const { collectOutputFiles } = await import('../cache/federation-cache.js');
 const { writeFederationInfo } = await import('../output/write-federation-info.js');
 const { bundleExposedAndMappings } = await import('./bundle-exposed-and-mappings.js');
@@ -298,6 +301,35 @@ describe('buildForFederation — output files (core#177)', () => {
     await expect(
       buildForFederation(config, makeFedOptions([], { workspaceRoot }), [])
     ).rejects.toThrow(/features\.strictImports/);
+    expect(writeFederationInfo).not.toHaveBeenCalled();
+  });
+
+  // An exposed build that empties the output folder wipes the shared files already in it,
+  // which no per-bundle check can see. remoteEntry.json must not be written pointing at them.
+  it('fails before remoteEntry.json is written when a published file is gone', async () => {
+    const actual = await vi.importActual<typeof outputValidation>(
+      '../output/validate-output-files.js'
+    );
+    vi.mocked(validateOutputFiles).mockImplementationOnce(actual.validateOutputFiles);
+    workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-wiped-'));
+    fs.mkdirSync(path.join(workspaceRoot, 'dist'));
+    fs.writeFileSync(path.join(workspaceRoot, 'dist', 'Comp.js'), 'export {};');
+    vi.mocked(bundleExposedAndMappings).mockResolvedValueOnce({
+      mappings: [],
+      exposes: [{ key: './Comp', outFileName: 'Comp.js' }],
+      outputFiles: [{ fileName: 'Comp.js', platform: 'browser' }],
+    });
+    const fedOptions = makeFedOptions([], { workspaceRoot });
+    bundled = {
+      'browser-shared': {
+        externals: [flat('rxjs', 'rxjs.js')],
+        outputFiles: [{ fileName: 'rxjs.js', platform: 'browser' }],
+      },
+    };
+
+    await expect(buildForFederation(makeConfig(false), fedOptions, [])).rejects.toThrow(
+      "remoteEntry.json names 'rxjs.js', missing from"
+    );
     expect(writeFederationInfo).not.toHaveBeenCalled();
   });
 });

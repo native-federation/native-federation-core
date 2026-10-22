@@ -4,6 +4,7 @@ import type { NormalizedFederationOptions } from '../../domain/core/federation-o
 import { assembleFederationInfo } from './assemble-federation-info.js';
 import { collectOutputFiles, recordArtifactFiles } from '../cache/federation-cache.js';
 import { validateBareImports } from '../output/validate-bare-imports.js';
+import { validateOutputFiles } from '../output/validate-output-files.js';
 import { writeFederationOutputs } from '../output/write-federation-outputs.js';
 
 export function finalizeFederationBuild(
@@ -14,13 +15,9 @@ export function finalizeFederationBuild(
 ): FederationInfo {
   const federationInfo = assembleFederationInfo(config, fedOptions, artifactInfo);
   recordArtifactFiles(fedOptions.federationCache, artifactInfo);
-  validateBareImports(
-    config,
-    fedOptions,
-    federationInfo,
-    collectOutputFiles(fedOptions.federationCache),
-    { fullReport }
-  );
+  const outputFiles = collectOutputFiles(fedOptions.federationCache);
+  validateOutputFiles(fedOptions, federationInfo, outputFiles);
+  validateBareImports(config, fedOptions, federationInfo, outputFiles, { fullReport });
   writeFederationOutputs(federationInfo, fedOptions);
   return federationInfo;
 }
