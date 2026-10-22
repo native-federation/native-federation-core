@@ -355,13 +355,13 @@ describe('renameChunksByContentCore', () => {
   ])('reads the hash segment of %s', (stem, base) => {
     const io = createMemoryIo()
       .setFile(`/a/${stem}.js`, 'export const a = 1;\n')
-      .setFile(`/b/${base}-AAAAAAAA.js`, 'export const a = 1;\n');
+      .setFile(`/b/${base}-BBBBBBBB.js`, 'export const a = 1;\n');
 
     const renamed = renameChunksByContentCore(io, '/a', [`${stem}.js`], []);
-    const sibling = renameChunksByContentCore(io, '/b', [`${base}-AAAAAAAA.js`], []);
+    const sibling = renameChunksByContentCore(io, '/b', [`${base}-BBBBBBBB.js`], []);
 
     expect(renamed.get(`${stem}.js`)).toMatch(new RegExp(`^${base}-[A-Z2-7]{8}\\.js$`));
-    expect(renamed.get(`${stem}.js`)).toBe(sibling.get(`${base}-AAAAAAAA.js`));
+    expect(renamed.get(`${stem}.js`)).toBe(sibling.get(`${base}-BBBBBBBB.js`));
   });
 
   it('appends a hash segment to a name that carries none', () => {
