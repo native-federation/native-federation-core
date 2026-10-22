@@ -40,6 +40,7 @@ export interface FileWriterPort {
 }
 
 export interface GlobPort {
+  /** In no particular order. */
   globFiles(pattern: string, opts: { cwd: string; ignore?: string[] }): string[];
 }
 

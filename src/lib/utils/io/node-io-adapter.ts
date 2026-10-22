@@ -87,15 +87,13 @@ export const nodeIo: IoPort = {
     fs.rmSync(path, { recursive: true, force: true, maxRetries: 3 });
   },
   globFiles(pattern, opts) {
-    // Sorted because the result becomes esbuild's entry-point order, which decides how shared
-    // code is split into chunks; walk order differs per glob library and filesystem.
     return globSync(pattern, {
       cwd: opts.cwd,
       ignore: opts.ignore,
       onlyFiles: true,
       deep: Infinity,
       expandDirectories: false,
-    }).sort();
+    });
   },
   hash(algorithm: HashAlgorithm, data: Uint8Array | string): Digest {
     const sum = crypto.createHash(algorithm).update(data);

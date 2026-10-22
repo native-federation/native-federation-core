@@ -19,7 +19,10 @@ export function resolvePackageJsonExportsWildcardCore(
     return [];
   }
 
-  const files = io.globFiles(toGlobPattern(pattern), { cwd, ignore: ['**/node_modules/**'] });
+  // The port promises no order, and entry order decides the chunk bytes.
+  const files = io
+    .globFiles(toGlobPattern(pattern), { cwd, ignore: ['**/node_modules/**'] })
+    .sort();
 
   const keys: KeyValuePair[] = [];
 

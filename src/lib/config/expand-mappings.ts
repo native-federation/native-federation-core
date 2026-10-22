@@ -45,10 +45,10 @@ export function expandWildcardMapping(
     return {};
   }
 
-  const files = ctx.io.globFiles(toGlobPattern(pattern), {
-    cwd: ctx.workspaceRoot,
-    ignore: IGNORED_DIRS,
-  });
+  // The port promises no order, and entry order decides the chunk bytes.
+  const files = ctx.io
+    .globFiles(toGlobPattern(pattern), { cwd: ctx.workspaceRoot, ignore: IGNORED_DIRS })
+    .sort();
 
   const expanded: PathToImport = {};
   const takenBy: Record<string, string> = {};
