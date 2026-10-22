@@ -61,14 +61,18 @@ export function isNpmStylePackage(importName: string): boolean {
   return NPM_NAME.test(inferPackageFromSecondary(importName.replace(/\*/g, 'x')));
 }
 
-// A mapping is published and grouped (`build: 'package'`, pruning, denseExternals) by the package
+// A mapping is published and grouped (`build: 'package'`, denseExternals) by the package
 // its import name implies, so a name like '@shared' or '~app/utils' has no sound package to
-// group under.
-export function warnNonNpmMappingNames(paths: PathToImport, strict = false): void {
+// group under, unless it declares its package.
+export function warnNonNpmMappingNames(
+  paths: PathToImport,
+  strict = false,
+  declaredPackages: ReadonlyMap<string, string> = new Map()
+): void {
   const offenders = [
     ...new Set(
       Object.values(paths)
-        .filter(importName => !isNpmStylePackage(importName))
+        .filter(importName => !declaredPackages.has(importName) && !isNpmStylePackage(importName))
         .map(inferPackageFromSecondary)
     ),
   ];
@@ -79,7 +83,8 @@ export function warnNonNpmMappingNames(paths: PathToImport, strict = false): voi
       `Shared mapping '${packageName}' does not follow npm package naming. Name mappings ` +
         `'package' or '@company/package' (lowercase). Subpaths and wildcards ` +
         `('@company/package/*') are allowed, but belong to that package: ` +
-        `build: 'package' bundles them together.`
+        `build: 'package' bundles them together. Or declare the package with 'package' ` +
+        `(needs features.denseExternals).`
     );
   }
 

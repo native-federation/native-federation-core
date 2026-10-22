@@ -144,6 +144,20 @@ describe('warnNonNpmMappingNames', () => {
     );
   });
 
+  // core#198: a declared package names its own group, so the name it implies does not matter.
+  it('exempts mappings that declare their package, even when strict', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    expect(() =>
+      warnNonNpmMappingNames(
+        { '/ws/libs/a/index.ts': '~a/x', '/ws/libs/b/index.ts': '~b/y' },
+        true,
+        new Map([['~a/x', '~a/x']])
+      )
+    ).toThrow(/: '~b'\.$/);
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("'~b'"));
+  });
+
   it('does not throw when strict and every name is npm-style', () => {
     expect(() => warnNonNpmMappingNames({ '/ws/libs/ui/index.ts': '@org/ui' }, true)).not.toThrow();
   });

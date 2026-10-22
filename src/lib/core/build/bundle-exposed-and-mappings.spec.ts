@@ -241,6 +241,33 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     }
   );
 
+  it('sets up the bundle of single-entry declared packages without splitting', async () => {
+    const config = makeConfig({
+      chunks: true,
+      sharedMappings: { './libs/a': '@org/a', './libs/b': '@org/b' },
+      sharedMappingsConfig: { '@org/b': { singleton: true, strictVersion: false, package: true } },
+      features: { ...makeConfig().features, denseChunking: true, denseExternals: true },
+    });
+    const io = createMemoryIo();
+    const adapter = createFakeBuildAdapter({ io });
+
+    const result = await bundleExposedAndMappingsCore(
+      { adapter, io },
+      config,
+      makeFedOptions(),
+      []
+    );
+
+    expect(adapter.calls.setup.map(c => [c.name, c.options.chunks])).toEqual([
+      ['mapping-bundle', true],
+      ['mapping-single-entry', false],
+    ]);
+    expect(result.mappings.map(m => [m.packageName, m.bundle])).toEqual([
+      ['@org/a', 'mapping-bundle'],
+      ['@org/b', 'mapping-single-entry'],
+    ]);
+  });
+
   it('leaves the adapter alone for a side that has no entry points', async () => {
     const config = makeConfig({ exposes: { './Comp': { file: './src/comp.ts' } } });
     const adapter = createFakeBuildAdapter();

@@ -10,6 +10,7 @@ import type { FileReaderPort, GlobPort } from '../domain/utils/io-port.contract.
 import { removeUnusedDeps } from '../config/remove-unused-deps.js';
 import { expandOrDropWildcards } from '../config/expand-mappings.js';
 import { assertBarrelMappings, warnNonNpmMappingNames } from '../config/validate-mappings.js';
+import { declaredMappingPackages } from '../config/mapping-utils.js';
 import { type FederationCache } from '../../domain.js';
 import type { NFAdapterInput } from '../domain/core/build-adapter.contract.js';
 import { createFederationCache } from './cache/federation-cache.js';
@@ -146,7 +147,11 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
 
   // Whatever survived either branch is what remoteEntry.json will advertise.
   assertBarrelMappings(config.sharedMappings);
-  warnNonNpmMappingNames(config.sharedMappings, config.features.strictImports);
+  warnNonNpmMappingNames(
+    config.sharedMappings,
+    config.features.strictImports,
+    declaredMappingPackages(config)
+  );
 
   if (!fromAdapter.externals?.length) return { config, options: normalizedOptions };
   // A new list leaves the user's array untouched; the Set stops a second normalize adding twice.

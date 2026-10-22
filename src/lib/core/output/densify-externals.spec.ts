@@ -189,6 +189,36 @@ describe('densifyExternals', () => {
     expect(result[0]!.dev).toEqual({ entryPoint: 'rxjs/index.js' });
   });
 
+  // core#198 / discussion #176: mapping names can mark a domain rather than one package.
+  it('groups a mapping under its declared package instead of the one its name implies', () => {
+    const result = densifyExternals(
+      [
+        flat('@shared/components/table', 'table.js'),
+        flat('@shared/components/collapse', 'collapse.js'),
+        flat('@shared/components/table/row', 'table-row.js'),
+      ],
+      new Map([
+        ['@shared/components/table', '@shared/components/table'],
+        ['@shared/components/collapse', '@shared/components/collapse'],
+        ['@shared/components/table/row', '@shared/components/table'],
+      ])
+    ) as DenseSharedInfo[];
+
+    expect(result.map(d => [d.packageName, Object.keys(d.entries)])).toEqual([
+      ['@shared/components/table', ['@shared/components/table', '@shared/components/table/row']],
+      ['@shared/components/collapse', ['@shared/components/collapse']],
+    ]);
+  });
+
+  it('keeps the name rule for everything the declared packages do not list', () => {
+    const result = densifyExternals(
+      [flat('@angular/common', 'common.js'), flat('@angular/common/http', 'http.js')],
+      new Map([['@shared/table', '@shared/table']])
+    ) as DenseSharedInfo[];
+
+    expect(result.map(d => d.packageName)).toEqual(['@angular/common']);
+  });
+
   it('never emits outFileName on a dense object and never entries on a flat one', () => {
     const chunk = flat(`${CHUNK_PREFIX}/chunk-x`, 'chunk-x.js');
     const result = densifyExternals([flat('tslib', 'tslib.js'), chunk]);

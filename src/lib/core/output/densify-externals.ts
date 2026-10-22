@@ -17,7 +17,8 @@ function isFlatChunk(entry: SharedInfo): boolean {
  * already-dense entries pass through unchanged.
  */
 export function densifyExternals(
-  shared: Array<SharedInfo | DenseSharedInfo>
+  shared: Array<SharedInfo | DenseSharedInfo>,
+  declaredPackages: ReadonlyMap<string, string> = new Map()
 ): Array<SharedInfo | DenseSharedInfo> {
   const result: Array<SharedInfo | DenseSharedInfo> = [];
   const groupIndex = new Map<string, number>();
@@ -35,7 +36,7 @@ export function densifyExternals(
     }
 
     const { outFileName, packageName, dev, ...meta } = entry;
-    const parent = inferPackageFromSecondary(packageName);
+    const parent = declaredPackages.get(packageName) ?? inferPackageFromSecondary(packageName);
     // Denylist, so a field added to SharedInfo later splits groups instead of being dropped.
     const sig = JSON.stringify(meta, Object.keys(meta).sort());
     const key = parent + ' ' + sig;
