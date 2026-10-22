@@ -203,6 +203,44 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     expect(adapter.calls.build.map(c => c.name)).toEqual(['mapping-bundle', 'mapping-or-exposed']);
   });
 
+  // Pins what each bundle's setup receives before mapping plans choose their own chunks
+  // (core#198): a config that declares no package must keep exactly these calls.
+  it.each([true, false])(
+    'sets up every bundle with the global chunks setting (%s)',
+    async chunks => {
+      const config = makeConfig({
+        chunks,
+        exposes: { './Comp': { file: './src/comp.ts' } },
+        sharedMappings: {
+          './libs/a': '@org/a',
+          './libs/b': '@org/b',
+          './libs/c/x': '@org/c/x',
+          './libs/c/y': '@org/c/y',
+        },
+        sharedMappingsConfig: {
+          '@org/b': { singleton: true, strictVersion: false, build: 'separate' },
+          '@org/c/*': { singleton: true, strictVersion: false, build: 'package' },
+        },
+      });
+      const adapter = createFakeBuildAdapter();
+
+      await bundleExposedAndMappingsCore({ adapter }, config, makeFedOptions(), []);
+
+      expect(
+        adapter.calls.setup.map(c => ({
+          name: c.name,
+          chunks: c.options.chunks,
+          entryPoints: c.options.entryPoints.map(ep => ep.outName),
+        }))
+      ).toEqual([
+        { name: 'mapping-bundle', chunks, entryPoints: ['_org_a.js'] },
+        { name: 'mapping-org_b', chunks, entryPoints: ['_org_b.js'] },
+        { name: 'mapping-org_c', chunks, entryPoints: ['_org_c_x.js', '_org_c_y.js'] },
+        { name: 'mapping-or-exposed', chunks, entryPoints: ['Comp.js'] },
+      ]);
+    }
+  );
+
   it('leaves the adapter alone for a side that has no entry points', async () => {
     const config = makeConfig({ exposes: { './Comp': { file: './src/comp.ts' } } });
     const adapter = createFakeBuildAdapter();
