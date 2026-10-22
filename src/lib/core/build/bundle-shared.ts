@@ -277,7 +277,7 @@ export async function bundleSharedCore(
   const hashEntries = fedOptions.dev
     ? new Set<string>()
     : new Set(entryPoints.map(ep => ep.outName));
-  const renamed = finalizeSharedOutputs(
+  const { renamed, chunks } = finalizeSharedOutputs(
     deps.io,
     cachedFiles,
     bundleCache.dir,
@@ -290,10 +290,6 @@ export async function bundleSharedCore(
 
   const result = buildResult(packageInfos, sharedBundles, outFileNames);
 
-  const chunks = bundleResult.filter(
-    br => isScript(br.fileName) && !result.find(r => r.outFileName === path.basename(br.fileName))
-  );
-
   /**
    * Chunking
    */
@@ -303,7 +299,7 @@ export async function bundleSharedCore(
       external.bundle = buildOptions.bundleName;
     });
     if (chunks.length > 0) {
-      exportedChunks = { [buildOptions.bundleName]: getChunkFileNames(chunks) };
+      exportedChunks = { [buildOptions.bundleName]: chunks };
     }
   } else {
     addChunksToResult(chunks, result);
@@ -357,7 +353,7 @@ function finalizeSharedOutputs(
   bundleDir: string,
   entries: Set<string>,
   hashEntries: Set<string>
-): Map<string, string> {
+): { renamed: Map<string, string>; chunks: string[] } {
   const sourceFiles = cachedFiles.filter(isScript);
   const chunks = sourceFiles.filter(file => !entries.has(file));
   const chunkNames = new Set(chunks);
@@ -401,7 +397,7 @@ function finalizeSharedOutputs(
     }
   }
 
-  return renamed;
+  return { renamed, chunks: chunks.map(chunk => renamed.get(chunk) ?? chunk) };
 }
 
 function applyRenames(
@@ -463,16 +459,11 @@ function buildResult(
   });
 }
 
-function getChunkFileNames(chunks: NFBuildAdapterResult[]): string[] {
-  return chunks.map(chunk => path.basename(chunk.fileName));
-}
-
 // Never a singleton: a chunk belongs to a build, not to a dependency, so nothing downstream can
 // tell whether the external it was split out of asked for `singleton: false` or a share scope.
 // Its name says what its bytes are, but a name is not enough to share state on.
-function addChunksToResult(chunks: NFBuildAdapterResult[], result: SharedInfo[]) {
-  for (const item of chunks) {
-    const fileName = path.basename(item.fileName);
+function addChunksToResult(chunks: string[], result: SharedInfo[]) {
+  for (const fileName of chunks) {
     result.push({
       singleton: false,
       strictVersion: false,

@@ -922,6 +922,40 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       expect(result.externals.some(e => e.packageName.startsWith('@nf-internal/'))).toBe(false);
     });
 
+    // Rollup imports one entry from another. Only reported chunks become @nf-internal/*: an entry
+    // is published under its own name, so it is never a chunk.
+    it.each([false, true])(
+      'leaves an import of another entry relative and unlisted (denseChunking: %s)',
+      async denseChunking => {
+        const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+        const adapter: FakeBuildAdapter = createFakeBuildAdapter({
+          results: name => {
+            const { options } = [...adapter.calls.setup].reverse().find(s => s.name === name)!;
+            const [a, b] = options.entryPoints.map(ep => path.join(options.outdir, ep.outName));
+            mem.setFile(a!, `export * from './${path.basename(b!)}';\n`);
+            mem.setFile(b!, 'export const b = 1;\n');
+            return [{ fileName: a! }, { fileName: b! }];
+          },
+        });
+        const config = makeConfig();
+        config.features.denseChunking = denseChunking;
+
+        const result = await bundleSharedCore(
+          { io: mem, repo: repoAtVersion('2.0.0'), adapter },
+          { ...fooWith(), bar: fooWith().foo! },
+          config,
+          makeFedOptions({ dev: true }),
+          [],
+          { ...BUILD_OPTIONS, chunks: true }
+        );
+
+        const [a, b] = result.externals.map(e => e.outFileName);
+        expect(result.externals.map(e => e.packageName)).toEqual(['foo', 'bar']);
+        expect(result.chunks).toBeUndefined();
+        expect(mem.readText(path.join('/ws/dist', a!))).toBe(`export * from './${b}';\n`);
+      }
+    );
+
     // core#177: the list adapters copy from, and the one integrity is computed over.
     it('reports every written file with the platform of its bundle', async () => {
       const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
