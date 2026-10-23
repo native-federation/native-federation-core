@@ -50,6 +50,18 @@ describe('getRawMappedPathsCore', () => {
     expect(Object.values(result)).toEqual(['@a']);
   });
 
+  // The keys decide a mapping's package under `build: 'paths'` (core#198), so they must not
+  // depend on what this remote selects; a key without a target still claims its names.
+  it('returns every key, whatever the selection', () => {
+    const io = writeTsConfig({ '@a': ['a/index.ts'], '@b/*': ['b/*'], '@c': [] });
+    expect(getRawMappedPathsCore(io, TSCONFIG, ['@a']).keys).toEqual(['@a', '@b/*', '@c']);
+    expect(getRawMappedPathsCore(io, TSCONFIG).keys).toEqual(['@a', '@b/*', '@c']);
+  });
+
+  it('returns no keys without compilerOptions.paths', () => {
+    expect(getRawMappedPathsCore(writeTsConfig(undefined), TSCONFIG).keys).toEqual([]);
+  });
+
   it('selects every key matching a wildcard pattern', () => {
     const io = writeTsConfig({
       '@org/ui': ['libs/ui/index.ts'],

@@ -449,6 +449,42 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     expect(a).not.toBe(b); // changes when content changes
   });
 
+  // Every tsconfig edit changes the keys (core#198); they must not rename a dev build's shared files.
+  it('leaves shared names alone when only the tsconfig paths keys differ', async () => {
+    const sharedBundles: Record<string, NormalizedExternalConfig> = {
+      foo: {
+        singleton: true,
+        strictVersion: false,
+        requiredVersion: '^1.0.0',
+        version: '1.0.0',
+        chunks: false,
+        platform: 'browser',
+        build: 'default',
+        packageInfo: { entryPoint: 'foo/index.js', version: '1.0.0', esm: true },
+      },
+    };
+    const outName = async (config: NormalizedFederationConfig) => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const adapter = createFakeBuildAdapter({ io: mem });
+      await bundleSharedCore(
+        { io: mem, repo: emptyRepo, adapter },
+        sharedBundles,
+        config,
+        makeFedOptions({ dev: true }),
+        [],
+        BUILD_OPTIONS
+      );
+      return adapter.calls.setup[0]!.options.entryPoints[0]!.outName;
+    };
+
+    const without = await outName(makeConfig());
+
+    expect(await outName({ ...makeConfig(), sharedMappingKeys: ['@org/a', '@org/b/*'] })).toBe(
+      without
+    );
+    expect(await outName({ ...makeConfig(), chunks: true })).not.toBe(without);
+  });
+
   it('routes a CommonJS external through a synthetic named-exports entry', async () => {
     const mem = createMemoryIo()
       .setFile(ROOT_PKG, '{}')

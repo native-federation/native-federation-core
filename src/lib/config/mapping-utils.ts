@@ -8,7 +8,8 @@ import type {
 import type { PreparedSkipList } from '../domain/config/skip-list.contract.js';
 import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { isInSkipList } from './default-skip-list.js';
-import { matchesWildcard } from '../utils/path-patterns.js';
+import { matchesExternal, matchesWildcard, parseWildcard } from '../utils/path-patterns.js';
+import { inferPackageFromSecondary } from '../utils/normalize.js';
 import { logger } from '../utils/logger.js';
 
 const ALL = '*';
@@ -120,4 +121,26 @@ export function resolveMappingConfig(
   }
 
   return normalizeMappingConfig({}, mappingVersion);
+}
+
+// Rules: AGENTS.md, `build: 'paths'`. Both candidates are '/'-aligned prefixes of the import, so the
+// longer one is never coarser than the name rule.
+export function pathsPackageOf(importName: string, keys: readonly string[]): string {
+  const byName = inferPackageFromSecondary(importName);
+  const key = keys.includes(importName) ? importName : longestWildcardKey(importName, keys);
+  if (key === undefined) return byName;
+
+  const { prefix, hasWildcard } = parseWildcard(key);
+  const byKey = hasWildcard ? prefix.slice(0, Math.max(prefix.lastIndexOf('/'), 0)) : key;
+  return byKey.length > byName.length ? byKey : byName;
+}
+
+// Two matching keys with equally long prefixes share that prefix, so key order never decides.
+function longestWildcardKey(importName: string, keys: readonly string[]): string | undefined {
+  let best: string | undefined;
+  for (const key of keys) {
+    if (!key.includes('*') || !matchesExternal(importName, key)) continue;
+    if (best === undefined || key.indexOf('*') > best.indexOf('*')) best = key;
+  }
+  return best;
 }

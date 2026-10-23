@@ -25,7 +25,7 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
   const chunks = config.chunks ?? true;
   const mappingVersion = config.features?.mappingVersion ?? true;
 
-  const { paths, configs } = getRawMappedPaths(
+  const { paths, configs, keys } = getRawMappedPaths(
     findMappingsTsConfig(),
     fromBuilder(config.sharedMappings)
   );
@@ -37,6 +37,7 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
     shared: normalizeShared(config, skip, chunks),
     sharedMappings: withoutSkippedMappings(paths, skip),
     sharedMappingsConfig: normalizeMappingConfigs(configs, mappingVersion),
+    sharedMappingKeys: keys,
     chunks,
     skip,
     externals: config.externals ?? [],

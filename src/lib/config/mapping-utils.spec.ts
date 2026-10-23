@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { mappingsFromWorkspace, resolveMappingConfig } from './mapping-utils.js';
+import { mappingsFromWorkspace, pathsPackageOf, resolveMappingConfig } from './mapping-utils.js';
 import { logger } from '../utils/logger.js';
 
 const BASE = { singleton: true, strictVersion: true };
@@ -112,5 +112,42 @@ describe('resolveMappingConfig', () => {
   it('lets a wildcard declared first beat a later exact pattern', () => {
     const configs = { '@org/*': cfg('wild'), '@org/ui': cfg('exact') };
     expect(resolveMappingConfig('@org/ui', configs, true)).toEqual(cfg('wild'));
+  });
+});
+
+// Fixtures are tsconfig `paths` keys as workspaces write them (core#198).
+describe('pathsPackageOf', () => {
+  it.each([
+    // [keys, import, package]
+    [['@org/lib', '@org/lib/*'], '@org/lib', '@org/lib'],
+    [['@org/lib', '@org/lib/*'], '@org/lib/testing', '@org/lib'],
+    [['@org/lib/*'], '@org/lib/testing', '@org/lib'],
+    // An explicit secondary key is its own package; whether it should join is a v5 question.
+    [['@org/lib/*', '@org/lib/testing'], '@org/lib/testing', '@org/lib/testing'],
+    [['@org/lib/*', '@org/lib/testing'], '@org/lib/other', '@org/lib'],
+    // #176's layout: one key per library, deeper than the name rule.
+    [['@shared/components/table'], '@shared/components/table', '@shared/components/table'],
+    [['@shared/components/*'], '@shared/components/table', '@shared/components'],
+    // A key coarser than the name rule leaves the name rule in charge.
+    [['@shared/*'], '@shared/components/table', '@shared/components'],
+    [['@a/*/index'], '@a/foo/index', '@a/foo'],
+    [['@org/ui-*'], '@org/ui-table', '@org/ui-table'],
+    [['@org/ui/x-*'], '@org/ui/x-table', '@org/ui'],
+    [['*'], '@org/x/y', '@org/x'],
+    [['libs/ui/*'], 'libs/ui/table', 'libs/ui'],
+    // The longest prefix wins, in either key order.
+    [['@org/*', '@org/ui/*'], '@org/ui/table/cell', '@org/ui'],
+    [['@org/ui/*', '@org/*'], '@org/ui/table/cell', '@org/ui'],
+    // No key matches: the name rule.
+    [['@org/lib'], '@other/x/y', '@other/x'],
+    [[], '@org/x/y', '@org/x'],
+  ])('reads %j for %s as %s', (keys, importName, expected) => {
+    expect(pathsPackageOf(importName, keys)).toBe(expected);
+  });
+
+  // `@a/b/c/index` starts with the prefix `@a/b/c/` and ends with the suffix `/index`, but only by
+  // sharing their '/'; TypeScript does not resolve it through the key, so neither does the package.
+  it('does not match a wildcard key whose prefix and suffix overlap', () => {
+    expect(pathsPackageOf('@a/b/c/index', ['@a/b/c/*/index'])).toBe('@a/b');
   });
 });

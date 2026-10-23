@@ -67,6 +67,8 @@ export interface NormalizedFederationConfig {
   shared: NormalizedSharedExternalsConfig;
   sharedMappings: PathToImport;
   sharedMappingsConfig: NormalizedSharedMappingConfigs;
+  // Every tsconfig `paths` key, selected or not; optional for configs built by hand.
+  sharedMappingKeys?: string[];
   skip: PreparedSkipList;
   chunks: boolean;
   externals: string[];
