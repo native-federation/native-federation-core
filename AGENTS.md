@@ -408,7 +408,10 @@ reached through two import trails — the mapping may be served by another remot
 module never is — and is then evaluated twice. Mappings default to one `mapping-bundle`;
 `build: 'separate'` gives a mapping its own bundle and `build: 'package'` one per mapped package,
 the same way a shared external is planned (`planMappingBundles`). `mapping-or-exposed` is a fixed
-name: the orchestrator registers it for every remote it knows.
+name: the orchestrator registers it for every remote it knows. A mapping's output name keeps only
+`[A-Za-z0-9_]` of its import, so two mappings, or a mapping and an exposed module, can share a file
+(also by case alone on macOS and Windows); a full build warns about it before bundling (core#196),
+since a dev build writes one over the other.
 
 ## Caching System
 

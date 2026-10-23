@@ -241,6 +241,74 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     }
   );
 
+  // core#196: output names keep only [A-Za-z0-9_], and file systems may ignore case; without a
+  // hash a dev build writes one file over the other, so the config is warned about up front.
+  describe('output files shared by two entries', () => {
+    afterEach(() => vi.restoreAllMocks());
+    const pkg = { singleton: true, strictVersion: false, build: 'package' as const };
+
+    it.each([
+      [
+        'two mappings in different bundles',
+        {
+          sharedMappings: { './libs/a': '@org/a-b/x', './libs/b': '@org/a/b-x' },
+          sharedMappingsConfig: { '@org/a-b/x': pkg, '@org/a/b-x': pkg },
+        },
+        "shared mapping '@org/a-b/x' and shared mapping '@org/a/b-x' are written as '_org_a_b_x.js'",
+      ],
+      [
+        'a mapping and an exposed module',
+        { sharedMappings: { './libs/utils': 'utils' }, exposes: { './utils': { file: './u.ts' } } },
+        "shared mapping 'utils' and exposed module './utils' are written as 'utils.js'",
+      ],
+      [
+        'names that differ only in case',
+        { sharedMappings: { './libs/b': 'button' }, exposes: { './Button': { file: './b.ts' } } },
+        "shared mapping 'button' and exposed module './Button' are written as 'button.js'",
+      ],
+    ])('warns about %s', async (_label, overrides, expected) => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const adapter = createFakeBuildAdapter();
+
+      await bundleExposedAndMappingsCore({ adapter }, makeConfig(overrides), makeFedOptions(), []);
+
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining(expected));
+    });
+
+    it('stays quiet without a shared file', async () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const config = makeConfig({
+        sharedMappings: { './libs/a': '@org/a' },
+        exposes: { './a': { file: './a.ts' } },
+      });
+
+      await bundleExposedAndMappingsCore(
+        { adapter: createFakeBuildAdapter() },
+        config,
+        makeFedOptions(),
+        []
+      );
+
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    // The names come from the config, which a rebuild reuses: once per full build is enough.
+    it('stays quiet on a rebuild', async () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const adapter = createFakeBuildAdapter();
+      const config = makeConfig({
+        sharedMappings: { './libs/utils': 'utils' },
+        exposes: { './utils': { file: './u.ts' } },
+      });
+
+      await bundleExposedAndMappingsCore({ adapter }, config, makeFedOptions(), []);
+      warn.mockClear();
+      await bundleExposedAndMappingsCore({ adapter }, config, makeFedOptions(), [], ['/ws/x.ts']);
+
+      expect(warn).not.toHaveBeenCalled();
+    });
+  });
+
   it('leaves the adapter alone for a side that has no entry points', async () => {
     const config = makeConfig({ exposes: { './Comp': { file: './src/comp.ts' } } });
     const adapter = createFakeBuildAdapter();

@@ -85,6 +85,15 @@ export async function bundleExposedAndMappingsCore(
     }
   );
 
+  if (!modifiedFiles) {
+    warnSharedOutNames([
+      ...mappingPlans.flatMap(plan =>
+        plan.entryPoints.map(ep => ({ outName: ep.outName, label: `shared mapping '${ep.key}'` }))
+      ),
+      ...exposes.map(ep => ({ outName: ep.outName, label: `exposed module '${ep.key}'` })),
+    ]);
+  }
+
   const hash = !fedOptions.dev;
 
   const runBuild = async (
@@ -218,6 +227,24 @@ export async function bundleExposedAndMappingsCore(
     integrity,
     outputFiles: toOutputFiles(outputPaths, 'browser'),
   };
+}
+
+// Output names keep only [A-Za-z0-9_] and file systems may ignore case, so two entries can share a
+// file, which a dev build (no hash) writes one over the other (core#196).
+function warnSharedOutNames(entries: Array<{ outName: string; label: string }>): void {
+  const byName = new Map<string, { outName: string; labels: string[] }>();
+  for (const { outName, label } of entries) {
+    const group = byName.get(outName.toLowerCase());
+    if (group) group.labels.push(label);
+    else byName.set(outName.toLowerCase(), { outName, labels: [label] });
+  }
+  for (const { outName, labels } of byName.values()) {
+    if (labels.length === 1) continue;
+    logger.warn(
+      `${labels.join(' and ')} are written as '${outName}'. A dev build writes one over the ` +
+        `other, so one is served for both, and a bundle holding both fails. Rename one of them.`
+    );
+  }
 }
 
 // Only a second key with the same last segment gets a suffix, so no other published name changes.
