@@ -1,11 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   assertBarrelMappings,
+  assertOneConfigPerPathsPackage,
   isNonBarrelImport,
   isNpmStylePackage,
   warnNonNpmMappingNames,
 } from './validate-mappings.js';
 import { logger } from '../utils/logger.js';
+import type {
+  NormalizedFederationConfig,
+  NormalizedMappingConfig,
+} from '../domain/config/federation-config.contract.js';
 
 describe('isNonBarrelImport', () => {
   it('accepts barrel specifiers', () => {
@@ -146,5 +151,95 @@ describe('warnNonNpmMappingNames', () => {
 
   it('does not throw when strict and every name is npm-style', () => {
     expect(() => warnNonNpmMappingNames({ '/ws/libs/ui/index.ts': '@org/ui' }, true)).not.toThrow();
+  });
+});
+
+describe('assertOneConfigPerPathsPackage', () => {
+  const paths: NormalizedMappingConfig = { singleton: true, strictVersion: false, build: 'paths' };
+  const config = (
+    sharedMappingsConfig: Record<string, NormalizedMappingConfig>,
+    sharedMappingKeys: string[] | undefined = ['@org/ui', '@org/ui/*', '@org/forms']
+  ) =>
+    ({
+      sharedMappings: {
+        './ui': '@org/ui',
+        './ui/button': '@org/ui/button',
+        './forms': '@org/forms',
+      },
+      sharedMappingsConfig,
+      sharedMappingKeys,
+      features: { mappingVersion: false },
+    }) as unknown as NormalizedFederationConfig;
+
+  it('passes a package whose mappings share one config', () => {
+    expect(() => assertOneConfigPerPathsPackage(config({ '*': paths }))).not.toThrow();
+  });
+
+  // The pruning flags never reach the published record.
+  it('ignores includeSecondaries and resolveGlob', () => {
+    const cfg = config({ '@org/ui': { ...paths, includeSecondaries: true }, '*': paths });
+    expect(() => assertOneConfigPerPathsPackage(cfg)).not.toThrow();
+  });
+
+  it('rejects a package whose mappings would publish different records', () => {
+    const cfg = config({ '@org/ui': { ...paths, singleton: false }, '*': paths });
+    expect(() => assertOneConfigPerPathsPackage(cfg)).toThrow(
+      /'@org\/ui' and '@org\/ui\/button' belong to tsconfig paths package '@org\/ui' but are configured differently/
+    );
+  });
+
+  // Otherwise `@org/ui/button` lands in the default bundle and `@org/ui` in its own.
+  it('rejects a package that is only partly built as paths', () => {
+    const cfg = config({ '@org/ui': paths, '@org/forms': paths });
+    expect(() => assertOneConfigPerPathsPackage(cfg)).toThrow(/configured differently/);
+  });
+
+  // `@org/ui/x` has a key of its own, but without 'paths' it is published under its name-rule
+  // package `@org/ui`, from the default bundle where it can share a chunk with `@org/other`.
+  it('rejects a mapping without paths that its name would publish under a paths package', () => {
+    const cfg = {
+      sharedMappings: { './ui': '@org/ui', './ui/x': '@org/ui/x', './other': '@org/other' },
+      sharedMappingsConfig: { '@org/ui': paths },
+      sharedMappingKeys: ['@org/ui', '@org/ui/x', '@org/other'],
+      features: { mappingVersion: false },
+    } as unknown as NormalizedFederationConfig;
+
+    expect(() => assertOneConfigPerPathsPackage(cfg)).toThrow(
+      `Shared mappings '@org/ui' and '@org/ui/x' belong to tsconfig paths package '@org/ui' but are configured differently (build: "paths" vs undefined)`
+    );
+  });
+
+  // Its key would put `row` in the paths package `@shared/components/table`, but without 'paths' it
+  // keeps the name rule and is published under `@shared/components`: nothing merges.
+  it('lets a mapping without paths keep the name rule under a paths key', () => {
+    const cfg = {
+      sharedMappings: {
+        './table': '@shared/components/table',
+        './table/row': '@shared/components/table/row',
+      },
+      sharedMappingsConfig: { '@shared/components/table': paths },
+      sharedMappingKeys: ['@shared/components/table', '@shared/components/table/*'],
+      features: { mappingVersion: false },
+    } as unknown as NormalizedFederationConfig;
+
+    expect(() => assertOneConfigPerPathsPackage(cfg)).not.toThrow();
+  });
+
+  it('reads a nested config the same whatever its key order', () => {
+    const cfg = config({
+      '@org/ui': { ...paths, requiredVersion: { version: 'auto', range: '^' } },
+      '*': { ...paths, requiredVersion: { range: '^', version: 'auto' } },
+    });
+    expect(() => assertOneConfigPerPathsPackage(cfg)).not.toThrow();
+  });
+
+  it('leaves packages without a paths mapping alone', () => {
+    const cfg = config({ '@org/forms': paths, '@org/ui': { ...paths, build: 'separate' } });
+    expect(() => assertOneConfigPerPathsPackage(cfg)).not.toThrow();
+  });
+
+  it('does nothing without build: paths', () => {
+    const cfg = config({ '@org/ui': { singleton: false, strictVersion: false } }, undefined);
+    expect(() => assertOneConfigPerPathsPackage(cfg)).not.toThrow();
   });
 });

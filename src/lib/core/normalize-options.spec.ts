@@ -433,6 +433,21 @@ describe('normalizeFederationOptionsCore', () => {
     vi.restoreAllMocks();
   });
 
+  // core#198: checked before any bundle runs, on the mappings that survived pruning.
+  it('throws for a build: paths package whose mappings are configured differently', async () => {
+    const io = createMemoryIo().setFile(CONFIG_PATH, '');
+    const paths = { singleton: true, strictVersion: false, build: 'paths' as const };
+    const config = makeConfig({
+      sharedMappings: { '/ws/libs/lib/index.ts': '@org/lib', '/ws/libs/lib/x.ts': '@org/lib/x' },
+      sharedMappingsConfig: { '@org/lib': paths, '@org/lib/*': { ...paths, singleton: false } },
+      sharedMappingKeys: ['@org/lib', '@org/lib/*'],
+    });
+
+    await expect(
+      normalizeFederationOptionsCore({ io, loadConfig: loaderFor(config) }, baseOptions, cache)
+    ).rejects.toThrow(/configured differently \(singleton: true vs false\)/);
+  });
+
   // angular-adapter#117: Nx reports workspaceRoot with the invoking shell's drive-letter
   // case, while the sharedMappings keys descend from cwd(). Every mapping then compares
   // unequal, gets classified unused, and the build silently ships without its workspace

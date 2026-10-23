@@ -57,6 +57,8 @@ function config(
     shared: {
       a: { platform: 'browser', build: 'default', chunks: false } as NormalizedExternalConfig,
     },
+    sharedMappings: {},
+    sharedMappingsConfig: {},
     ...(overrides.shareScope ? { shareScope: overrides.shareScope } : {}),
     features: { denseExternals: overrides.denseExternals ?? false },
   } as unknown as NormalizedFederationConfig;

@@ -1,10 +1,9 @@
 import type {
   ExternalConfig,
-  ExternalConfigInput,
   ResolvedSharedExternalsConfig,
   ShareExternalsOptions,
 } from './external-config.contract.js';
-import type { SharedMappingEntry } from './federation-config.contract.js';
+import type { MappingConfigInput, SharedMappingEntry } from './federation-config.contract.js';
 import type { SkipList } from './skip-list.contract.js';
 
 // `withNativeFederation` accepts a builder wherever it accepts the value `get()` returns.
@@ -21,5 +20,5 @@ export interface PackageJsonExternalsBuilder extends ConfigBuilder<ResolvedShare
 
 export interface WorkspaceMappingsBuilder extends ConfigBuilder<SharedMappingEntry[]> {
   filter(patterns: string[]): WorkspaceMappingsBuilder;
-  patch(patterns: string[], cfg: Partial<ExternalConfigInput>): WorkspaceMappingsBuilder;
+  patch(patterns: string[], cfg: Partial<MappingConfigInput>): WorkspaceMappingsBuilder;
 }

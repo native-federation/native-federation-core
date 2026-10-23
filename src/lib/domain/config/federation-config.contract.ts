@@ -10,10 +10,15 @@ import type { ConfigBuilder } from './config-builders.contract.js';
 
 export type ExposeEntry = { file: string; element?: string };
 
-export type SharedMappingEntry = string | [string[], ExternalConfigInput];
+// `build: 'paths'` takes the package from the tsconfig `paths` keys (core#198).
+export type MappingConfigInput = Omit<ExternalConfigInput, 'build'> & {
+  build?: 'separate' | 'package' | 'paths';
+};
+
+export type SharedMappingEntry = string | [string[], MappingConfigInput];
 
 /** Selection pattern -> config, kept in declaration order: first match wins. */
-export type SharedMappingConfigs = Record<string, ExternalConfigInput>;
+export type SharedMappingConfigs = Record<string, MappingConfigInput>;
 
 /**
  * Only the subset of `ExternalConfig` a mapping can act on — `build` picks a bundle of its own,
@@ -28,7 +33,7 @@ export type SharedMappingConfigs = Record<string, ExternalConfigInput>;
 export interface NormalizedMappingConfig {
   singleton: boolean;
   strictVersion: boolean;
-  build?: 'separate' | 'package';
+  build?: 'separate' | 'package' | 'paths';
   requiredVersion?: string | AutoRequiredOptions;
   version?: string;
   shareScope?: string;

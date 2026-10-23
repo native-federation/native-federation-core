@@ -220,6 +220,14 @@ describe('withNativeFederation', () => {
     expect(result.sharedMappingKeys).toEqual(['@org/ui', '@org/skip', '@org/forms/*']);
   });
 
+  it('rejects build: paths on a shared npm package', () => {
+    expect(() =>
+      withNativeFederation({
+        shared: { rxjs: { build: 'paths' } as unknown as { build: 'package' } },
+      })
+    ).toThrow("Shared external 'rxjs' sets build: 'paths'");
+  });
+
   it('builds shared mappings from the resolved tsconfig, filtering the skip list', () => {
     getRawMappedPaths.mockReturnValue({
       paths: {

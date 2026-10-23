@@ -93,6 +93,13 @@ function normalizeShared(
     const key = cur.replace(/\\/g, '/');
     const sharedConfig = shared[cur]!;
 
+    // An untyped config can still set it, and planSharedBundles would read it as 'package'.
+    if ((sharedConfig.build as string | undefined) === 'paths') {
+      throw new Error(
+        `Shared external '${cur}' sets build: 'paths', which only sharedMappings take: an npm package is named by its package.json.`
+      );
+    }
+
     if (!!sharedConfig.chunks && !sharedConfig.build && sharedConfig.chunks !== chunks) {
       logger.warn(
         `External '${cur}' has explicit chunk settings, consider switching build type to { build: 'package' }.`

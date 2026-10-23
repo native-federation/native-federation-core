@@ -1,6 +1,7 @@
 import type { WorkspaceMappingsBuilder } from '../domain/config/config-builders.contract.js';
-import type { ExternalConfigInput } from '../domain/config/external-config.contract.js';
 import type {
+  MappingConfigInput,
+  NormalizedFederationConfig,
   NormalizedMappingConfig,
   NormalizedSharedMappingConfigs,
   SharedMappingEntry,
@@ -18,16 +19,16 @@ const ALL = '*';
  * Sugar over the `sharedMappings` array form: `get()` returns entries that could equally
  * be written by hand. Without `filter()` the selection is every tsconfig path mapping.
  */
-export function mappingsFromWorkspace(baseCfg: ExternalConfigInput = {}): WorkspaceMappingsBuilder {
+export function mappingsFromWorkspace(baseCfg: MappingConfigInput = {}): WorkspaceMappingsBuilder {
   const selection: string[] = [];
-  const patches: Array<{ patterns: string[]; cfg: Partial<ExternalConfigInput> }> = [];
+  const patches: Array<{ patterns: string[]; cfg: Partial<MappingConfigInput> }> = [];
 
   const builder: WorkspaceMappingsBuilder = {
     filter(patterns: string[]) {
       selection.push(...patterns);
       return builder;
     },
-    patch(patterns: string[], cfg: Partial<ExternalConfigInput>) {
+    patch(patterns: string[], cfg: Partial<MappingConfigInput>) {
       patches.push({ patterns, cfg });
       return builder;
     },
@@ -83,7 +84,7 @@ export function withoutSkippedMappings(
  * is lifted out because it steers wildcard expansion, not secondary entry points.
  */
 export function normalizeMappingConfig(
-  cfg: ExternalConfigInput,
+  cfg: MappingConfigInput,
   mappingVersion: boolean
 ): NormalizedMappingConfig {
   const includeSecondaries =
@@ -143,4 +144,20 @@ function longestWildcardKey(importName: string, keys: readonly string[]): string
     if (best === undefined || key.indexOf('*') > best.indexOf('*')) best = key;
   }
   return best;
+}
+
+export function pathsMappingPackages(
+  config: NormalizedFederationConfig
+): ReadonlyMap<string, string> {
+  const packages = new Map<string, string>();
+  const keys = config.sharedMappingKeys ?? [];
+  for (const mappedImport of Object.values(config.sharedMappings)) {
+    const { build } = resolveMappingConfig(
+      mappedImport,
+      config.sharedMappingsConfig,
+      config.features.mappingVersion
+    );
+    if (build === 'paths') packages.set(mappedImport, pathsPackageOf(mappedImport, keys));
+  }
+  return packages;
 }

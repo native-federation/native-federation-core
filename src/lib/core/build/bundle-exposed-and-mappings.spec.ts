@@ -1247,3 +1247,98 @@ describe('mapping output without build: paths', () => {
     ]);
   });
 });
+
+// core#198, end to end through bundling and remoteEntry.json assembly.
+describe("mapping output with build: 'paths'", () => {
+  const paths = { singleton: true, strictVersion: false, build: 'paths' as const };
+  const config = (denseExternals: boolean, denseChunking: boolean) =>
+    makeConfig({
+      chunks: true,
+      sharedMappings: {
+        './libs/components/table': '@shared/components/table',
+        './libs/components/collapse': '@shared/components/collapse',
+        './libs/lib': '@org/lib',
+        './libs/lib/testing': '@org/lib/testing',
+        './libs/other': '@other/a',
+      },
+      sharedMappingsConfig: { '@shared/*': paths, '@org/lib': paths, '@org/lib/*': paths },
+      // One key per #176-style library, and a library with its secondaries under `X/*`.
+      sharedMappingKeys: [
+        '@shared/components/table',
+        '@shared/components/collapse',
+        '@org/lib',
+        '@org/lib/*',
+        '@other/a',
+      ],
+      features: { ...makeConfig().features, denseExternals, denseChunking },
+    });
+
+  async function build(denseExternals: boolean, denseChunking: boolean) {
+    const io = createMemoryIo();
+    const adapter = createFakeBuildAdapter({ io });
+    const fedOptions = makeFedOptions({ dev: false });
+    const cfg = config(denseExternals, denseChunking);
+    const artifactInfo = await bundleExposedAndMappingsCore({ adapter, io }, cfg, fedOptions, []);
+    return { adapter, info: assembleFederationInfo(cfg, fedOptions, artifactInfo) };
+  }
+
+  const dense = [
+    [false, false],
+    [false, true],
+    [true, false],
+    [true, true],
+  ];
+
+  it.each(dense)(
+    'bundles each package on its own (denseExternals: %s, denseChunking: %s)',
+    async (dx, dc) => {
+      const { adapter } = await build(dx, dc);
+
+      expect(
+        adapter.calls.setup.map(c => [
+          c.name,
+          c.options.chunks,
+          c.options.entryPoints.map(ep => ep.outName),
+        ])
+      ).toEqual([
+        ['mapping-bundle', true, ['_other_a.js']],
+        [
+          'mapping-single-entry',
+          false,
+          ['_shared_components_table.js', '_shared_components_collapse.js'],
+        ],
+        ['mapping-pkg-org_lib', true, ['_org_lib.js', '_org_lib_testing.js']],
+      ]);
+    }
+  );
+
+  it.each([false, true])(
+    'publishes dense records under the paths package (denseChunking: %s)',
+    async denseChunking => {
+      const { info } = await build(true, denseChunking);
+
+      expect(info.shared.map(s => ('entries' in s ? [s.packageName, s.entries] : s))).toEqual([
+        ['@other/a', { '@other/a': '_other_a.js' }],
+        ['@shared/components/table', { '@shared/components/table': '_shared_components_table.js' }],
+        [
+          '@shared/components/collapse',
+          { '@shared/components/collapse': '_shared_components_collapse.js' },
+        ],
+        ['@org/lib', { '@org/lib': '_org_lib.js', '@org/lib/testing': '_org_lib_testing.js' }],
+      ]);
+    }
+  );
+
+  // A flat record carries no package group, so only the bundling follows the paths packages.
+  it('keeps flat records per mapping', async () => {
+    const { info } = await build(false, true);
+
+    expect(info.shared.map(s => [s.packageName, 'bundle' in s && s.bundle])).toEqual([
+      ['@other/a', 'mapping-bundle'],
+      ['@shared/components/table', 'mapping-single-entry'],
+      ['@shared/components/collapse', 'mapping-single-entry'],
+      ['@org/lib', 'mapping-pkg-org_lib'],
+      ['@org/lib/testing', 'mapping-pkg-org_lib'],
+    ]);
+  });
+});

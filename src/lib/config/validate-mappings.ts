@@ -1,7 +1,9 @@
 import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
+import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
+import { pathsMappingPackages, resolveMappingConfig } from './mapping-utils.js';
 import { logger } from '../utils/logger.js';
 import { inferPackageFromSecondary } from '../utils/normalize.js';
-import { formatList } from '../utils/format-list.js';
+import { formatDifference, formatList } from '../utils/format-list.js';
 
 /**
  * A trailing `.js`/`.ts`/... is a file import and resolves; any other dot in the last segment
@@ -90,4 +92,42 @@ export function warnNonNpmMappingNames(paths: PathToImport, strict = false): voi
       `('package' or '@company/package', subpaths belong to that package): ` +
       `${formatList(offenders, MAX_LISTED)}.`
   );
+}
+
+// A mapping without 'paths' keeps the name rule, under which densifyExternals would merge it into a
+// 'paths' record from another bundle.
+export function assertOneConfigPerPathsPackage(config: NormalizedFederationConfig): void {
+  const packages = pathsMappingPackages(config);
+  const claimed = new Set(packages.values());
+  if (claimed.size === 0) return;
+
+  const first = new Map<string, { importName: string; record: object }>();
+  for (const importName of Object.values(config.sharedMappings)) {
+    const packageName = packages.get(importName) ?? inferPackageFromSecondary(importName);
+    if (!claimed.has(packageName)) continue;
+
+    // The pruning flags never reach the published record.
+    const {
+      includeSecondaries: _i,
+      resolveGlob: _r,
+      ...record
+    } = resolveMappingConfig(
+      importName,
+      config.sharedMappingsConfig,
+      config.features.mappingVersion
+    );
+    const seen = first.get(packageName);
+    if (!seen) {
+      first.set(packageName, { importName, record });
+      continue;
+    }
+    const difference = formatDifference(seen.record, record);
+    if (difference) {
+      throw new Error(
+        `Shared mappings '${seen.importName}' and '${importName}' belong to tsconfig paths package ` +
+          `'${packageName}' but are configured differently (${difference}). A package publishes ` +
+          `one record: build all of its mappings with build: 'paths' and one config.`
+      );
+    }
+  }
 }
