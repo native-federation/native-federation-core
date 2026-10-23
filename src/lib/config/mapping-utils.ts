@@ -1,6 +1,7 @@
 import type { WorkspaceMappingsBuilder } from '../domain/config/config-builders.contract.js';
-import type { ExternalConfigInput } from '../domain/config/external-config.contract.js';
 import type {
+  MappingConfigInput,
+  NormalizedFederationConfig,
   NormalizedMappingConfig,
   NormalizedSharedMappingConfigs,
   SharedMappingEntry,
@@ -8,7 +9,8 @@ import type {
 import type { PreparedSkipList } from '../domain/config/skip-list.contract.js';
 import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { isInSkipList } from './default-skip-list.js';
-import { matchesWildcard } from '../utils/path-patterns.js';
+import { matchesExternal, matchesWildcard, parseWildcard } from '../utils/path-patterns.js';
+import { inferPackageFromSecondary } from '../utils/normalize.js';
 import { logger } from '../utils/logger.js';
 
 const ALL = '*';
@@ -17,16 +19,16 @@ const ALL = '*';
  * Sugar over the `sharedMappings` array form: `get()` returns entries that could equally
  * be written by hand. Without `filter()` the selection is every tsconfig path mapping.
  */
-export function mappingsFromWorkspace(baseCfg: ExternalConfigInput = {}): WorkspaceMappingsBuilder {
+export function mappingsFromWorkspace(baseCfg: MappingConfigInput = {}): WorkspaceMappingsBuilder {
   const selection: string[] = [];
-  const patches: Array<{ patterns: string[]; cfg: Partial<ExternalConfigInput> }> = [];
+  const patches: Array<{ patterns: string[]; cfg: Partial<MappingConfigInput> }> = [];
 
   const builder: WorkspaceMappingsBuilder = {
     filter(patterns: string[]) {
       selection.push(...patterns);
       return builder;
     },
-    patch(patterns: string[], cfg: Partial<ExternalConfigInput>) {
+    patch(patterns: string[], cfg: Partial<MappingConfigInput>) {
       patches.push({ patterns, cfg });
       return builder;
     },
@@ -82,7 +84,7 @@ export function withoutSkippedMappings(
  * is lifted out because it steers wildcard expansion, not secondary entry points.
  */
 export function normalizeMappingConfig(
-  cfg: ExternalConfigInput,
+  cfg: MappingConfigInput,
   mappingVersion: boolean
 ): NormalizedMappingConfig {
   const includeSecondaries =
@@ -120,4 +122,42 @@ export function resolveMappingConfig(
   }
 
   return normalizeMappingConfig({}, mappingVersion);
+}
+
+// Rules: AGENTS.md, `build: 'paths'`. Both candidates are '/'-aligned prefixes of the import, so the
+// longer one is never coarser than the name rule.
+export function pathsPackageOf(importName: string, keys: readonly string[]): string {
+  const byName = inferPackageFromSecondary(importName);
+  const key = keys.includes(importName) ? importName : longestWildcardKey(importName, keys);
+  if (key === undefined) return byName;
+
+  const { prefix, hasWildcard } = parseWildcard(key);
+  const byKey = hasWildcard ? prefix.slice(0, Math.max(prefix.lastIndexOf('/'), 0)) : key;
+  return byKey.length > byName.length ? byKey : byName;
+}
+
+// Two matching keys with equally long prefixes share that prefix, so key order never decides.
+function longestWildcardKey(importName: string, keys: readonly string[]): string | undefined {
+  let best: string | undefined;
+  for (const key of keys) {
+    if (!key.includes('*') || !matchesExternal(importName, key)) continue;
+    if (best === undefined || key.indexOf('*') > best.indexOf('*')) best = key;
+  }
+  return best;
+}
+
+export function pathsMappingPackages(
+  config: NormalizedFederationConfig
+): ReadonlyMap<string, string> {
+  const packages = new Map<string, string>();
+  const keys = config.sharedMappingKeys ?? [];
+  for (const mappedImport of Object.values(config.sharedMappings)) {
+    const { build } = resolveMappingConfig(
+      mappedImport,
+      config.sharedMappingsConfig,
+      config.features.mappingVersion
+    );
+    if (build === 'paths') packages.set(mappedImport, pathsPackageOf(mappedImport, keys));
+  }
+  return packages;
 }

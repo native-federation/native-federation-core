@@ -69,6 +69,7 @@ export async function bundleExposedAndMappingsCore(
 
   const mappingPlans = planMappingBundles(config).map(plan => ({
     bundleName: plan.bundleName,
+    chunks: plan.chunks,
     entryPoints: Object.entries(plan.entries).map(([entryPoint, mappedImport]) => ({
       fileName: entryPoint,
       outName: mappedImport.replace(/[^A-Za-z0-9]/g, '_') + '.js',
@@ -84,11 +85,21 @@ export async function bundleExposedAndMappingsCore(
     }
   );
 
+  if (!modifiedFiles) {
+    warnSharedOutNames([
+      ...mappingPlans.flatMap(plan =>
+        plan.entryPoints.map(ep => ({ outName: ep.outName, label: `shared mapping '${ep.key}'` }))
+      ),
+      ...exposes.map(ep => ({ outName: ep.outName, label: `exposed module '${ep.key}'` })),
+    ]);
+  }
+
   const hash = !fedOptions.dev;
 
   const runBuild = async (
     bundleName: string,
-    entryPoints: EntryPoint[]
+    entryPoints: EntryPoint[],
+    chunks: boolean
   ): Promise<Record<string, string>> => {
     if (entryPoints.length === 0) return {};
 
@@ -103,7 +114,7 @@ export async function bundleExposedAndMappingsCore(
           dev: !!fedOptions.dev,
           watch: fedOptions.watch,
           mappedPaths: config.sharedMappings,
-          chunks: config.chunks,
+          chunks,
           hash,
           optimizedMappings: config.features.ignoreUnusedDeps,
           isMappingOrExposed: true,
@@ -155,7 +166,7 @@ export async function bundleExposedAndMappingsCore(
   for (const plan of mappingPlans) {
     logger.info(`Bundling shared mappings with bundle type '${plan.bundleName}'`);
     const start = process.hrtime();
-    const results = await runBuild(plan.bundleName, plan.entryPoints);
+    const results = await runBuild(plan.bundleName, plan.entryPoints, plan.chunks);
     const files: string[] = [];
 
     for (const item of plan.entryPoints) {
@@ -178,7 +189,7 @@ export async function bundleExposedAndMappingsCore(
 
   if (exposes.length > 0) logger.info('Bundling exposed modules');
   const exposedStart = process.hrtime();
-  const exposedResults = await runBuild(EXPOSED_BUNDLE, exposes);
+  const exposedResults = await runBuild(EXPOSED_BUNDLE, exposes, config.chunks);
 
   const exposedResult: Array<ExposesInfo> = [];
   const exposedFiles: string[] = [];
@@ -216,6 +227,24 @@ export async function bundleExposedAndMappingsCore(
     integrity,
     outputFiles: toOutputFiles(outputPaths, 'browser'),
   };
+}
+
+// Output names keep only [A-Za-z0-9_] and file systems may ignore case, so two entries can share a
+// file, which a dev build (no hash) writes one over the other (core#196).
+function warnSharedOutNames(entries: Array<{ outName: string; label: string }>): void {
+  const byName = new Map<string, { outName: string; labels: string[] }>();
+  for (const { outName, label } of entries) {
+    const group = byName.get(outName.toLowerCase());
+    if (group) group.labels.push(label);
+    else byName.set(outName.toLowerCase(), { outName, labels: [label] });
+  }
+  for (const { outName, labels } of byName.values()) {
+    if (labels.length === 1) continue;
+    logger.warn(
+      `${labels.join(' and ')} are written as '${outName}'. A dev build writes one over the ` +
+        `other, so one is served for both, and a bundle holding both fails. Rename one of them.`
+    );
+  }
 }
 
 // Only a second key with the same last segment gets a suffix, so no other published name changes.

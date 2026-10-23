@@ -194,7 +194,11 @@ export async function bundleSharedCore(
 
   const packageInfos = [...inferredPackageInfos, ...configuredPackageInfos];
 
-  const configState = `BUNDLER_CHUNKS;${builderVersion};${JSON.stringify(config)}`;
+  // The paths keys change with every tsconfig edit but never reach a shared bundle.
+  const configState = `BUNDLER_CHUNKS;${builderVersion};${JSON.stringify({
+    ...config,
+    sharedMappingKeys: undefined,
+  })}`;
 
   const entryPoints: EntryPoint[] = packageInfos.map(pi => {
     const encName = pi.packageName.replace(/[^A-Za-z0-9]/g, '_');

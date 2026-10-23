@@ -25,7 +25,7 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
   const chunks = config.chunks ?? true;
   const mappingVersion = config.features?.mappingVersion ?? true;
 
-  const { paths, configs } = getRawMappedPaths(
+  const { paths, configs, keys } = getRawMappedPaths(
     findMappingsTsConfig(),
     fromBuilder(config.sharedMappings)
   );
@@ -37,6 +37,7 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
     shared: normalizeShared(config, skip, chunks),
     sharedMappings: withoutSkippedMappings(paths, skip),
     sharedMappingsConfig: normalizeMappingConfigs(configs, mappingVersion),
+    sharedMappingKeys: keys,
     chunks,
     skip,
     externals: config.externals ?? [],
@@ -91,6 +92,13 @@ function normalizeShared(
   result = Object.keys(shared).reduce<NormalizedSharedExternalsConfig>((acc, cur) => {
     const key = cur.replace(/\\/g, '/');
     const sharedConfig = shared[cur]!;
+
+    // An untyped config can still set it, and planSharedBundles would read it as 'package'.
+    if ((sharedConfig.build as string | undefined) === 'paths') {
+      throw new Error(
+        `Shared external '${cur}' sets build: 'paths', which only sharedMappings take: an npm package is named by its package.json.`
+      );
+    }
 
     if (!!sharedConfig.chunks && !sharedConfig.build && sharedConfig.chunks !== chunks) {
       logger.warn(

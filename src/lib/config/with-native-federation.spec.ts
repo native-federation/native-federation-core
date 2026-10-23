@@ -205,6 +205,29 @@ describe('withNativeFederation', () => {
     expect(result.shared['react']).not.toHaveProperty('pool');
   });
 
+  // A skipped mapping is never published, but its key still decides the package of the others
+  // (core#198).
+  it('carries every tsconfig paths key, skipped ones included', () => {
+    getRawMappedPaths.mockReturnValue({
+      paths: { '/ws/libs/ui/index.ts': '@org/ui', '/ws/libs/skip/index.ts': '@org/skip' },
+      configs: {},
+      keys: ['@org/ui', '@org/skip', '@org/forms/*'],
+    });
+
+    const result = withNativeFederation({ skip: ['@org/skip'] });
+
+    expect(result.sharedMappings).toEqual({ '/ws/libs/ui/index.ts': '@org/ui' });
+    expect(result.sharedMappingKeys).toEqual(['@org/ui', '@org/skip', '@org/forms/*']);
+  });
+
+  it('rejects build: paths on a shared npm package', () => {
+    expect(() =>
+      withNativeFederation({
+        shared: { rxjs: { build: 'paths' } as unknown as { build: 'package' } },
+      })
+    ).toThrow("Shared external 'rxjs' sets build: 'paths'");
+  });
+
   it('builds shared mappings from the resolved tsconfig, filtering the skip list', () => {
     getRawMappedPaths.mockReturnValue({
       paths: {

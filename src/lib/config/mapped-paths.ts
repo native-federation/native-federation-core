@@ -12,6 +12,8 @@ import { matchesWildcard } from '../utils/path-patterns.js';
 export interface RawMappedPaths {
   paths: PathToImport;
   configs: SharedMappingConfigs;
+  // Every `paths` key, whether selected or not, so a remote's selection cannot change a package.
+  keys: string[];
 }
 
 /**
@@ -43,7 +45,7 @@ export function getRawMappedPathsCore(
   const { paths: mappings, basePath } = readCompilerPaths(io, rootTsConfigPath);
 
   if (!mappings) {
-    return { paths: mappedPaths, configs };
+    return { paths: mappedPaths, configs, keys: [] };
   }
 
   const base = rootPath ?? basePath;
@@ -59,7 +61,7 @@ export function getRawMappedPathsCore(
     }
   }
 
-  return { paths: mappedPaths, configs };
+  return { paths: mappedPaths, configs, keys: Object.keys(mappings) };
 }
 
 // Resolved like the compile resolves them: through `extends`, against `baseUrl` or else the
