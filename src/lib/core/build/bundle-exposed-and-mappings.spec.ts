@@ -12,6 +12,7 @@ import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
 import { createFakeBuildAdapter } from './__test-helpers__/fake-build-adapter.js';
 import { prepareSkipList } from '../../config/default-skip-list.js';
 import { logger } from '../../utils/logger.js';
+import { assembleFederationInfo } from './assemble-federation-info.js';
 import type {
   NormalizedFederationConfig,
   NormalizedMappingConfig,
@@ -1105,5 +1106,144 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
       )
     ).rejects.toThrow(/Aborted before bundling/);
     expect(adapter.calls.build).toHaveLength(0);
+  });
+});
+
+// Pins the mapping output of every existing build mode before `build: 'paths'` (core#198) lands:
+// a config without it must keep these bundles, `bundle` fields and published records.
+describe('mapping output without build: paths', () => {
+  const cfg = { singleton: true, strictVersion: false };
+  // Shaped like discussion #176: domain-named libraries that the name rule groups by their first
+  // two segments, a library next to its own secondary, one mapping in each other build mode, and a
+  // package whose entries land in two bundles (`@org/b` on its own, `@org/b/extra` in the default).
+  const config = (denseExternals: boolean, denseChunking: boolean) =>
+    makeConfig({
+      chunks: true,
+      sharedMappings: {
+        './libs/components/table': '@shared/components/table',
+        './libs/components/collapse': '@shared/components/collapse',
+        './libs/lib': '@org/lib',
+        './libs/lib/testing': '@org/lib/testing',
+        './libs/b': '@org/b',
+        './libs/b/extra': '@org/b/extra',
+        './libs/c/x': '@org/c/x',
+        './libs/c/y': '@org/c/y',
+      },
+      sharedMappingsConfig: {
+        '@org/b': { ...cfg, build: 'separate' },
+        '@org/c/*': { ...cfg, build: 'package' },
+      },
+      features: { ...makeConfig().features, denseExternals, denseChunking },
+    });
+
+  async function build(denseExternals: boolean, denseChunking: boolean) {
+    const io = createMemoryIo();
+    const adapter = createFakeBuildAdapter({ io });
+    const fedOptions = makeFedOptions({ dev: false });
+    const artifactInfo = await bundleExposedAndMappingsCore(
+      { adapter, io },
+      config(denseExternals, denseChunking),
+      fedOptions,
+      []
+    );
+    const info = assembleFederationInfo(
+      config(denseExternals, denseChunking),
+      fedOptions,
+      artifactInfo
+    );
+    return { adapter, artifactInfo, info };
+  }
+
+  it.each([
+    [false, false],
+    [false, true],
+    [true, false],
+    [true, true],
+  ])('plans the same bundles (denseExternals: %s, denseChunking: %s)', async (dx, dc) => {
+    const { adapter } = await build(dx, dc);
+
+    expect(
+      adapter.calls.setup.map(c => [
+        c.name,
+        c.options.chunks,
+        c.options.entryPoints.map(ep => ep.outName),
+      ])
+    ).toEqual([
+      [
+        'mapping-bundle',
+        true,
+        [
+          '_shared_components_table.js',
+          '_shared_components_collapse.js',
+          '_org_lib.js',
+          '_org_lib_testing.js',
+          '_org_b_extra.js',
+        ],
+      ],
+      ['mapping-org_b', true, ['_org_b.js']],
+      ['mapping-org_c', true, ['_org_c_x.js', '_org_c_y.js']],
+    ]);
+  });
+
+  it.each([false, true])(
+    'publishes one flat record per mapping (denseChunking: %s)',
+    async denseChunking => {
+      const { info } = await build(false, denseChunking);
+      const bundle = (name: string) => (denseChunking ? { bundle: name } : {});
+
+      expect(
+        info.shared.map(s => ({
+          packageName: s.packageName,
+          ...('bundle' in s && { bundle: s.bundle }),
+        }))
+      ).toEqual([
+        { packageName: '@shared/components/table', ...bundle('mapping-bundle') },
+        { packageName: '@shared/components/collapse', ...bundle('mapping-bundle') },
+        { packageName: '@org/lib', ...bundle('mapping-bundle') },
+        { packageName: '@org/lib/testing', ...bundle('mapping-bundle') },
+        { packageName: '@org/b/extra', ...bundle('mapping-bundle') },
+        { packageName: '@org/b', ...bundle('mapping-org_b') },
+        { packageName: '@org/c/x', ...bundle('mapping-org_c') },
+        { packageName: '@org/c/y', ...bundle('mapping-org_c') },
+      ]);
+    }
+  );
+
+  it('groups dense records by the name rule', async () => {
+    const { info } = await build(true, false);
+
+    expect(info.shared.map(s => ('entries' in s ? [s.packageName, s.entries] : s))).toEqual([
+      [
+        '@shared/components',
+        {
+          '@shared/components/table': '_shared_components_table.js',
+          '@shared/components/collapse': '_shared_components_collapse.js',
+        },
+      ],
+      ['@org/lib', { '@org/lib': '_org_lib.js', '@org/lib/testing': '_org_lib_testing.js' }],
+      // One record although its entries were built in two bundles.
+      ['@org/b', { '@org/b/extra': '_org_b_extra.js', '@org/b': '_org_b.js' }],
+      ['@org/c', { '@org/c/x': '_org_c_x.js', '@org/c/y': '_org_c_y.js' }],
+    ]);
+  });
+
+  // With denseChunking the bundle is part of a record's metadata, so a package built in two
+  // bundles publishes two records under one name.
+  it('splits dense records by bundle with denseChunking', async () => {
+    const { info } = await build(true, true);
+
+    expect(
+      info.shared.map(s => ('entries' in s ? [s.packageName, s.bundle, Object.keys(s.entries)] : s))
+    ).toEqual([
+      [
+        '@shared/components',
+        'mapping-bundle',
+        ['@shared/components/table', '@shared/components/collapse'],
+      ],
+      ['@org/lib', 'mapping-bundle', ['@org/lib', '@org/lib/testing']],
+      ['@org/b', 'mapping-bundle', ['@org/b/extra']],
+      ['@org/b', 'mapping-org_b', ['@org/b']],
+      ['@org/c', 'mapping-org_c', ['@org/c/x', '@org/c/y']],
+    ]);
   });
 });
