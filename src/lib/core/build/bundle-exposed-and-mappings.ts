@@ -21,7 +21,8 @@ import type { EntryPoint, NFBuildAdapter } from '../../domain/core/build-adapter
 import { rewriteChunkImportsCore } from './rewrite-chunk-imports.js';
 import { renameChunksByContentCore } from './rename-chunks-by-content.js';
 import { getBuildAdapter } from './build-adapter.js';
-import { resolveMappingConfig } from '../../config/mapping-utils.js';
+import { mappingPackageByImport, resolveMappingConfig } from '../../config/mapping-utils.js';
+import { formatDifference } from '../../utils/format-list.js';
 import { applyAutoRequiredOptions } from '../../config/version-lookup.js';
 import type { AutoRequiredOptions } from '../../domain/config/external-config.contract.js';
 import { planMappingBundles } from './mapping-bundle-plan.js';
@@ -66,6 +67,7 @@ export async function bundleExposedAndMappingsCore(
     throw new AbortedError('[bundle-exposed-and-mappings] Aborted before bundling');
   }
   const io = deps.io ?? nodeIo;
+  assertOneRecordPerDeclaredPackage(config, fedOptions);
 
   const mappingPlans = planMappingBundles(config).map(plan => ({
     bundleName: plan.bundleName,
@@ -314,6 +316,26 @@ function toSharedMappingInfo(
   config: NormalizedFederationConfig,
   fedOptions: NormalizedFederationOptions
 ): SharedInfo {
+  return {
+    packageName: mappedImport,
+    outFileName,
+    ...mappingRecord(mappedPath, mappedImport, config, fedOptions),
+    dev: !fedOptions.dev
+      ? undefined
+      : {
+          entryPoint: normalize(path.normalize(mappedPath)),
+        },
+  };
+}
+
+type MappingRecord = Omit<SharedInfo, 'packageName' | 'outFileName' | 'dev'>;
+
+function mappingRecord(
+  mappedPath: string,
+  mappedImport: string,
+  config: NormalizedFederationConfig,
+  fedOptions: NormalizedFederationOptions
+): MappingRecord {
   const mappingVersion = config.features.mappingVersion
     ? getMappingVersion(mappedPath, fedOptions.workspaceRoot)
     : '';
@@ -321,7 +343,8 @@ function toSharedMappingInfo(
   const mappingConfig = resolveMappingConfig(
     mappedImport,
     config.sharedMappingsConfig,
-    config.features.mappingVersion
+    config.features.mappingVersion,
+    config.sharedMappingPackages
   );
   const requiredVersionCfg = mappingConfig.requiredVersion;
   // An explicit version drives requiredVersion too, the same way the detected one does.
@@ -333,20 +356,45 @@ function toSharedMappingInfo(
   const version = asked ?? mappingConfig.version ?? mappingVersion;
 
   return {
-    packageName: mappedImport,
-    outFileName,
     requiredVersion: mappingRequiredVersion(requiredVersionCfg, version),
     singleton: mappingConfig.singleton,
     strictVersion: mappingConfig.strictVersion,
     version,
     ...(mappingConfig.shareScope && { shareScope: mappingConfig.shareScope }),
     ...(mappingConfig.pool && { pool: mappingConfig.pool }),
-    dev: !fedOptions.dev
-      ? undefined
-      : {
-          entryPoint: normalize(path.normalize(mappedPath)),
-        },
   };
+}
+
+// The config is one per package by construction, but each entry point reads its version from its
+// own package.json. Checked before bundling, so a mismatch fails before anything is written.
+function assertOneRecordPerDeclaredPackage(
+  config: NormalizedFederationConfig,
+  fedOptions: NormalizedFederationOptions
+): void {
+  const packages = mappingPackageByImport(config);
+  if (packages.size === 0) return;
+
+  const first = new Map<string, { importName: string; record: MappingRecord }>();
+  for (const [mappedPath, mappedImport] of Object.entries(config.sharedMappings)) {
+    const packageName = packages.get(mappedImport);
+    if (packageName === undefined) continue;
+
+    const record = mappingRecord(mappedPath, mappedImport, config, fedOptions);
+    const seen = first.get(packageName);
+    if (!seen) {
+      first.set(packageName, { importName: mappedImport, record });
+      continue;
+    }
+    const difference = formatDifference(seen.record, record);
+    if (difference) {
+      throw new Error(
+        `Shared mappings '${seen.importName}' and '${mappedImport}' belong to declared package ` +
+          `'${packageName}' but publish different metadata (${difference}). A package publishes ` +
+          `one record: set one version in its .package() config, or align the libraries' ` +
+          `package.json versions.`
+      );
+    }
+  }
 }
 
 // '~' stays the default range for a mapping; see README 'Configuring shared mappings'.

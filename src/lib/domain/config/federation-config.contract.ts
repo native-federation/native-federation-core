@@ -10,12 +10,17 @@ import type { ConfigBuilder } from './config-builders.contract.js';
 
 export type ExposeEntry = { file: string; element?: string };
 
-// `build: 'paths'` takes the package from the tsconfig `paths` keys (core#198).
 export type MappingConfigInput = Omit<ExternalConfigInput, 'build'> & {
-  build?: 'separate' | 'package' | 'paths';
+  build?: 'separate' | 'package';
 };
 
-export type SharedMappingEntry = string | [string[], MappingConfigInput];
+// Declares a package by prefix, see `mappingsFromWorkspace().package()`. It selects nothing.
+export type SharedMappingPackageEntry = Omit<MappingConfigInput, 'build'> & { package: string };
+
+export type SharedMappingEntry =
+  | string
+  | [string[], MappingConfigInput]
+  | SharedMappingPackageEntry;
 
 /** Selection pattern -> config, kept in declaration order: first match wins. */
 export type SharedMappingConfigs = Record<string, MappingConfigInput>;
@@ -33,7 +38,7 @@ export type SharedMappingConfigs = Record<string, MappingConfigInput>;
 export interface NormalizedMappingConfig {
   singleton: boolean;
   strictVersion: boolean;
-  build?: 'separate' | 'package' | 'paths';
+  build?: 'separate' | 'package';
   requiredVersion?: string | AutoRequiredOptions;
   version?: string;
   shareScope?: string;
@@ -72,8 +77,8 @@ export interface NormalizedFederationConfig {
   shared: NormalizedSharedExternalsConfig;
   sharedMappings: PathToImport;
   sharedMappingsConfig: NormalizedSharedMappingConfigs;
-  // Every tsconfig `paths` key, selected or not; optional for configs built by hand.
-  sharedMappingKeys?: string[];
+  // Declared package prefix -> the config of every mapping under it.
+  sharedMappingPackages?: NormalizedSharedMappingConfigs;
   skip: PreparedSkipList;
   chunks: boolean;
   externals: string[];

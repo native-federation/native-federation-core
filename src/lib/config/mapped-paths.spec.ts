@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest';
 import * as path from 'path';
 import { getRawMappedPathsCore } from './mapped-paths.js';
 import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
+import type {
+  SharedMappingConfigs,
+  SharedMappingEntry,
+} from '../domain/config/federation-config.contract.js';
+import {
+  mappingsFromWorkspace,
+  normalizeMappingConfig,
+  resolveMappingConfig,
+} from './mapping-utils.js';
 
 const ROOT = path.resolve('/ws');
 const TSCONFIG = path.join(ROOT, 'tsconfig.json');
@@ -50,12 +59,99 @@ describe('getRawMappedPathsCore', () => {
     expect(Object.values(result)).toEqual(['@a']);
   });
 
-  // The keys decide a mapping's package under `build: 'paths'` (core#198), so they must not
-  // depend on what this remote selects; a key without a target still claims its names.
+  // Declarations are checked against every key, not against what this remote selects; a key
+  // without a target still counts.
   it('returns every key, whatever the selection', () => {
     const io = writeTsConfig({ '@a': ['a/index.ts'], '@b/*': ['b/*'], '@c': [] });
     expect(getRawMappedPathsCore(io, TSCONFIG, ['@a']).keys).toEqual(['@a', '@b/*', '@c']);
     expect(getRawMappedPathsCore(io, TSCONFIG).keys).toEqual(['@a', '@b/*', '@c']);
+  });
+
+  // A declaration names a package; it selects nothing, so `@b` stays unshared.
+  it('collects { package } entries with their config, without selecting them', () => {
+    const io = writeTsConfig({ '@a/x': ['a/x.ts'], '@b': ['b/index.ts'] });
+    const result = getRawMappedPathsCore(io, TSCONFIG, [
+      { package: '@a/x', singleton: false },
+      '@a/x',
+    ]);
+    expect(result.packages).toEqual({ '@a/x': { singleton: false } });
+    expect(Object.values(result.paths)).toEqual(['@a/x']);
+    expect(result.configs).toEqual({});
+  });
+
+  // Only an absent sharedMappings shares everything; declarations never count as a selection.
+  it.each([
+    ['only declarations', [{ package: '@a/x' }]],
+    ['an empty list', []],
+  ])('selects nothing from %s', (_label, entries) => {
+    const io = writeTsConfig({ '@a/x': ['a/x.ts'], '@b': ['b/index.ts'] });
+    expect(getRawMappedPathsCore(io, TSCONFIG, entries).paths).toEqual({});
+  });
+
+  it('accepts a repeated declaration with the same config', () => {
+    const io = writeTsConfig({ '@a/x': ['a/x.ts'] });
+    const entries = [
+      { package: '@a/x', pool: 'a' },
+      { package: '@a/x', pool: 'a' },
+    ];
+    expect(getRawMappedPathsCore(io, TSCONFIG, entries).packages).toEqual({
+      '@a/x': { pool: 'a' },
+    });
+  });
+
+  it('rejects a repeated declaration with another config', () => {
+    const io = writeTsConfig({ '@a/x': ['a/x.ts'] });
+    const entries = [
+      { package: '@a/x', pool: 'a' },
+      { package: '@a/x', pool: 'b' },
+    ];
+    expect(() => getRawMappedPathsCore(io, TSCONFIG, entries)).toThrow(
+      `Shared mapping package '@a/x' is declared twice with different configs (pool: "a" vs "b").`
+    );
+  });
+
+  // Untyped configs can hand over anything.
+  it.each([[{}], [{ package: 1 }], [null]])('rejects the malformed entry %j', entry => {
+    const io = writeTsConfig({ '@a/x': ['a/x.ts'] });
+    const entries = [entry] as unknown as SharedMappingEntry[];
+    expect(() => getRawMappedPathsCore(io, TSCONFIG, entries)).toThrow(
+      `Invalid sharedMappings entry ${JSON.stringify(entry)}`
+    );
+  });
+
+  // Builder output through selection and lookup: the package config reaches every entry point,
+  // while a sibling that only shares the prefix's characters keeps its own.
+  it('resolves every import under a declared package to its config', () => {
+    const io = writeTsConfig({
+      '@org/lib': ['libs/lib/index.ts'],
+      '@org/lib/testing': ['libs/lib/testing/index.ts'],
+      '@org/library': ['libs/library/index.ts'],
+    });
+    const entries = mappingsFromWorkspace({ singleton: true })
+      .patch(['@org/library'], { pool: 'patch' })
+      .package('@org/lib', { pool: 'lib' })
+      .get();
+
+    const { paths, configs, packages } = getRawMappedPathsCore(io, TSCONFIG, entries);
+    const normalized = (c: SharedMappingConfigs) =>
+      Object.fromEntries(Object.entries(c).map(([k, v]) => [k, normalizeMappingConfig(v, true)]));
+    const pool = (importName: string) =>
+      resolveMappingConfig(importName, normalized(configs), true, normalized(packages)).pool;
+
+    expect(Object.values(paths).sort()).toEqual(['@org/lib', '@org/lib/testing', '@org/library']);
+    expect(['@org/lib', '@org/lib/testing', '@org/library'].map(pool)).toEqual([
+      'lib',
+      'lib',
+      'patch',
+    ]);
+  });
+
+  it('rejects a build on a declaration', () => {
+    const io = writeTsConfig({ '@a/x': ['a/x.ts'] });
+    const entries = [{ package: '@a/x', build: 'separate' }] as unknown as SharedMappingEntry[];
+    expect(() => getRawMappedPathsCore(io, TSCONFIG, entries)).toThrow(
+      "Shared mapping package '@a/x' sets build"
+    );
   });
 
   it('returns no keys without compilerOptions.paths', () => {

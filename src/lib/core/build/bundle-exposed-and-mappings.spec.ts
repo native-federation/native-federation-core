@@ -204,8 +204,8 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     expect(adapter.calls.build.map(c => c.name)).toEqual(['mapping-bundle', 'mapping-or-exposed']);
   });
 
-  // Pins what each bundle's setup receives before mapping plans choose their own chunks
-  // (core#198): a config without build: 'paths' must keep exactly these calls.
+  // Pins what each bundle's setup receives now that mapping plans choose their own chunks
+  // (core#198): a config without declared packages must keep exactly these calls.
   it.each([true, false])(
     'sets up every bundle with the global chunks setting (%s)',
     async chunks => {
@@ -1109,9 +1109,9 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
   });
 });
 
-// Pins the mapping output of every existing build mode before `build: 'paths'` (core#198) lands:
-// a config without it must keep these bundles, `bundle` fields and published records.
-describe('mapping output without build: paths', () => {
+// Pins the mapping output of every build mode without declared packages (core#198): such a config
+// must keep these bundles, `bundle` fields and published records.
+describe('mapping output without declared packages', () => {
   const cfg = { singleton: true, strictVersion: false };
   // Shaped like discussion #176: domain-named libraries that the name rule groups by their first
   // two segments, a library next to its own secondary, one mapping in each other build mode, and a
@@ -1248,9 +1248,10 @@ describe('mapping output without build: paths', () => {
   });
 });
 
-// core#198, end to end through bundling and remoteEntry.json assembly.
-describe("mapping output with build: 'paths'", () => {
-  const paths = { singleton: true, strictVersion: false, build: 'paths' as const };
+// End to end through bundling and remoteEntry.json assembly; `@org/lib` is #213's Nx layout, an
+// exact tsconfig key per entry point joined by one declaration.
+describe('mapping output with declared packages', () => {
+  const pkg: NormalizedMappingConfig = { singleton: true, strictVersion: false };
   const config = (denseExternals: boolean, denseChunking: boolean) =>
     makeConfig({
       chunks: true,
@@ -1259,17 +1260,14 @@ describe("mapping output with build: 'paths'", () => {
         './libs/components/collapse': '@shared/components/collapse',
         './libs/lib': '@org/lib',
         './libs/lib/testing': '@org/lib/testing',
-        './libs/other': '@other/a',
+        './libs/library': '@org/library',
       },
-      sharedMappingsConfig: { '@shared/*': paths, '@org/lib': paths, '@org/lib/*': paths },
-      // One key per #176-style library, and a library with its secondaries under `X/*`.
-      sharedMappingKeys: [
-        '@shared/components/table',
-        '@shared/components/collapse',
-        '@org/lib',
-        '@org/lib/*',
-        '@other/a',
-      ],
+      sharedMappingsConfig: { '*': pkg },
+      sharedMappingPackages: {
+        '@shared/components/table': pkg,
+        '@shared/components/collapse': pkg,
+        '@org/lib': pkg,
+      },
       features: { ...makeConfig().features, denseExternals, denseChunking },
     });
 
@@ -1301,7 +1299,7 @@ describe("mapping output with build: 'paths'", () => {
           c.options.entryPoints.map(ep => ep.outName),
         ])
       ).toEqual([
-        ['mapping-bundle', true, ['_other_a.js']],
+        ['mapping-bundle', true, ['_org_library.js']],
         [
           'mapping-single-entry',
           false,
@@ -1313,12 +1311,12 @@ describe("mapping output with build: 'paths'", () => {
   );
 
   it.each([false, true])(
-    'publishes dense records under the paths package (denseChunking: %s)',
+    'publishes one dense record per declared package (denseChunking: %s)',
     async denseChunking => {
       const { info } = await build(true, denseChunking);
 
       expect(info.shared.map(s => ('entries' in s ? [s.packageName, s.entries] : s))).toEqual([
-        ['@other/a', { '@other/a': '_other_a.js' }],
+        ['@org/library', { '@org/library': '_org_library.js' }],
         ['@shared/components/table', { '@shared/components/table': '_shared_components_table.js' }],
         [
           '@shared/components/collapse',
@@ -1329,16 +1327,69 @@ describe("mapping output with build: 'paths'", () => {
     }
   );
 
-  // A flat record carries no package group, so only the bundling follows the paths packages.
+  // A flat record carries no package group, so only the bundling follows the declarations
+  // (normalize warns about it).
   it('keeps flat records per mapping', async () => {
     const { info } = await build(false, true);
 
     expect(info.shared.map(s => [s.packageName, 'bundle' in s && s.bundle])).toEqual([
-      ['@other/a', 'mapping-bundle'],
+      ['@org/library', 'mapping-bundle'],
       ['@shared/components/table', 'mapping-single-entry'],
       ['@shared/components/collapse', 'mapping-single-entry'],
       ['@org/lib', 'mapping-pkg-org_lib'],
       ['@org/lib/testing', 'mapping-pkg-org_lib'],
     ]);
+  });
+
+  // The config is one per package, but each entry point reads its version from its own
+  // package.json; a mismatch has to fail before anything is written.
+  describe('versions', () => {
+    let tmpRoot: string;
+
+    beforeEach(() => {
+      tmpRoot = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'declared-version-'));
+    });
+
+    afterEach(() => {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    });
+
+    function entry(relDir: string, version: string) {
+      const dir = path.join(tmpRoot, relDir);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ version }));
+      fs.writeFileSync(path.join(dir, 'index.ts'), '');
+      return path.join(dir, 'index.ts');
+    }
+
+    async function buildVersions(testingVersion: string) {
+      const io = createMemoryIo();
+      const adapter = createFakeBuildAdapter({ io });
+      const cfg = makeConfig({
+        sharedMappings: {
+          [entry('libs/lib', '1.0.0')]: '@org/lib',
+          [entry('libs/lib/testing', testingVersion)]: '@org/lib/testing',
+        },
+        sharedMappingPackages: { '@org/lib': pkg },
+        features: { ...makeConfig().features, mappingVersion: true },
+      });
+      const fedOptions = makeFedOptions({ dev: false, workspaceRoot: tmpRoot });
+      const run = bundleExposedAndMappingsCore({ adapter, io }, cfg, fedOptions, []);
+      return { adapter, run };
+    }
+
+    it('rejects a declared package whose entry points read different versions', async () => {
+      const { adapter, run } = await buildVersions('2.0.0');
+
+      await expect(run).rejects.toThrow(
+        /'@org\/lib' and '@org\/lib\/testing' belong to declared package '@org\/lib' but publish different metadata \(requiredVersion: "~1\.0\.0" vs "~2\.0\.0", version: "1\.0\.0" vs "2\.0\.0"\)/
+      );
+      expect(adapter.calls.setup).toEqual([]);
+    });
+
+    it('builds a declared package whose entry points agree', async () => {
+      const { run } = await buildVersions('1.0.0');
+      await expect(run).resolves.toBeDefined();
+    });
   });
 });

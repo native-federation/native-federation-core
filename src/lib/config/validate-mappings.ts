@@ -1,9 +1,10 @@
 import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
-import { pathsMappingPackages, resolveMappingConfig } from './mapping-utils.js';
+import { declaredPackageOf } from './mapping-utils.js';
+import { matchesExternal, parseWildcard } from '../utils/path-patterns.js';
 import { logger } from '../utils/logger.js';
 import { inferPackageFromSecondary } from '../utils/normalize.js';
-import { formatDifference, formatList } from '../utils/format-list.js';
+import { formatList } from '../utils/format-list.js';
 
 /**
  * A trailing `.js`/`.ts`/... is a file import and resolves; any other dot in the last segment
@@ -94,40 +95,66 @@ export function warnNonNpmMappingNames(paths: PathToImport, strict = false): voi
   );
 }
 
-// A mapping without 'paths' keeps the name rule, under which densifyExternals would merge it into a
-// 'paths' record from another bundle.
-export function assertOneConfigPerPathsPackage(config: NormalizedFederationConfig): void {
-  const packages = pathsMappingPackages(config);
-  const claimed = new Set(packages.values());
-  if (claimed.size === 0) return;
-
-  const first = new Map<string, { importName: string; record: object }>();
-  for (const importName of Object.values(config.sharedMappings)) {
-    const packageName = packages.get(importName) ?? inferPackageFromSecondary(importName);
-    if (!claimed.has(packageName)) continue;
-
-    // The pruning flags never reach the published record.
-    const {
-      includeSecondaries: _i,
-      resolveGlob: _r,
-      ...record
-    } = resolveMappingConfig(
-      importName,
-      config.sharedMappingsConfig,
-      config.features.mappingVersion
-    );
-    const seen = first.get(packageName);
-    if (!seen) {
-      first.set(packageName, { importName, record });
-      continue;
-    }
-    const difference = formatDifference(seen.record, record);
-    if (difference) {
+// At least as deep as the name rule, so a declared package is never coarser than it.
+export function assertMappingPackagePrefixes(prefixes: readonly string[]): void {
+  for (const prefix of prefixes) {
+    const segments = prefix.split('/');
+    const tooShallow = prefix.startsWith('@') && segments.length < 2;
+    if (prefix.includes('*') || segments.includes('') || tooShallow) {
       throw new Error(
-        `Shared mappings '${seen.importName}' and '${importName}' belong to tsconfig paths package ` +
-          `'${packageName}' but are configured differently (${difference}). A package publishes ` +
-          `one record: build all of its mappings with build: 'paths' and one config.`
+        `Shared mapping package '${prefix}' is not a package name: declare 'package' or ` +
+          `'@company/package', optionally with subpaths ('@company/package/ui'), without a wildcard.`
       );
     }
   }
+}
+
+// A declared package's config goes ahead of every pattern, so one under its prefix never applies.
+export function assertNoConfigUnderMappingPackage(
+  patterns: readonly string[],
+  prefixes: readonly string[]
+): void {
+  for (const pattern of patterns) {
+    const prefix = declaredPackageOf(pattern, prefixes);
+    if (prefix === undefined) continue;
+    throw new Error(
+      `Shared mapping config '${pattern}' sits under declared package '${prefix}', whose config ` +
+        `applies instead. Configure it on the package: mappingsFromWorkspace().package('${prefix}', cfg).`
+    );
+  }
+}
+
+// Declarations are meant to live in one module every remote imports, so they are checked against
+// every tsconfig key, not against what this remote selected.
+export function warnUnmatchedMappingPackages(
+  prefixes: readonly string[],
+  keys: readonly string[]
+): void {
+  for (const prefix of prefixes) {
+    if (!keys.some(key => keyReaches(key, prefix))) {
+      logger.warn(`Shared mapping package '${prefix}' covers no tsconfig paths key.`);
+    }
+  }
+}
+
+// A wildcard can produce the prefix when its literal start sits under the prefix or begins it; an
+// empty literal ('*') would reach anything and so proves nothing.
+function keyReaches(key: string, prefix: string): boolean {
+  const { prefix: literal, hasWildcard } = parseWildcard(key);
+  if (!hasWildcard) return matchesExternal(key, prefix);
+  return literal.length > 0 && (literal.startsWith(prefix + '/') || (prefix + '/').startsWith(literal));
+}
+
+// Flat records keep every entry point its own external, so a host can still take a package's entry
+// points from different remotes and evaluate the chunks they share twice.
+export function warnMappingPackagesWithoutDenseExternals(config: NormalizedFederationConfig): void {
+  if (!config.sharedMappingPackages || config.features.denseExternals) return;
+
+  const message =
+    `Shared mapping packages ${formatList(Object.keys(config.sharedMappingPackages), MAX_LISTED)} ` +
+    `are bundled as packages but published entry point by entry point, because ` +
+    `features.denseExternals is off: a host can load them from different remotes and evaluate ` +
+    `their shared code twice. Enable denseExternals.`;
+  if (config.features.strictImports) throw new Error(message);
+  logger.warn(message);
 }

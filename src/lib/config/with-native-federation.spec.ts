@@ -15,7 +15,12 @@ vi.mock('./project-paths.js', () => ({
 }));
 
 vi.mock('./mapped-paths.js', () => ({
-  getRawMappedPaths: (...args: unknown[]) => getRawMappedPaths(...args),
+  // Only the specs that declare packages set them.
+  getRawMappedPaths: (...args: unknown[]) => ({
+    packages: {},
+    keys: [],
+    ...getRawMappedPaths(...args),
+  }),
 }));
 
 import { withNativeFederation } from './with-native-federation.js';
@@ -205,27 +210,66 @@ describe('withNativeFederation', () => {
     expect(result.shared['react']).not.toHaveProperty('pool');
   });
 
-  // A skipped mapping is never published, but its key still decides the package of the others
-  // (core#198).
-  it('carries every tsconfig paths key, skipped ones included', () => {
+  it('normalizes declared packages with the mapping defaults', () => {
     getRawMappedPaths.mockReturnValue({
-      paths: { '/ws/libs/ui/index.ts': '@org/ui', '/ws/libs/skip/index.ts': '@org/skip' },
+      paths: { '/ws/libs/lib/index.ts': '@org/lib' },
       configs: {},
-      keys: ['@org/ui', '@org/skip', '@org/forms/*'],
+      keys: ['@org/lib'],
+      packages: { '@org/lib': { singleton: false, pool: 'lib' } },
     });
 
-    const result = withNativeFederation({ skip: ['@org/skip'] });
+    const result = withNativeFederation({});
 
-    expect(result.sharedMappings).toEqual({ '/ws/libs/ui/index.ts': '@org/ui' });
-    expect(result.sharedMappingKeys).toEqual(['@org/ui', '@org/skip', '@org/forms/*']);
+    expect(result.sharedMappingPackages).toEqual({
+      '@org/lib': { singleton: false, strictVersion: true, pool: 'lib' },
+    });
   });
 
-  it('rejects build: paths on a shared npm package', () => {
-    expect(() =>
-      withNativeFederation({
-        shared: { rxjs: { build: 'paths' } as unknown as { build: 'package' } },
-      })
-    ).toThrow("Shared external 'rxjs' sets build: 'paths'");
+  it('leaves sharedMappingPackages out without declarations', () => {
+    expect(withNativeFederation({})).not.toHaveProperty('sharedMappingPackages');
+  });
+
+  it('rejects a declared prefix that is not a package name', () => {
+    getRawMappedPaths.mockReturnValue({ paths: {}, configs: {}, packages: { '@org': {} } });
+    expect(() => withNativeFederation({})).toThrow("Shared mapping package '@org' is not a package name");
+  });
+
+  // The package's config goes ahead of every pattern, so this one would never apply.
+  it('rejects a config under a declared package', () => {
+    getRawMappedPaths.mockReturnValue({
+      paths: {},
+      configs: { '@org/lib/testing': { singleton: false } },
+      keys: ['@org/lib', '@org/lib/testing'],
+      packages: { '@org/lib': {} },
+    });
+    expect(() => withNativeFederation({})).toThrow(
+      "Shared mapping config '@org/lib/testing' sits under declared package '@org/lib'"
+    );
+  });
+
+  it('warns for a declared package no tsconfig key reaches', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    getRawMappedPaths.mockReturnValue({
+      paths: {},
+      configs: {},
+      keys: ['@org/lib'],
+      packages: { '@org/lbi': {} },
+    });
+
+    withNativeFederation({});
+
+    expect(warn).toHaveBeenCalledWith("Shared mapping package '@org/lbi' covers no tsconfig paths key.");
+  });
+
+  // An untyped config from 4.9.0-next.1 can still carry it.
+  it("rejects build: 'paths' on a mapping, pointing at .package()", () => {
+    getRawMappedPaths.mockReturnValue({
+      paths: {},
+      configs: { '@org/*': { build: 'paths' } },
+    });
+    expect(() => withNativeFederation({})).toThrow(
+      /Mapping '@org\/\*' sets build: 'paths'.*mappingsFromWorkspace\(\)\.package/
+    );
   });
 
   it('builds shared mappings from the resolved tsconfig, filtering the skip list', () => {

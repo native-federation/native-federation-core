@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { planMappingBundles } from './mapping-bundle-plan.js';
-import { pathsMappingPackages } from '../../config/mapping-utils.js';
+import { mappingPackageByImport } from '../../config/mapping-utils.js';
 import type {
   NormalizedFederationConfig,
   NormalizedMappingConfig,
@@ -69,39 +69,36 @@ describe('planMappingBundles', () => {
     ).toEqual(['mapping-org_ui_button', 'mapping-org_ui_card']);
   });
 
-  // core#198: a chunk shared by two packages would load twice once a runtime serves them from
-  // different remotes, so every plan that may split holds one paths package at most.
-  describe("build: 'paths'", () => {
-    const paths = mappingCfg({ build: 'paths' });
-    // Keys as a tsconfig would list them, one per library as in #176; the lookup itself is
-    // specified in mapping-utils.spec.ts.
-    const KEYS = [
-      '@shared/components/table',
-      '@shared/components/collapse',
-      '@shared/forms',
-      '@shared/forms/*',
-      '@shared/utils',
-    ];
-    const pathsConfig = (
+  // A chunk shared by two packages would load twice once a runtime serves them from different
+  // remotes, so every plan that may split holds one declared package at most.
+  describe('declared packages', () => {
+    const declared = (
       sharedMappings: PathToImport,
-      sharedMappingsConfig: Record<string, NormalizedMappingConfig> = { '*': paths },
+      prefixes: string[],
+      sharedMappingsConfig: Record<string, NormalizedMappingConfig> = {},
       chunks = true
-    ) => ({ ...config(sharedMappings, sharedMappingsConfig, chunks), sharedMappingKeys: KEYS });
+    ): NormalizedFederationConfig => ({
+      ...config(sharedMappings, sharedMappingsConfig, chunks),
+      sharedMappingPackages: Object.fromEntries(prefixes.map(p => [p, mappingCfg()])),
+    });
 
     // The guarantee itself, checked on every case below: a plan that may split holds one package.
     function expectSafePlans(cfg: NormalizedFederationConfig) {
-      const packages = pathsMappingPackages(cfg);
+      const packages = mappingPackageByImport(cfg);
       for (const plan of planMappingBundles(cfg).filter(p => p.chunks)) {
         expect(new Set(Object.values(plan.entries).map(i => packages.get(i))).size).toBe(1);
       }
     }
 
     it('bundles single-entry packages together without splitting', () => {
-      const cfg = pathsConfig({
-        './libs/table': '@shared/components/table',
-        './libs/collapse': '@shared/components/collapse',
-        './libs/utils': '@shared/utils',
-      });
+      const cfg = declared(
+        {
+          './libs/table': '@shared/components/table',
+          './libs/collapse': '@shared/components/collapse',
+          './libs/utils': '@shared/utils',
+        },
+        ['@shared/components/table', '@shared/components/collapse', '@shared/utils']
+      );
 
       expect(planMappingBundles(cfg)).toEqual([
         {
@@ -117,40 +114,52 @@ describe('planMappingBundles', () => {
       expectSafePlans(cfg);
     });
 
+    // #213: Nx gives every entry point an exact key; the declaration joins them.
     it('gives a multi-entry package a bundle of its own that keeps splitting', () => {
-      const cfg = pathsConfig({
-        './libs/forms': '@shared/forms',
-        './libs/forms/input': '@shared/forms/input',
-      });
+      const cfg = declared(
+        {
+          './libs/lib': '@org/lib',
+          './libs/lib/testing': '@org/lib/testing',
+          './libs/utils': '@shared/utils',
+        },
+        ['@org/lib', '@shared/utils']
+      );
 
       expect(planMappingBundles(cfg)).toEqual([
         {
-          bundleName: 'mapping-pkg-shared_forms',
+          bundleName: 'mapping-single-entry',
+          chunks: false,
+          entries: { './libs/utils': '@shared/utils' },
+        },
+        {
+          bundleName: 'mapping-pkg-org_lib',
           chunks: true,
-          entries: { './libs/forms': '@shared/forms', './libs/forms/input': '@shared/forms/input' },
+          entries: { './libs/lib': '@org/lib', './libs/lib/testing': '@org/lib/testing' },
         },
       ]);
       expectSafePlans(cfg);
     });
 
-    it('leaves mappings without it as they were', () => {
-      const cfg = pathsConfig(
+    // The package lookup comes first, so a build that reached the mapping some other way is moot.
+    it('leaves mappings outside every package as they were', () => {
+      const cfg = declared(
         {
           './libs/a': '@org/a',
           './libs/ui/button': '@org/ui/button',
-          './libs/utils': '@shared/utils',
+          './libs/library': '@org/library',
           './libs/forms': '@shared/forms',
           './libs/forms/input': '@shared/forms/input',
         },
-        { '@shared/*': paths, '@org/ui/*': mappingCfg({ build: 'package' }) }
+        ['@shared/forms'],
+        { '@org/ui/*': mappingCfg({ build: 'package' }), '*': mappingCfg({ build: 'separate' }) }
       );
 
       expect(
         planMappingBundles(cfg).map(p => [p.bundleName, p.chunks, Object.values(p.entries)])
       ).toEqual([
-        ['mapping-bundle', true, ['@org/a']],
+        ['mapping-org_a', true, ['@org/a']],
         ['mapping-org_ui', true, ['@org/ui/button']],
-        ['mapping-single-entry', false, ['@shared/utils']],
+        ['mapping-org_library', true, ['@org/library']],
         ['mapping-pkg-shared_forms', true, ['@shared/forms', '@shared/forms/input']],
       ]);
       expectSafePlans(cfg);
@@ -158,7 +167,7 @@ describe('planMappingBundles', () => {
 
     // The count is taken from the mappings that survived pruning.
     it('treats a package left with one entry as single-entry', () => {
-      const cfg = pathsConfig({ './libs/forms': '@shared/forms' });
+      const cfg = declared({ './libs/forms': '@shared/forms' }, ['@shared/forms']);
 
       expect(planMappingBundles(cfg).map(p => [p.bundleName, p.chunks])).toEqual([
         ['mapping-single-entry', false],
@@ -166,9 +175,10 @@ describe('planMappingBundles', () => {
     });
 
     it('never turns splitting on for a package when the config turns it off', () => {
-      const cfg = pathsConfig(
+      const cfg = declared(
         { './libs/forms': '@shared/forms', './libs/forms/input': '@shared/forms/input' },
-        { '*': paths },
+        ['@shared/forms'],
+        {},
         false
       );
 
@@ -176,18 +186,17 @@ describe('planMappingBundles', () => {
     });
 
     it('rejects two packages that would share a bundle name', () => {
-      const cfg = {
-        ...pathsConfig({
+      const cfg = declared(
+        {
           './a/x': '@org/ui-table/x',
           './a/y': '@org/ui-table/y',
           './b/x': '@org/ui_table/x',
           './b/y': '@org/ui_table/y',
-        }),
-        sharedMappingKeys: ['@org/ui-table/*', '@org/ui_table/*'],
-      };
-
+        },
+        ['@org/ui-table', '@org/ui_table']
+      );
       expect(() => planMappingBundles(cfg)).toThrow(
-        /'@org\/ui-table' and '@org\/ui_table' would both be bundled as 'mapping-pkg-org_ui_table'/
+        /declared packages '@org\/ui-table' and '@org\/ui_table' would both be bundled as 'mapping-pkg-org_ui_table'/
       );
     });
   });

@@ -88,7 +88,8 @@ function keptMappings(
     const mappingConfig = resolveMappingConfig(
       mappedImport,
       config.sharedMappingsConfig,
-      config.features.mappingVersion
+      config.features.mappingVersion,
+      config.sharedMappingPackages
     );
     if (!mappingConfig.includeSecondaries) continue;
 

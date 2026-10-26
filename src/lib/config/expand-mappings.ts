@@ -121,7 +121,8 @@ export function expandOrDropWildcards(
     const mappingConfig = resolveMappingConfig(
       mappedImport,
       config.sharedMappingsConfig,
-      config.features.mappingVersion
+      config.features.mappingVersion,
+      config.sharedMappingPackages
     );
     if (mappingConfig.resolveGlob) {
       Object.assign(result, expandWildcardMapping(mappedPath, mappedImport, ctx));

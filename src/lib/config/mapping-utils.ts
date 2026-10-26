@@ -5,12 +5,12 @@ import type {
   NormalizedMappingConfig,
   NormalizedSharedMappingConfigs,
   SharedMappingEntry,
+  SharedMappingPackageEntry,
 } from '../domain/config/federation-config.contract.js';
 import type { PreparedSkipList } from '../domain/config/skip-list.contract.js';
 import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { isInSkipList } from './default-skip-list.js';
-import { matchesExternal, matchesWildcard, parseWildcard } from '../utils/path-patterns.js';
-import { inferPackageFromSecondary } from '../utils/normalize.js';
+import { matchesExternal, matchesWildcard } from '../utils/path-patterns.js';
 import { logger } from '../utils/logger.js';
 
 const ALL = '*';
@@ -22,6 +22,7 @@ const ALL = '*';
 export function mappingsFromWorkspace(baseCfg: MappingConfigInput = {}): WorkspaceMappingsBuilder {
   const selection: string[] = [];
   const patches: Array<{ patterns: string[]; cfg: Partial<MappingConfigInput> }> = [];
+  const packages: SharedMappingPackageEntry[] = [];
 
   const builder: WorkspaceMappingsBuilder = {
     filter(patterns: string[]) {
@@ -32,9 +33,14 @@ export function mappingsFromWorkspace(baseCfg: MappingConfigInput = {}): Workspa
       patches.push({ patterns, cfg });
       return builder;
     },
+    package(prefix: string, cfg: Omit<MappingConfigInput, 'build'> = {}) {
+      const { build: _build, ...base } = baseCfg;
+      packages.push({ ...base, ...cfg, package: prefix });
+      return builder;
+    },
     get(): SharedMappingEntry[] {
       const selected = selection.length > 0 ? [...selection] : [ALL];
-      const entries: SharedMappingEntry[] = [];
+      const entries: SharedMappingEntry[] = [...packages];
 
       for (const { patterns, cfg } of patches) {
         const kept = patterns.filter(p => isSelected(p, selected));
@@ -48,8 +54,13 @@ export function mappingsFromWorkspace(baseCfg: MappingConfigInput = {}): Workspa
         if (kept.length > 0) entries.push([kept, { ...baseCfg, ...cfg }]);
       }
 
+      // A selected pattern under a declared package takes the package's config, so it carries none.
+      const prefixes = packages.map(entry => entry.package);
+      const underPackage = selected.filter(p => declaredPackageOf(p, prefixes) !== undefined);
+      const rest = selected.filter(p => !underPackage.includes(p));
+      entries.push(...underPackage);
       // Patches precede the selection so first-match-wins resolves them first.
-      entries.push([selected, baseCfg]);
+      if (rest.length > 0) entries.push([rest, baseCfg]);
 
       return entries;
     },
@@ -109,14 +120,19 @@ export function normalizeMappingConfig(
 /**
  * Looks a mapping's config up by its import name. Wildcard substitution rewrites imports
  * (`@org/ui/*` -> `@org/ui/button`), so the table is keyed by the pattern the user wrote and
- * matched, not compared. Declaration order decides: the first matching pattern wins.
- * Falls back to the defaults so callers never re-state them.
+ * matched, not compared. A declared package's config goes first; after that declaration order
+ * decides: the first matching pattern wins. Falls back to the defaults so callers never re-state
+ * them.
  */
 export function resolveMappingConfig(
   importName: string,
   configs: NormalizedSharedMappingConfigs,
-  mappingVersion: boolean
+  mappingVersion: boolean,
+  packages: NormalizedSharedMappingConfigs = {}
 ): NormalizedMappingConfig {
+  const declared = declaredPackageOf(importName, Object.keys(packages));
+  if (declared !== undefined) return packages[declared]!;
+
   for (const [pattern, config] of Object.entries(configs)) {
     if (matchesWildcard(importName, pattern)) return config;
   }
@@ -124,40 +140,27 @@ export function resolveMappingConfig(
   return normalizeMappingConfig({}, mappingVersion);
 }
 
-// Rules: AGENTS.md, `build: 'paths'`. Both candidates are '/'-aligned prefixes of the import, so the
-// longer one is never coarser than the name rule.
-export function pathsPackageOf(importName: string, keys: readonly string[]): string {
-  const byName = inferPackageFromSecondary(importName);
-  const key = keys.includes(importName) ? importName : longestWildcardKey(importName, keys);
-  if (key === undefined) return byName;
-
-  const { prefix, hasWildcard } = parseWildcard(key);
-  const byKey = hasWildcard ? prefix.slice(0, Math.max(prefix.lastIndexOf('/'), 0)) : key;
-  return byKey.length > byName.length ? byKey : byName;
-}
-
-// Two matching keys with equally long prefixes share that prefix, so key order never decides.
-function longestWildcardKey(importName: string, keys: readonly string[]): string | undefined {
+// The longest declared prefix the import is, or sits under at a '/'.
+export function declaredPackageOf(
+  importName: string,
+  prefixes: readonly string[]
+): string | undefined {
   let best: string | undefined;
-  for (const key of keys) {
-    if (!key.includes('*') || !matchesExternal(importName, key)) continue;
-    if (best === undefined || key.indexOf('*') > best.indexOf('*')) best = key;
+  for (const prefix of prefixes) {
+    if (!matchesExternal(importName, prefix)) continue;
+    if (best === undefined || prefix.length > best.length) best = prefix;
   }
   return best;
 }
 
-export function pathsMappingPackages(
+export function mappingPackageByImport(
   config: NormalizedFederationConfig
 ): ReadonlyMap<string, string> {
+  const prefixes = Object.keys(config.sharedMappingPackages ?? {});
   const packages = new Map<string, string>();
-  const keys = config.sharedMappingKeys ?? [];
   for (const mappedImport of Object.values(config.sharedMappings)) {
-    const { build } = resolveMappingConfig(
-      mappedImport,
-      config.sharedMappingsConfig,
-      config.features.mappingVersion
-    );
-    if (build === 'paths') packages.set(mappedImport, pathsPackageOf(mappedImport, keys));
+    const declared = declaredPackageOf(mappedImport, prefixes);
+    if (declared !== undefined) packages.set(mappedImport, declared);
   }
   return packages;
 }

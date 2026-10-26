@@ -11,7 +11,7 @@ import { removeUnusedDeps } from '../config/remove-unused-deps.js';
 import { expandOrDropWildcards } from '../config/expand-mappings.js';
 import {
   assertBarrelMappings,
-  assertOneConfigPerPathsPackage,
+  warnMappingPackagesWithoutDenseExternals,
   warnNonNpmMappingNames,
 } from '../config/validate-mappings.js';
 import { type FederationCache } from '../../domain.js';
@@ -151,7 +151,7 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
   // Whatever survived either branch is what remoteEntry.json will advertise.
   assertBarrelMappings(config.sharedMappings);
   warnNonNpmMappingNames(config.sharedMappings, config.features.strictImports);
-  assertOneConfigPerPathsPackage(config);
+  warnMappingPackagesWithoutDenseExternals(config);
 
   if (!fromAdapter.externals?.length) return { config, options: normalizedOptions };
   // A new list leaves the user's array untouched; the Set stops a second normalize adding twice.

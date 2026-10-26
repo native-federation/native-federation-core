@@ -189,8 +189,8 @@ describe('densifyExternals', () => {
     expect(result[0]!.dev).toEqual({ entryPoint: 'rxjs/index.js' });
   });
 
-  // core#198 / discussion #176: mapping names can mark a domain rather than one package.
-  it("groups a build: 'paths' mapping under its tsconfig paths package", () => {
+  // Discussion #176: mapping names can mark a domain rather than one package.
+  it('groups a mapping under its declared package', () => {
     const result = densifyExternals(
       [
         flat('@shared/components/table', 'table.js'),
@@ -210,7 +210,7 @@ describe('densifyExternals', () => {
     ]);
   });
 
-  it('keeps the name rule for everything the paths packages do not list', () => {
+  it('keeps the name rule for everything the declared packages do not list', () => {
     const result = densifyExternals(
       [flat('@angular/common', 'common.js'), flat('@angular/common/http', 'http.js')],
       new Map([['@shared/table', '@shared/table']])
@@ -219,28 +219,7 @@ describe('densifyExternals', () => {
     expect(result.map(d => d.packageName)).toEqual(['@angular/common']);
   });
 
-  // The config is checked before bundling, but a version read from each library's own
-  // package.json is only known here; two records under one name is what #198 rules out.
-  it('rejects a paths package whose mappings publish different versions', () => {
-    const packages = new Map([
-      ['@org/ui/table', '@org/ui'],
-      ['@org/ui/button', '@org/ui'],
-    ]);
-
-    expect(() =>
-      densifyExternals(
-        [
-          flat('@org/ui/table', 'table.js'),
-          flat('@org/ui/button', 'button.js', { version: '2.0.0', requiredVersion: '~2.0.0' }),
-        ],
-        packages
-      )
-    ).toThrow(
-      /'@org\/ui\/table' and '@org\/ui\/button' belong to tsconfig paths package '@org\/ui' but publish different metadata \(requiredVersion: "\^1\.0\.0" vs "~2\.0\.0", version: "1\.2\.3" vs "2\.0\.0"\)/
-    );
-  });
-
-  // Without build: 'paths' this stays as on main: two records under one name.
+  // Outside a declared package: two records under one name.
   it('still splits a name-rule package by version', () => {
     const result = densifyExternals([
       flat('@org/ui/table', 'table.js'),
