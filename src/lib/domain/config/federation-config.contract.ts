@@ -49,6 +49,9 @@ export interface NormalizedMappingConfig {
 
 export type NormalizedSharedMappingConfigs = Record<string, NormalizedMappingConfig>;
 
+// A prefix covers itself and its subpaths, and its config outranks every sharedMappingsConfig pattern.
+export type NormalizedSharedMappingPackages = Record<string, NormalizedMappingConfig>;
+
 export interface FederationConfig {
   name?: string;
   exposes?: Record<string, string | ExposeEntry>;
@@ -77,8 +80,7 @@ export interface NormalizedFederationConfig {
   shared: NormalizedSharedExternalsConfig;
   sharedMappings: PathToImport;
   sharedMappingsConfig: NormalizedSharedMappingConfigs;
-  // Declared package prefix -> the config of every mapping under it.
-  sharedMappingPackages?: NormalizedSharedMappingConfigs;
+  sharedMappingPackages?: NormalizedSharedMappingPackages;
   skip: PreparedSkipList;
   chunks: boolean;
   externals: string[];
