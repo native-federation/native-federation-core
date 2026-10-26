@@ -85,12 +85,7 @@ function keptMappings(
   const kept: PathToImport = {};
 
   for (const [mappedPath, mappedImport] of Object.entries(config.sharedMappings)) {
-    const mappingConfig = resolveMappingConfig(
-      mappedImport,
-      config.sharedMappingsConfig,
-      config.features.mappingVersion,
-      config.sharedMappingPackages
-    );
+    const mappingConfig = resolveMappingConfig(mappedImport, config);
     if (!mappingConfig.includeSecondaries) continue;
 
     if (!isWildcardMapping(mappedPath, mappedImport)) {

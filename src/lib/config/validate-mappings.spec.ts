@@ -186,9 +186,12 @@ describe('assertNoConfigUnderMappingPackage', () => {
   );
 
   // A broader pattern still configures every mapping outside the package.
-  it.each([['@org/library'], ['@org/*'], ['*'], ['@other/lib']])('lets %s through', pattern => {
-    expect(() => assertNoConfigUnderMappingPackage([pattern], ['@org/lib'])).not.toThrow();
-  });
+  it.each([['@org/library'], ['@org/*'], ['@org/lib*'], ['*'], ['@other/lib']])(
+    'lets %s through',
+    pattern => {
+      expect(() => assertNoConfigUnderMappingPackage([pattern], ['@org/lib'])).not.toThrow();
+    }
+  );
 });
 
 describe('warnUnmatchedMappingPackages', () => {
@@ -228,20 +231,29 @@ describe('warnUnmatchedMappingPackages', () => {
 describe('warnMappingPackagesWithoutDenseExternals', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  const config = (features: Partial<NormalizedFederationConfig['features']>, declared = true) =>
+  // Declarations live in a module every remote imports, so most remotes declare packages they
+  // publish nothing of.
+  const config = (
+    features: Partial<NormalizedFederationConfig['features']>,
+    sharedMappings: Record<string, string> = { '/ws/libs/lib/a.ts': '@org/lib/a' }
+  ) =>
     ({
-      ...(declared && { sharedMappingPackages: { '@org/lib': {} } }),
+      sharedMappings,
+      sharedMappingPackages: { '@org/lib': {}, '@org/unused': {} },
       features: { denseExternals: false, strictImports: false, ...features },
     }) as unknown as NormalizedFederationConfig;
 
-  it('warns when packages are declared but published flat', () => {
+  it('warns about the declared packages this remote publishes flat', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     warnMappingPackagesWithoutDenseExternals(config({}));
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("'@org/lib'"));
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('Enable denseExternals'));
+    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('@org/unused'));
   });
 
-  it('throws instead under strictImports', () => {
+  // Another remote can publish another entry point of the same package, so a single one locally
+  // still lets a host mix the two.
+  it('throws under strictImports, even for a single published entry point', () => {
     expect(() => warnMappingPackagesWithoutDenseExternals(config({ strictImports: true }))).toThrow(
       /features.denseExternals is off/
     );
@@ -249,10 +261,16 @@ describe('warnMappingPackagesWithoutDenseExternals', () => {
 
   it.each([
     ['with denseExternals', config({ denseExternals: true })],
-    ['without declarations', config({}, false)],
+    ['when nothing published is under a declared package', config({}, { '/ws/x.ts': '@org/x' })],
+    ['without mappings', config({}, {})],
   ])('stays quiet %s', (_label, cfg) => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     warnMappingPackagesWithoutDenseExternals(cfg);
     expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('does not throw under strictImports when nothing published is under a declared package', () => {
+    const cfg = config({ strictImports: true }, { '/ws/x.ts': '@org/x' });
+    expect(() => warnMappingPackagesWithoutDenseExternals(cfg)).not.toThrow();
   });
 });

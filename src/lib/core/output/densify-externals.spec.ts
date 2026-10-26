@@ -3,7 +3,11 @@ import { densifyExternals, toDenseSharedInfoFormat } from './densify-externals.j
 import type { SharedInfo, DenseSharedInfo } from '../../domain/core/federation-info.contract.js';
 import { CHUNK_PREFIX } from '../../domain/core/chunk.js';
 
-function flat(packageName: string, outFileName: string, overrides: Partial<SharedInfo> = {}): SharedInfo {
+function flat(
+  packageName: string,
+  outFileName: string,
+  overrides: Partial<SharedInfo> = {}
+): SharedInfo {
   return {
     singleton: true,
     strictVersion: true,
@@ -17,11 +21,14 @@ function flat(packageName: string, outFileName: string, overrides: Partial<Share
 
 describe('densifyExternals', () => {
   it('collapses a primary + its secondaries into one dense object with correct entries', () => {
-    const result = densifyExternals([
-      flat('@angular/common', 'common.js'),
-      flat('@angular/common/http', 'common-http.js'),
-      flat('@angular/common/locales', 'common-locales.js'),
-    ]);
+    const result = densifyExternals(
+      [
+        flat('@angular/common', 'common.js'),
+        flat('@angular/common/http', 'common-http.js'),
+        flat('@angular/common/locales', 'common-locales.js'),
+      ],
+      new Map()
+    );
 
     expect(result).toHaveLength(1);
     const dense = result[0] as DenseSharedInfo;
@@ -34,7 +41,7 @@ describe('densifyExternals', () => {
   });
 
   it('produces a single-key entries map for a single-entry package', () => {
-    const result = densifyExternals([flat('tslib', 'tslib.js')]);
+    const result = densifyExternals([flat('tslib', 'tslib.js')], new Map());
 
     expect(result).toHaveLength(1);
     const dense = result[0] as DenseSharedInfo;
@@ -43,10 +50,10 @@ describe('densifyExternals', () => {
   });
 
   it('densifies shared mapping entries', () => {
-    const result = densifyExternals([
-      flat('@myorg/utils', 'utils.js'),
-      flat('@myorg/utils/testing', 'utils-testing.js'),
-    ]);
+    const result = densifyExternals(
+      [flat('@myorg/utils', 'utils.js'), flat('@myorg/utils/testing', 'utils-testing.js')],
+      new Map()
+    );
 
     expect(result).toHaveLength(1);
     expect((result[0] as DenseSharedInfo).entries).toEqual({
@@ -62,7 +69,7 @@ describe('densifyExternals', () => {
       version: '0.0.0',
       requiredVersion: '0.0.0',
     });
-    const result = densifyExternals([flat('tslib', 'tslib.js'), chunk]);
+    const result = densifyExternals([flat('tslib', 'tslib.js'), chunk], new Map());
 
     expect(result).toHaveLength(2);
     expect((result[0] as DenseSharedInfo).entries).toEqual({ tslib: 'tslib.js' });
@@ -79,7 +86,7 @@ describe('densifyExternals', () => {
       version: '0.0.0',
       requiredVersion: '0.0.0',
     });
-    const [denseChunk] = densifyExternals([chunk]) as [DenseSharedInfo];
+    const [denseChunk] = densifyExternals([chunk], new Map()) as [DenseSharedInfo];
 
     expect(denseChunk.singleton).toBe(false);
     expect(denseChunk.strictVersion).toBe(false);
@@ -88,7 +95,7 @@ describe('densifyExternals', () => {
   });
 
   it('treats any package starting with the prefix as a chunk (keyed by its full name)', () => {
-    const result = densifyExternals([flat(CHUNK_PREFIX, 'nf-internal.js')]);
+    const result = densifyExternals([flat(CHUNK_PREFIX, 'nf-internal.js')], new Map());
 
     expect(result).toHaveLength(1);
     const dense = result[0] as DenseSharedInfo;
@@ -97,10 +104,13 @@ describe('densifyExternals', () => {
   });
 
   it('splits divergent metadata into separate dense objects sharing packageName', () => {
-    const result = densifyExternals([
-      flat('@angular/common', 'common.js', { version: '1.2.3' }),
-      flat('@angular/common/http', 'common-http.js', { version: '9.9.9' }),
-    ]);
+    const result = densifyExternals(
+      [
+        flat('@angular/common', 'common.js', { version: '1.2.3' }),
+        flat('@angular/common/http', 'common-http.js', { version: '9.9.9' }),
+      ],
+      new Map()
+    );
 
     expect(result).toHaveLength(2);
     const [a, b] = result as [DenseSharedInfo, DenseSharedInfo];
@@ -114,32 +124,47 @@ describe('densifyExternals', () => {
 
   // core#145: mappings expanded from '@org/ui/*' with build: 'separate' each get their own bundle.
   it('splits mapping secondaries planned into different bundles', () => {
-    const result = densifyExternals([
-      flat('@org/ui/button', 'button.js', { bundle: 'mapping-org_ui_button' }),
-      flat('@org/ui/card', 'card.js', { bundle: 'mapping-org_ui_card' }),
-    ]);
+    const result = densifyExternals(
+      [
+        flat('@org/ui/button', 'button.js', { bundle: 'mapping-org_ui_button' }),
+        flat('@org/ui/card', 'card.js', { bundle: 'mapping-org_ui_card' }),
+      ],
+      new Map()
+    );
 
     expect(result).toEqual([
-      expect.objectContaining({ bundle: 'mapping-org_ui_button', entries: { '@org/ui/button': 'button.js' } }),
-      expect.objectContaining({ bundle: 'mapping-org_ui_card', entries: { '@org/ui/card': 'card.js' } }),
+      expect.objectContaining({
+        bundle: 'mapping-org_ui_button',
+        entries: { '@org/ui/button': 'button.js' },
+      }),
+      expect.objectContaining({
+        bundle: 'mapping-org_ui_card',
+        entries: { '@org/ui/card': 'card.js' },
+      }),
     ]);
   });
 
   it('splits a separate mapping from one left in the default mapping bundle', () => {
-    const result = densifyExternals([
-      flat('@org/ui/button', 'button.js', { bundle: 'mapping-org_ui_button' }),
-      flat('@org/ui/card', 'card.js', { bundle: 'mapping-bundle' }),
-    ]);
+    const result = densifyExternals(
+      [
+        flat('@org/ui/button', 'button.js', { bundle: 'mapping-org_ui_button' }),
+        flat('@org/ui/card', 'card.js', { bundle: 'mapping-bundle' }),
+      ],
+      new Map()
+    );
 
     expect(result.map(r => r.bundle)).toEqual(['mapping-org_ui_button', 'mapping-bundle']);
   });
 
   it('splits external secondaries planned into different bundles but merges those sharing one', () => {
-    const result = densifyExternals([
-      flat('rxjs', 'rxjs.js', { bundle: 'browser-rxjs' }),
-      flat('rxjs/operators', 'rxjs-operators.js', { bundle: 'browser-rxjs_operators' }),
-      flat('rxjs/ajax', 'rxjs-ajax.js', { bundle: 'browser-rxjs' }),
-    ]);
+    const result = densifyExternals(
+      [
+        flat('rxjs', 'rxjs.js', { bundle: 'browser-rxjs' }),
+        flat('rxjs/operators', 'rxjs-operators.js', { bundle: 'browser-rxjs_operators' }),
+        flat('rxjs/ajax', 'rxjs-ajax.js', { bundle: 'browser-rxjs' }),
+      ],
+      new Map()
+    );
 
     expect(result).toEqual([
       expect.objectContaining({
@@ -154,36 +179,51 @@ describe('densifyExternals', () => {
   });
 
   it('splits secondaries in different pools', () => {
-    const result = densifyExternals([
-      flat('rxjs', 'rxjs.js', { pool: 'a' }),
-      flat('rxjs/operators', 'rxjs-operators.js', { pool: 'b' }),
-    ]);
+    const result = densifyExternals(
+      [
+        flat('rxjs', 'rxjs.js', { pool: 'a' }),
+        flat('rxjs/operators', 'rxjs-operators.js', { pool: 'b' }),
+      ],
+      new Map()
+    );
 
     expect(result.map(r => r.pool)).toEqual(['a', 'b']);
   });
 
   // Guards the denylist: a field the densifier does not know about must not be silently merged.
   it('splits on a metadata field it has no special handling for', () => {
-    const result = densifyExternals([
-      flat('rxjs', 'rxjs.js', { future: 1 } as Partial<SharedInfo>),
-      flat('rxjs/operators', 'rxjs-operators.js', { future: 2 } as Partial<SharedInfo>),
-    ]);
+    const result = densifyExternals(
+      [
+        flat('rxjs', 'rxjs.js', { future: 1 } as Partial<SharedInfo>),
+        flat('rxjs/operators', 'rxjs-operators.js', { future: 2 } as Partial<SharedInfo>),
+      ],
+      new Map()
+    );
 
     expect(result).toHaveLength(2);
   });
 
   it('groups entries whose optional fields were added in a different order', () => {
     const a = { ...flat('rxjs', 'rxjs.js'), bundle: 'browser-shared', pool: 'p' };
-    const b = { ...flat('rxjs/operators', 'rxjs-operators.js'), pool: 'p', bundle: 'browser-shared' };
+    const b = {
+      ...flat('rxjs/operators', 'rxjs-operators.js'),
+      pool: 'p',
+      bundle: 'browser-shared',
+    };
 
-    expect(densifyExternals([a, b])).toHaveLength(1);
+    expect(densifyExternals([a, b], new Map())).toHaveLength(1);
   });
 
   it('keeps the first dev hint when merging, without letting it split the group', () => {
-    const result = densifyExternals([
-      flat('rxjs', 'rxjs.js', { dev: { entryPoint: 'rxjs/index.js' } }),
-      flat('rxjs/operators', 'rxjs-operators.js', { dev: { entryPoint: 'rxjs/operators/index.js' } }),
-    ]);
+    const result = densifyExternals(
+      [
+        flat('rxjs', 'rxjs.js', { dev: { entryPoint: 'rxjs/index.js' } }),
+        flat('rxjs/operators', 'rxjs-operators.js', {
+          dev: { entryPoint: 'rxjs/operators/index.js' },
+        }),
+      ],
+      new Map()
+    );
 
     expect(result).toHaveLength(1);
     expect(result[0]!.dev).toEqual({ entryPoint: 'rxjs/index.js' });
@@ -221,10 +261,13 @@ describe('densifyExternals', () => {
 
   // Outside a declared package: two records under one name.
   it('still splits a name-rule package by version', () => {
-    const result = densifyExternals([
-      flat('@org/ui/table', 'table.js'),
-      flat('@org/ui/button', 'button.js', { version: '2.0.0' }),
-    ]) as DenseSharedInfo[];
+    const result = densifyExternals(
+      [
+        flat('@org/ui/table', 'table.js'),
+        flat('@org/ui/button', 'button.js', { version: '2.0.0' }),
+      ],
+      new Map()
+    ) as DenseSharedInfo[];
 
     expect(result.map(d => [d.packageName, d.version])).toEqual([
       ['@org/ui', '1.2.3'],
@@ -234,7 +277,7 @@ describe('densifyExternals', () => {
 
   it('never emits outFileName on a dense object and never entries on a flat one', () => {
     const chunk = flat(`${CHUNK_PREFIX}/chunk-x`, 'chunk-x.js');
-    const result = densifyExternals([flat('tslib', 'tslib.js'), chunk]);
+    const result = densifyExternals([flat('tslib', 'tslib.js'), chunk], new Map());
 
     for (const entry of result) {
       if ('entries' in entry) {
@@ -253,7 +296,7 @@ describe('densifyExternals', () => {
       packageName: 'rxjs',
       entries: { rxjs: 'rxjs.js', 'rxjs/operators': 'rxjs-operators.js' },
     };
-    const result = densifyExternals([dense]);
+    const result = densifyExternals([dense], new Map());
 
     expect(result).toHaveLength(1);
     expect(result[0]).toEqual(dense);
@@ -261,12 +304,15 @@ describe('densifyExternals', () => {
 
   it('preserves first-seen order across mixed dense groups and chunks', () => {
     const chunk = flat(`${CHUNK_PREFIX}/c1`, 'c1.js');
-    const result = densifyExternals([
-      flat('tslib', 'tslib.js'),
-      chunk,
-      flat('@angular/common', 'common.js'),
-      flat('@angular/common/http', 'common-http.js'),
-    ]);
+    const result = densifyExternals(
+      [
+        flat('tslib', 'tslib.js'),
+        chunk,
+        flat('@angular/common', 'common.js'),
+        flat('@angular/common/http', 'common-http.js'),
+      ],
+      new Map()
+    );
 
     expect(result.map(r => ('entries' in r ? Object.keys(r.entries)[0] : r.packageName))).toEqual([
       'tslib',
@@ -278,10 +324,7 @@ describe('densifyExternals', () => {
 
 describe('toDenseSharedInfoFormat', () => {
   it('converts each flat entry to its own dense object keyed by its packageName', () => {
-    const result = toDenseSharedInfoFormat([
-      flat('tslib', 'tslib.js'),
-      flat('rxjs', 'rxjs.js'),
-    ]);
+    const result = toDenseSharedInfoFormat([flat('tslib', 'tslib.js'), flat('rxjs', 'rxjs.js')]);
 
     expect(result).toEqual([
       {

@@ -18,7 +18,7 @@ function isFlatChunk(entry: SharedInfo): boolean {
  */
 export function densifyExternals(
   shared: Array<SharedInfo | DenseSharedInfo>,
-  declaredPackages: ReadonlyMap<string, string> = new Map()
+  declaredPackages: ReadonlyMap<string, string>
 ): Array<SharedInfo | DenseSharedInfo> {
   const result: Array<SharedInfo | DenseSharedInfo> = [];
   const groupIndex = new Map<string, number>();

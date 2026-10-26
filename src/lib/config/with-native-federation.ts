@@ -154,7 +154,6 @@ function normalizeMappingConfigs(
         `Mapping '${pattern}' sets ${ignored.join(', ')}, which mapped paths do not honour. Ignored.`
       );
     }
-    // An untyped config can still carry build: 'paths' from 4.9.0-next.1.
     if (!MAPPING_BUILDS.has(cfg.build)) {
       throw new Error(
         `Mapping '${pattern}' sets build: '${cfg.build}'; a mapping takes 'separate' or 'package'. ` +

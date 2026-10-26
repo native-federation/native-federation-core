@@ -31,11 +31,7 @@ export function planMappingBundles(config: NormalizedFederationConfig): MappingB
       addEntry(entriesByPackage, packageName, mappedPath, mappedImport);
       continue;
     }
-    const { build } = resolveMappingConfig(
-      mappedImport,
-      config.sharedMappingsConfig,
-      config.features.mappingVersion
-    );
+    const { build } = resolveMappingConfig(mappedImport, config);
     addEntry(entriesByBundle, bundleNameFor(build, mappedImport), mappedPath, mappedImport);
   }
 

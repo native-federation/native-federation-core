@@ -67,7 +67,13 @@ export async function bundleExposedAndMappingsCore(
     throw new AbortedError('[bundle-exposed-and-mappings] Aborted before bundling');
   }
   const io = deps.io ?? nodeIo;
-  assertOneRecordPerDeclaredPackage(config, fedOptions);
+  const records = new Map(
+    Object.entries(config.sharedMappings).map(([mappedPath, mappedImport]) => [
+      mappedPath,
+      mappingRecord(io, mappedPath, mappedImport, config, fedOptions),
+    ])
+  );
+  assertOneRecordPerDeclaredPackage(config, records);
 
   const mappingPlans = planMappingBundles(config).map(plan => ({
     bundleName: plan.bundleName,
@@ -177,7 +183,7 @@ export async function bundleExposedAndMappingsCore(
         item.fileName,
         item.key,
         path.basename(distEntryFile),
-        config,
+        records.get(item.fileName)!,
         fedOptions
       );
       if (dense) mapping.bundle = plan.bundleName;
@@ -313,13 +319,13 @@ function toSharedMappingInfo(
   mappedPath: string,
   mappedImport: string,
   outFileName: string,
-  config: NormalizedFederationConfig,
+  record: MappingRecord,
   fedOptions: NormalizedFederationOptions
 ): SharedInfo {
   return {
     packageName: mappedImport,
     outFileName,
-    ...mappingRecord(mappedPath, mappedImport, config, fedOptions),
+    ...record,
     dev: !fedOptions.dev
       ? undefined
       : {
@@ -331,21 +337,17 @@ function toSharedMappingInfo(
 type MappingRecord = Omit<SharedInfo, 'packageName' | 'outFileName' | 'dev'>;
 
 function mappingRecord(
+  io: FileReaderPort,
   mappedPath: string,
   mappedImport: string,
   config: NormalizedFederationConfig,
   fedOptions: NormalizedFederationOptions
 ): MappingRecord {
   const mappingVersion = config.features.mappingVersion
-    ? getMappingVersion(mappedPath, fedOptions.workspaceRoot)
+    ? getMappingVersionCore(io, mappedPath, fedOptions.workspaceRoot)
     : '';
 
-  const mappingConfig = resolveMappingConfig(
-    mappedImport,
-    config.sharedMappingsConfig,
-    config.features.mappingVersion,
-    config.sharedMappingPackages
-  );
+  const mappingConfig = resolveMappingConfig(mappedImport, config);
   const requiredVersionCfg = mappingConfig.requiredVersion;
   // An explicit version drives requiredVersion too, the same way the detected one does.
   const explicitVersion =
@@ -369,7 +371,7 @@ function mappingRecord(
 // own package.json. Checked before bundling, so a mismatch fails before anything is written.
 function assertOneRecordPerDeclaredPackage(
   config: NormalizedFederationConfig,
-  fedOptions: NormalizedFederationOptions
+  records: ReadonlyMap<string, MappingRecord>
 ): void {
   const packages = mappingPackageByImport(config);
   if (packages.size === 0) return;
@@ -379,7 +381,7 @@ function assertOneRecordPerDeclaredPackage(
     const packageName = packages.get(mappedImport);
     if (packageName === undefined) continue;
 
-    const record = mappingRecord(mappedPath, mappedImport, config, fedOptions);
+    const record = records.get(mappedPath)!;
     const seen = first.get(packageName);
     if (!seen) {
       first.set(packageName, { importName: mappedImport, record });
@@ -429,8 +431,4 @@ export function getMappingVersionCore(
     if (dir === resolvedRoot || parent === dir) return '';
     dir = parent;
   }
-}
-
-export function getMappingVersion(fileName: string, workspaceRoot: string): string {
-  return getMappingVersionCore(nodeIo, fileName, workspaceRoot);
 }

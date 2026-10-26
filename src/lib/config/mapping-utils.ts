@@ -3,7 +3,6 @@ import type {
   MappingConfigInput,
   NormalizedFederationConfig,
   NormalizedMappingConfig,
-  NormalizedSharedMappingConfigs,
   SharedMappingEntry,
   SharedMappingPackageEntry,
 } from '../domain/config/federation-config.contract.js';
@@ -126,18 +125,20 @@ export function normalizeMappingConfig(
  */
 export function resolveMappingConfig(
   importName: string,
-  configs: NormalizedSharedMappingConfigs,
-  mappingVersion: boolean,
-  packages: NormalizedSharedMappingConfigs = {}
+  config: Pick<
+    NormalizedFederationConfig,
+    'sharedMappingsConfig' | 'sharedMappingPackages' | 'features'
+  >
 ): NormalizedMappingConfig {
+  const packages = config.sharedMappingPackages ?? {};
   const declared = declaredPackageOf(importName, Object.keys(packages));
   if (declared !== undefined) return packages[declared]!;
 
-  for (const [pattern, config] of Object.entries(configs)) {
-    if (matchesWildcard(importName, pattern)) return config;
+  for (const [pattern, mappingConfig] of Object.entries(config.sharedMappingsConfig)) {
+    if (matchesWildcard(importName, pattern)) return mappingConfig;
   }
 
-  return normalizeMappingConfig({}, mappingVersion);
+  return normalizeMappingConfig({}, config.features.mappingVersion);
 }
 
 // The longest declared prefix the import is, or sits under at a '/'.

@@ -3,6 +3,7 @@ import * as path from 'path';
 import { getRawMappedPathsCore } from './mapped-paths.js';
 import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
 import type {
+  NormalizedFederationConfig,
   SharedMappingConfigs,
   SharedMappingEntry,
 } from '../domain/config/federation-config.contract.js';
@@ -136,7 +137,11 @@ describe('getRawMappedPathsCore', () => {
     const normalized = (c: SharedMappingConfigs) =>
       Object.fromEntries(Object.entries(c).map(([k, v]) => [k, normalizeMappingConfig(v, true)]));
     const pool = (importName: string) =>
-      resolveMappingConfig(importName, normalized(configs), true, normalized(packages)).pool;
+      resolveMappingConfig(importName, {
+        sharedMappingsConfig: normalized(configs),
+        sharedMappingPackages: normalized(packages),
+        features: { mappingVersion: true } as NormalizedFederationConfig['features'],
+      }).pool;
 
     expect(Object.values(paths).sort()).toEqual(['@org/lib', '@org/lib/testing', '@org/library']);
     expect(['@org/lib', '@org/lib/testing', '@org/library'].map(pool)).toEqual([

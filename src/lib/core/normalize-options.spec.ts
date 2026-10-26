@@ -434,12 +434,13 @@ describe('normalizeFederationOptionsCore', () => {
   });
 
   // Flat records leave a declared package's entry points to separate remotes at runtime.
-  it('fails a strict build that declares packages without denseExternals', async () => {
+  it('fails a strict build that publishes a declared package without denseExternals', async () => {
     const io = createMemoryIo().setFile(CONFIG_PATH, '');
     const base = makeConfig();
     const config = makeConfig({
+      sharedMappings: { '/ws/libs/lib/index.ts': '@org/lib' },
       sharedMappingPackages: { '@org/lib': { singleton: true, strictVersion: false } },
-      features: { ...base.features, strictImports: true },
+      features: { ...base.features, ignoreUnusedDeps: false, strictImports: true },
     });
 
     await expect(
