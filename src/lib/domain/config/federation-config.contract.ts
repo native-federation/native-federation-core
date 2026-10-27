@@ -78,8 +78,11 @@ export interface NormalizedFederationConfig {
   name: string;
   exposes: Record<string, ExposeEntry>;
   shared: NormalizedSharedExternalsConfig;
+  /** In v5 each entry also carries its resolved package and config, replacing the two fields below. */
   sharedMappings: PathToImport;
+  /** Removed in v5: read the config from the `sharedMappings` entry. */
   sharedMappingsConfig: NormalizedSharedMappingConfigs;
+  /** Removed in v5: read the package from the `sharedMappings` entry. */
   sharedMappingPackages?: NormalizedSharedMappingPackages;
   skip: PreparedSkipList;
   chunks: boolean;
