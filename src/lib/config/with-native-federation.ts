@@ -36,7 +36,10 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
   );
   const prefixes = Object.keys(packages);
   assertMappingPackagePrefixes(prefixes);
-  assertNoConfigUnderMappingPackage(Object.keys(configs), prefixes);
+  assertNoConfigUnderMappingPackage(
+    Object.keys(configs).filter(pattern => Object.keys(configs[pattern]!).length > 0),
+    prefixes
+  );
   warnUnmatchedMappingPackages(prefixes, keys);
 
   const normalized: NormalizedFederationConfig = {

@@ -247,6 +247,17 @@ describe('withNativeFederation', () => {
     );
   });
 
+  // A hand-written `[['@org/lib/*'], {}]` only selects, like the bare string the builder emits.
+  it('accepts an empty config under a declared package', () => {
+    getRawMappedPaths.mockReturnValue({
+      paths: {},
+      configs: { '@org/lib/*': {} },
+      keys: ['@org/lib', '@org/lib/*'],
+      packages: { '@org/lib': {} },
+    });
+    expect(() => withNativeFederation({})).not.toThrow();
+  });
+
   it('warns for a declared package no tsconfig key reaches', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     getRawMappedPaths.mockReturnValue({
