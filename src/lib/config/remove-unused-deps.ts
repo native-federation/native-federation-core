@@ -54,8 +54,8 @@ export function removeUnusedDeps(
   };
 }
 
-// esbuild treats every subpath of an external as external and keeps it verbatim, but the import
-// map only has a key for the mapping itself, so the import fails at runtime.
+// An external covers its subpaths (matchesExternal), so the import stays bare, but the import map
+// only has a key for the mapping itself, so the import fails at runtime.
 function warnOnUnresolvableSubpaths(
   specifiers: ReadonlyMap<string, string> | undefined,
   published: ReadonlySet<string>

@@ -863,7 +863,7 @@ describe('createMappingImportResolver — the unpublished-target warning', () =>
   it('warns once per target across a rebuild\u2019s worth of lookups, and again after reset', () => {
     const resolve = createMappingImportResolver(MAPPINGS, hidden());
 
-    // esbuild re-resolves the whole module graph, so one deep import arrives many times.
+    // Every importer of the target asks again within a build, so one deep import arrives many times.
     for (let i = 0; i < 10; i++) resolve(f('libs/ui/src/badge.component'), APP);
     expect(warn).toHaveBeenCalledTimes(1);
 
