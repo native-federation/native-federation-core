@@ -619,7 +619,8 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     mem: ReturnType<typeof createMemoryIo>,
     version: string,
     sharedBundles: Record<string, NormalizedExternalConfig> = fooWith(),
-    externalsCacheKey?: ExternalsCacheKey
+    externalsCacheKey?: ExternalsCacheKey,
+    buildOptions = BUILD_OPTIONS
   ) => {
     const adapter = { ...createFakeBuildAdapter({ io: mem }), externalsCacheKey };
     const result = await bundleSharedCore(
@@ -628,7 +629,7 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       makeConfig(),
       makeFedOptions({ cacheExternalArtifacts: true }),
       [],
-      BUILD_OPTIONS
+      buildOptions
     );
     return { adapter, result };
   };
@@ -687,6 +688,19 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
 
       expect(adapter.calls.setup).toHaveLength(1);
     });
+  });
+
+  // A bundle cached without chunks would be replayed with no chunk list (core#216).
+  it("rebuilds when the bundle's chunks setting changed under an unchanged config", async () => {
+    const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+
+    await cachedBuild(mem, '2.0.0', fooWith(), undefined, { ...BUILD_OPTIONS, chunks: false });
+    const { adapter } = await cachedBuild(mem, '2.0.0', fooWith(), undefined, {
+      ...BUILD_OPTIONS,
+      chunks: true,
+    });
+
+    expect(adapter.calls.setup).toHaveLength(1);
   });
 
   describe('adapter lifecycle', () => {

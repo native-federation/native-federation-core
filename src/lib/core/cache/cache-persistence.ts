@@ -35,7 +35,8 @@ export const getChecksum = (
   contentSignals: Record<string, string> = {},
   resolvedVersions: Record<string, string> = {},
   adapterKey?: ExternalsCacheKey,
-  externals: readonly string[] = []
+  externals: readonly string[] = [],
+  chunks?: boolean
 ): string =>
   getChecksumCore(
     nodeIo,
@@ -46,7 +47,8 @@ export const getChecksum = (
     contentSignals,
     resolvedVersions,
     adapterKey,
-    externals
+    externals,
+    chunks
   );
 
 export type FeatureFlags = Partial<NormalizedFederationConfig['features']>;
@@ -98,7 +100,9 @@ export const getChecksumCore = (
   // pre-installed-version checksum byte for byte.
   resolvedVersions: Record<string, string> = {},
   adapterKey?: ExternalsCacheKey,
-  externals: readonly string[] = []
+  externals: readonly string[] = [],
+  // The bundle's `chunks`: it decides which files a cached bundle holds (core#216).
+  chunks?: boolean
 ): string => {
   const denseExternals = Object.keys(shared)
     .sort()
@@ -117,7 +121,8 @@ export const getChecksumCore = (
       denseExternals +
         `:dev=${dev}:builder=${builderVersion}:features=${featureState(features)}` +
         adapterState(adapterKey) +
-        externalsState(externals)
+        externalsState(externals) +
+        (chunks === undefined ? '' : `:chunks=${chunks ? '1' : '0'}`)
     )
     .hex();
 };

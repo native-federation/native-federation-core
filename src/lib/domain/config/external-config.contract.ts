@@ -38,7 +38,8 @@ export interface NormalizedExternalConfig {
   includeSecondaries?: boolean;
   shareScope?: string;
   pool?: string;
-  chunks: boolean;
+  // Set only when the user set it on an external with a bundle of its own.
+  chunks?: boolean;
   platform: 'browser' | 'node';
   build: 'default' | 'separate' | 'package';
   packageInfo?: {

@@ -23,6 +23,11 @@ import type {
   SharedExternalsConfig,
 } from '../domain/config/external-config.contract.js';
 import { logger } from '../utils/logger.js';
+import {
+  inferPackageFromSecondary,
+  sharedBundleName,
+  sharedBundlePackage,
+} from '../utils/normalize.js';
 
 export function withNativeFederation(config: FederationConfig): NormalizedFederationConfig {
   const skip = prepareSkipList(config.skip ?? []);
@@ -103,15 +108,21 @@ function normalizeShared(
       platform: 'browser',
     }).get() as NormalizedSharedExternalsConfig);
 
+  const ignoredChunks: string[] = [];
+
   result = Object.keys(shared).reduce<NormalizedSharedExternalsConfig>((acc, cur) => {
     const key = cur.replace(/\\/g, '/');
     const sharedConfig = shared[cur]!;
+    const build = sharedConfig.build ?? 'default';
 
-    if (!!sharedConfig.chunks && !sharedConfig.build && sharedConfig.chunks !== chunks) {
-      logger.warn(
-        `External '${cur}' has explicit chunk settings, consider switching build type to { build: 'package' }.`
-      );
-      sharedConfig.chunks = chunks;
+    // Without a bundle of its own, an external is built with the global `chunks`.
+    const ownChunks = build === 'default' ? undefined : sharedConfig.chunks;
+    if (
+      build === 'default' &&
+      sharedConfig.chunks !== undefined &&
+      sharedConfig.chunks !== chunks
+    ) {
+      ignoredChunks.push(key);
     }
 
     const normalizedConfig: NormalizedExternalConfig = {
@@ -119,14 +130,14 @@ function normalizeShared(
       singleton: sharedConfig.singleton ?? false,
       strictVersion: sharedConfig.strictVersion ?? false,
       version: sharedConfig.version,
-      chunks: sharedConfig.chunks ?? chunks,
+      ...(ownChunks !== undefined && { chunks: ownChunks }),
       includeSecondaries:
         typeof sharedConfig.includeSecondaries === 'object'
           ? !!sharedConfig.includeSecondaries.keepAll
           : sharedConfig.includeSecondaries,
       packageInfo: sharedConfig.packageInfo as NormalizedExternalConfig['packageInfo'],
       platform: sharedConfig.platform ?? config.platform ?? 'browser',
-      build: sharedConfig.build ?? 'default',
+      build,
       ...(sharedConfig.shareScope && { shareScope: sharedConfig.shareScope }),
       ...(sharedConfig.pool && { pool: sharedConfig.pool }),
     };
@@ -140,7 +151,47 @@ function normalizeShared(
     .filter(key => !isInSkipList(key, skip))
     .reduce((acc, cur) => ({ ...acc, [cur]: result[cur] }), {});
 
+  warnIgnoredChunks(
+    ignoredChunks.filter(key => key in result),
+    chunks
+  );
+  warnChunksConflicts(result);
+
   return result;
+}
+
+// Secondaries inherit their package's config, so one setting is reported once per package.
+function warnIgnoredChunks(keys: string[], chunks: boolean): void {
+  if (keys.length === 0) return;
+  const packages = [...new Set(keys.map(inferPackageFromSecondary))];
+  logger.warn(
+    `Shared externals ${packages.map(p => `'${p}'`).join(', ')} set chunks: ${!chunks}, but ` +
+      `without build they are built in the shared bundle, which uses the global chunks: ` +
+      `${chunks}. Remove chunks, or give the external a bundle of its own with build: ` +
+      `'separate' or 'package'.`
+  );
+}
+
+// Checked here rather than in the planner, which runs again on every watch rebuild.
+function warnChunksConflicts(shared: NormalizedSharedExternalsConfig): void {
+  const bundles = new Map<string, Record<string, string[]>>();
+  for (const [key, cfg] of Object.entries(shared)) {
+    if (cfg.chunks === undefined) continue;
+    const bundleName = sharedBundleName(cfg.platform, sharedBundlePackage(key, cfg.build));
+    const votes = bundles.get(bundleName) ?? {};
+    (votes[String(cfg.chunks)] ??= []).push(key);
+    bundles.set(bundleName, votes);
+  }
+
+  for (const [bundleName, votes] of bundles) {
+    if (Object.keys(votes).length < 2) continue;
+    const list = (keys: string[]) => keys.map(k => `'${k}'`).join(', ');
+    logger.warn(
+      `Shared externals ${list(votes['true']!)} (chunks: true) and ${list(votes['false']!)} ` +
+        `(chunks: false) are built in one bundle, '${bundleName}', which can only take one ` +
+        `chunks setting, so the first one listed in shared wins. Set the same value on all of them.`
+    );
+  }
 }
 
 const MAPPING_BUILDS = new Set([undefined, 'separate', 'package']);

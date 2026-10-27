@@ -1,6 +1,6 @@
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
-import { inferPackageFromSecondary, normalizePackageName } from '../../utils/normalize.js';
+import { sharedBundleName, sharedBundlePackage } from '../../utils/normalize.js';
 
 export interface SharedBundlePlan {
   bundleName: string;
@@ -39,30 +39,35 @@ export function splitShared(shared: Record<string, NormalizedExternalConfig>): S
   return { sharedBrowser, sharedServer, separateBrowser, separateServer };
 }
 
+interface SeparateGroup {
+  entries: Record<string, NormalizedExternalConfig>;
+  chunks?: boolean;
+}
+
 function planSeparate(
   separate: Record<string, NormalizedExternalConfig>,
   platform: 'browser' | 'node',
-  externals: string[]
+  externals: string[],
+  globalChunks: boolean
 ): SharedBundlePlan[] {
-  const grouped: Record<
-    string,
-    { entries: Record<string, NormalizedExternalConfig>; chunks: boolean }
-  > = {};
+  const grouped: Record<string, SeparateGroup> = {};
 
   for (const [key, shared] of Object.entries(separate)) {
-    const packageName = shared.build === 'separate' ? key : inferPackageFromSecondary(key);
-    if (!grouped[packageName]) grouped[packageName] = { chunks: shared.chunks, entries: {} };
-    grouped[packageName].entries[key] = shared;
+    const packageName = sharedBundlePackage(key, shared.build);
+    const group = (grouped[packageName] ??= { entries: {} });
+    group.entries[key] = shared;
+    // Until 5.0 a disagreement only warns (normalizeShared), and the first value wins.
+    group.chunks ??= shared.chunks;
   }
 
-  return Object.entries(grouped).map(([packageName, group]) => ({
-    bundleName: `${platform}-${normalizePackageName(packageName)}`,
+  return Object.entries(grouped).map(([packageName, { entries, chunks }]) => ({
+    bundleName: sharedBundleName(platform, packageName),
     platform,
-    chunks: group.chunks,
-    entries: group.entries,
+    chunks: chunks ?? globalChunks,
+    entries,
     // The package and its own subpaths are what this bundle builds; 'react-dom' is not 'react's.
     externals: externals.filter(e => e !== packageName && !e.startsWith(packageName + '/')),
-    keys: Object.keys(group.entries),
+    keys: Object.keys(entries),
     kind: 'separate',
   }));
 }
@@ -102,8 +107,8 @@ export function planSharedBundles(
     });
   }
 
-  plans.push(...planSeparate(separateBrowser, 'browser', externals));
-  plans.push(...planSeparate(separateServer, 'node', externals));
+  plans.push(...planSeparate(separateBrowser, 'browser', externals, config.chunks));
+  plans.push(...planSeparate(separateServer, 'node', externals, config.chunks));
 
   return plans;
 }
