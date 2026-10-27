@@ -140,7 +140,6 @@ function normalizeShared(
   return result;
 }
 
-const IGNORED_MAPPING_PROPS = ['platform', 'chunks', 'packageInfo'] as const;
 const MAPPING_BUILDS = new Set([undefined, 'separate', 'package']);
 
 function normalizeMappingConfigs(
@@ -148,12 +147,6 @@ function normalizeMappingConfigs(
   mappingVersion: boolean
 ): NormalizedSharedMappingConfigs {
   return Object.entries(configs).reduce((acc, [pattern, cfg]) => {
-    const ignored = IGNORED_MAPPING_PROPS.filter(prop => cfg[prop] !== undefined);
-    if (ignored.length > 0) {
-      logger.warn(
-        `Mapping '${pattern}' sets ${ignored.join(', ')}, which mapped paths do not honour. Ignored.`
-      );
-    }
     if (!MAPPING_BUILDS.has(cfg.build)) {
       throw new Error(
         `Mapping '${pattern}' sets build: '${cfg.build}'; a mapping takes 'separate' or 'package'. ` +

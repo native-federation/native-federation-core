@@ -10,7 +10,10 @@ import type { ConfigBuilder } from './config-builders.contract.js';
 
 export type ExposeEntry = { file: string; element?: string };
 
-export type MappingConfigInput = Omit<ExternalConfigInput, 'build'> & {
+export type MappingConfigInput = Omit<
+  ExternalConfigInput,
+  'build' | 'platform' | 'chunks' | 'packageInfo'
+> & {
   build?: 'separate' | 'package';
 };
 
