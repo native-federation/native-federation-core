@@ -30,3 +30,15 @@ export function inferPackageFromSecondary(secondary: string): string {
   }
   return parts[0]!;
 }
+
+// The package a shared external with `build` is bundled under: its own key for 'separate'.
+export function sharedBundlePackage(
+  key: string,
+  build: 'default' | 'separate' | 'package'
+): string {
+  return build === 'separate' ? key : inferPackageFromSecondary(key);
+}
+
+export function sharedBundleName(platform: 'browser' | 'node', packageName: string): string {
+  return `${platform}-${normalizePackageName(packageName)}`;
+}

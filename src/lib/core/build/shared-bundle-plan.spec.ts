@@ -115,7 +115,6 @@ describe('planSharedBundles', () => {
     });
 
     it("applies one entry's value to the entries of its package that leave it unset", () => {
-      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
       const cfg = config(
         {
           '@org/ui': ext({ build: 'package', chunks: false }),
@@ -125,10 +124,10 @@ describe('planSharedBundles', () => {
       );
 
       expect(chunksOf(cfg)).toEqual([['browser-org_ui', false]]);
-      expect(warn).not.toHaveBeenCalled();
     });
 
-    it('warns when two entries of one package disagree, and keeps the first value', () => {
+    // The disagreement is reported by normalizeShared, once per config load.
+    it('keeps the first value when two entries of one package disagree, without a warning', () => {
       const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
       const cfg = config({
         '@org/ui': ext({ build: 'package', chunks: true }),
@@ -136,11 +135,7 @@ describe('planSharedBundles', () => {
       });
 
       expect(chunksOf(cfg)).toEqual([['browser-org_ui', true]]);
-      expect(warn).toHaveBeenCalledWith(
-        expect.stringMatching(
-          /'@org\/ui' \(chunks: true\) and '@org\/ui\/button' \(chunks: false\) are built in one bundle, 'browser-org_ui'/
-        )
-      );
+      expect(warn).not.toHaveBeenCalled();
     });
   });
 });

@@ -26,6 +26,7 @@ vi.mock('./mapped-paths.js', () => ({
 import { withNativeFederation } from './with-native-federation.js';
 import { logger } from '../utils/logger.js';
 import type { FederationConfig } from '../domain/config/federation-config.contract.js';
+import type { ExternalConfig } from '../domain/config/external-config.contract.js';
 
 describe('withNativeFederation', () => {
   beforeEach(() => {
@@ -166,8 +167,9 @@ describe('withNativeFederation', () => {
 
       const result = withNativeFederation({ chunks: global, shared: { react: { chunks: own } } });
 
-      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/'react' set chunks: .*build/));
-      expect(result.shared['react'].chunks).toBeUndefined();
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]![0]).toContain("'react'");
+      expect(result.shared['react']!.chunks).toBeUndefined();
     });
 
     it('warns under the default global chunks, which is true', () => {
@@ -199,8 +201,9 @@ describe('withNativeFederation', () => {
         },
       });
 
-      expect(warn).toHaveBeenCalledTimes(1);
-      expect(warn.mock.calls[0]![0]).toMatch(/^Shared externals '@angular\/core', 'rxjs' set/);
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]![0]).toContain("'@angular/core', 'rxjs'");
+      expect(warn.mock.calls[0]![0]).not.toContain('rxjs-interop');
     });
 
     it('does not report an external in the skip list', () => {
@@ -220,7 +223,7 @@ describe('withNativeFederation', () => {
       });
 
       expect(warn).not.toHaveBeenCalled();
-      expect(result.shared['react'].chunks).toBe(true);
+      expect(result.shared['react']!.chunks).toBe(true);
     });
 
     // Unset is no vote, so the planner can tell it from a value that happens to equal the global.
@@ -230,12 +233,70 @@ describe('withNativeFederation', () => {
       expect(result.shared['react']).not.toHaveProperty('chunks');
     });
 
+    // The direction the old check reset in place, which a frozen object turns into a TypeError.
     it("does not write into the user's config", () => {
       vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-      const react = Object.freeze({ chunks: false });
+      const react = Object.freeze({ chunks: true });
 
-      expect(() => withNativeFederation({ shared: { react } })).not.toThrow();
-      expect(react.chunks).toBe(false);
+      expect(() => withNativeFederation({ chunks: false, shared: { react } })).not.toThrow();
+      expect(react.chunks).toBe(true);
+    });
+
+    // A normalized config passed back in carries build: 'default'; it is not a bundle of its own.
+    it("warns for an explicit build: 'default' like for no build", () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      const result = withNativeFederation({
+        shared: { rxjs: { build: 'default', chunks: false } as unknown as ExternalConfig },
+      });
+
+      expect(warn).toHaveBeenCalledOnce();
+      expect(result.shared['rxjs']!.chunks).toBeUndefined();
+    });
+
+    it('warns once when entries of one package bundle disagree, naming every key', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      withNativeFederation({
+        shared: {
+          '@org/ui': { build: 'package', chunks: true },
+          '@org/ui/button': { build: 'package', chunks: false },
+          '@org/ui/card': { build: 'package', chunks: false },
+        },
+      });
+
+      expect(warn).toHaveBeenCalledOnce();
+      const message = warn.mock.calls[0]![0];
+      expect(message).toContain("'@org/ui' (chunks: true)");
+      expect(message).toContain("'@org/ui/button', '@org/ui/card' (chunks: false)");
+      expect(message).toContain("'browser-org_ui'");
+    });
+
+    it('does not warn when an entry of a package bundle leaves chunks unset', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      withNativeFederation({
+        shared: {
+          '@org/ui': { build: 'package', chunks: false },
+          '@org/ui/button': { build: 'package' },
+        },
+      });
+
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    // Each platform gets a bundle of its own, so these do not compete.
+    it('does not warn when one package is built for both platforms with different chunks', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      withNativeFederation({
+        shared: {
+          '@org/ui': { build: 'package', chunks: true },
+          '@org/ui/server': { build: 'package', chunks: false, platform: 'node' },
+        },
+      });
+
+      expect(warn).not.toHaveBeenCalled();
     });
   });
 
