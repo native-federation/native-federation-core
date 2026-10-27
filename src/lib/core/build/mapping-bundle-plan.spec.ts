@@ -128,6 +128,86 @@ describe('planMappingBundles', () => {
     });
   });
 
+  // `chunks` is a setting of the bundle, so a mapping's value applies to everything built with it.
+  describe('chunks', () => {
+    const chunksOf = (cfg: NormalizedFederationConfig) =>
+      planMappingBundles(cfg).map(p => [p.bundleName, p.chunks]);
+
+    it('takes the global value when no mapping sets it', () => {
+      expect(chunksOf(config({ './libs/a': '@org/a' }, {}, false))).toEqual([
+        ['mapping-bundle', false],
+      ]);
+    });
+
+    it("applies one mapping's value to the mappings that leave it unset", () => {
+      const cfg = config(
+        { './libs/a': '@org/a', './libs/b': '@org/b' },
+        { '@org/b': mappingCfg({ chunks: false }) }
+      );
+
+      expect(chunksOf(cfg)).toEqual([['mapping-bundle', false]]);
+    });
+
+    it('accepts mappings that agree', () => {
+      const cfg = config(
+        { './libs/a': '@org/a', './libs/b': '@org/b' },
+        { '@org/a': mappingCfg({ chunks: true }), '@org/b': mappingCfg({ chunks: true }) },
+        false
+      );
+
+      expect(chunksOf(cfg)).toEqual([['mapping-bundle', true]]);
+    });
+
+    it('sets a bundle of its own apart from the global value', () => {
+      const cfg = config(
+        { './libs/a': '@org/a', './libs/b': '@org/b' },
+        { '@org/a': mappingCfg({ build: 'separate', chunks: false }) }
+      );
+
+      expect(chunksOf(cfg)).toEqual([
+        ['mapping-org_a', false],
+        ['mapping-bundle', true],
+      ]);
+    });
+
+    it('rejects two mappings in one bundle that disagree, naming both', () => {
+      const cfg = config(
+        { './libs/a': '@org/a', './libs/b': '@org/b' },
+        { '@org/a': mappingCfg({ chunks: true }), '@org/b': mappingCfg({ chunks: false }) }
+      );
+
+      expect(() => planMappingBundles(cfg)).toThrow(
+        /'@org\/a' \(chunks: true\) and '@org\/b' \(chunks: false\) are built in one bundle, 'mapping-bundle'/
+      );
+    });
+
+    // Two patterns can reach one inferred package; first-match-wins only picks each import's config.
+    it("rejects two 'package' patterns that disagree within one package", () => {
+      const cfg = config(
+        { './libs/ui/button': '@org/ui/button', './libs/ui/card': '@org/ui/card' },
+        {
+          '@org/ui/button': mappingCfg({ build: 'package', chunks: true }),
+          '@org/ui/*': mappingCfg({ build: 'package', chunks: false }),
+        }
+      );
+
+      expect(() => planMappingBundles(cfg)).toThrow(/'mapping-org_ui'/);
+    });
+
+    // Declared packages share the default bundle, so their values have to agree as well.
+    it('rejects declared packages that disagree', () => {
+      const cfg: NormalizedFederationConfig = {
+        ...config({ './libs/a': '@org/a', './libs/b': '@org/b' }),
+        sharedMappingPackages: {
+          '@org/a': mappingCfg({ chunks: false }),
+          '@org/b': mappingCfg({ chunks: true }),
+        },
+      };
+
+      expect(() => planMappingBundles(cfg)).toThrow(/'@org\/a' \(chunks: false\) and '@org\/b'/);
+    });
+  });
+
   it('plans nothing when there are no mappings', () => {
     expect(planMappingBundles(config({}))).toEqual([]);
   });

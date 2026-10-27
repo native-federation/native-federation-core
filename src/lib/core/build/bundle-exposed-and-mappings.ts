@@ -151,7 +151,7 @@ export async function bundleExposedAndMappingsCore(
     );
   };
 
-  const dense = config.chunks && config.features.denseChunking;
+  const isDense = (chunks: boolean) => chunks && config.features.denseChunking;
   const exportedChunks: ChunkInfo = {};
   const written: string[] = [];
 
@@ -159,7 +159,8 @@ export async function bundleExposedAndMappingsCore(
   const collectBundleOutputs = (
     bundleName: string,
     resultMap: Record<string, string>,
-    entries: string[]
+    entries: string[],
+    dense: boolean
   ) => {
     const { files, chunks } = finalizeBundleOutputs(io, resultMap, entries, {
       dense,
@@ -187,12 +188,12 @@ export async function bundleExposedAndMappingsCore(
         records.get(item.fileName)!,
         fedOptions
       );
-      if (dense) mapping.bundle = plan.bundleName;
+      if (isDense(plan.chunks)) mapping.bundle = plan.bundleName;
       sharedResult.push(mapping);
       files.push(distEntryFile);
     }
 
-    collectBundleOutputs(plan.bundleName, results, files);
+    collectBundleOutputs(plan.bundleName, results, files, isDense(plan.chunks));
     logger.measure(start, `Bundling '${plan.bundleName}' shared mappings`);
   }
 
@@ -220,7 +221,7 @@ export async function bundleExposedAndMappingsCore(
     exposedFiles.push(distEntryFile);
   }
 
-  collectBundleOutputs(EXPOSED_BUNDLE, exposedResults, exposedFiles);
+  collectBundleOutputs(EXPOSED_BUNDLE, exposedResults, exposedFiles, isDense(config.chunks));
   if (exposes.length > 0) logger.measure(exposedStart, 'Bundling exposed modules');
 
   const outputPaths = [...new Set(written)];

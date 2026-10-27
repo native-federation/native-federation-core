@@ -106,6 +106,7 @@ export function normalizeMappingConfig(
     singleton: cfg.singleton ?? true,
     strictVersion: cfg.strictVersion ?? mappingVersion,
     ...(cfg.build && { build: cfg.build }),
+    ...(cfg.chunks !== undefined && { chunks: cfg.chunks }),
     ...(cfg.requiredVersion !== undefined && { requiredVersion: cfg.requiredVersion }),
     ...(cfg.version !== undefined && { version: cfg.version }),
     ...(cfg.shareScope && { shareScope: cfg.shareScope }),
