@@ -6,6 +6,7 @@ export interface NFBuildAdapterContext<TBundlerContext = unknown> {
   outdir: string;
   dev: boolean;
   name: string;
+  /** @deprecated Core never reads this context; it moves to the adapters in v5. */
   isMappingOrExposed: boolean;
 }
 
@@ -51,6 +52,8 @@ export interface EntryPoint {
   key?: string;
 }
 
+export type NFBundleKind = 'shared' | 'mapping' | 'exposed';
+
 export interface NFBuildAdapterOptions<TBundlerCache = unknown> {
   // Keep the order: it decides how shared code is split into chunks.
   entryPoints: EntryPoint[];
@@ -60,12 +63,15 @@ export interface NFBuildAdapterOptions<TBundlerCache = unknown> {
   external: string[];
   outdir: string;
   mappedPaths: PathToImport;
+  kind: NFBundleKind;
+  /** @deprecated Read `kind`; mappings and exposed modules are built in separate bundles. */
   isMappingOrExposed: boolean;
   dev?: boolean;
   watch?: boolean;
   chunks?: boolean;
   hash: boolean;
   platform?: 'browser' | 'node';
+  /** @deprecated Unused by core and by the published adapters; removed in v5. */
   optimizedMappings?: boolean;
   cache: FederationCache<TBundlerCache>;
 }

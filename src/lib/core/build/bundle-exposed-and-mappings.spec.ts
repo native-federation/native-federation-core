@@ -130,7 +130,10 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     expect(result.mappings).toEqual([
       expect.objectContaining({ packageName: 'foo', outFileName: 'foo.js' }),
     ]);
-    expect(adapter.calls.setup.map(c => c.name)).toEqual(['mapping-bundle', 'mapping-or-exposed']);
+    expect(adapter.calls.setup.map(c => [c.name, c.options.kind])).toEqual([
+      ['mapping-bundle', 'mapping'],
+      ['mapping-or-exposed', 'exposed'],
+    ]);
     expect(adapter.calls.build.map(c => c.name)).toEqual(['mapping-bundle', 'mapping-or-exposed']);
   });
 

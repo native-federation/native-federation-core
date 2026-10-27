@@ -17,7 +17,11 @@ import { normalize } from '../../utils/normalize.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import { type NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
 import { AbortedError } from '../../utils/errors.js';
-import type { EntryPoint, NFBuildAdapter } from '../../domain/core/build-adapter.contract.js';
+import type {
+  EntryPoint,
+  NFBuildAdapter,
+  NFBundleKind,
+} from '../../domain/core/build-adapter.contract.js';
 import { rewriteChunkImportsCore } from './rewrite-chunk-imports.js';
 import { renameChunksByContentCore } from './rename-chunks-by-content.js';
 import { getBuildAdapter } from './build-adapter.js';
@@ -108,7 +112,8 @@ export async function bundleExposedAndMappingsCore(
   const runBuild = async (
     bundleName: string,
     entryPoints: EntryPoint[],
-    chunks: boolean
+    chunks: boolean,
+    kind: NFBundleKind
   ): Promise<Record<string, string>> => {
     if (entryPoints.length === 0) return {};
 
@@ -126,6 +131,7 @@ export async function bundleExposedAndMappingsCore(
           chunks,
           hash,
           optimizedMappings: config.features.ignoreUnusedDeps,
+          kind,
           isMappingOrExposed: true,
           cache: fedOptions.federationCache,
         });
@@ -176,7 +182,7 @@ export async function bundleExposedAndMappingsCore(
   for (const plan of mappingPlans) {
     logger.info(`Bundling shared mappings with bundle type '${plan.bundleName}'`);
     const start = process.hrtime();
-    const results = await runBuild(plan.bundleName, plan.entryPoints, plan.chunks);
+    const results = await runBuild(plan.bundleName, plan.entryPoints, plan.chunks, 'mapping');
     const files: string[] = [];
 
     for (const item of plan.entryPoints) {
@@ -199,7 +205,7 @@ export async function bundleExposedAndMappingsCore(
 
   if (exposes.length > 0) logger.info('Bundling exposed modules');
   const exposedStart = process.hrtime();
-  const exposedResults = await runBuild(EXPOSED_BUNDLE, exposes, config.chunks);
+  const exposedResults = await runBuild(EXPOSED_BUNDLE, exposes, config.chunks, 'exposed');
 
   const exposedResult: Array<ExposesInfo> = [];
   const exposedFiles: string[] = [];
