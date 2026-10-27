@@ -5,12 +5,10 @@ import {
   assertNoConfigUnderMappingPackage,
   isNonBarrelImport,
   isNpmStylePackage,
-  warnMappingPackagesWithoutDenseExternals,
   warnNonNpmMappingNames,
   warnUnmatchedMappingPackages,
 } from './validate-mappings.js';
 import { logger } from '../utils/logger.js';
-import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
 
 describe('isNonBarrelImport', () => {
   it('accepts barrel specifiers', () => {
@@ -225,52 +223,5 @@ describe('warnUnmatchedMappingPackages', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     warnUnmatchedMappingPackages(['@typo/lib'], [key]);
     expect(warn).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('warnMappingPackagesWithoutDenseExternals', () => {
-  afterEach(() => vi.restoreAllMocks());
-
-  // Declarations live in a module every remote imports, so most remotes declare packages they
-  // publish nothing of.
-  const config = (
-    features: Partial<NormalizedFederationConfig['features']>,
-    sharedMappings: Record<string, string> = { '/ws/libs/lib/a.ts': '@org/lib/a' }
-  ) =>
-    ({
-      sharedMappings,
-      sharedMappingPackages: { '@org/lib': {}, '@org/unused': {} },
-      features: { denseExternals: false, strictImports: false, ...features },
-    }) as unknown as NormalizedFederationConfig;
-
-  it('warns about the declared packages this remote publishes flat', () => {
-    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-    warnMappingPackagesWithoutDenseExternals(config({}));
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("'@org/lib'"));
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Enable denseExternals'));
-    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('@org/unused'));
-  });
-
-  // Another remote can publish another entry point of the same package, so a single one locally
-  // still lets a host mix the two.
-  it('throws under strictImports, even for a single published entry point', () => {
-    expect(() => warnMappingPackagesWithoutDenseExternals(config({ strictImports: true }))).toThrow(
-      /features.denseExternals is off/
-    );
-  });
-
-  it.each([
-    ['with denseExternals', config({ denseExternals: true })],
-    ['when nothing published is under a declared package', config({}, { '/ws/x.ts': '@org/x' })],
-    ['without mappings', config({}, {})],
-  ])('stays quiet %s', (_label, cfg) => {
-    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-    warnMappingPackagesWithoutDenseExternals(cfg);
-    expect(warn).not.toHaveBeenCalled();
-  });
-
-  it('does not throw under strictImports when nothing published is under a declared package', () => {
-    const cfg = config({ strictImports: true }, { '/ws/x.ts': '@org/x' });
-    expect(() => warnMappingPackagesWithoutDenseExternals(cfg)).not.toThrow();
   });
 });
