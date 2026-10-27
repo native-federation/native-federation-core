@@ -167,6 +167,7 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     });
     expect(result.externals[0]!.outFileName).toMatch(/^foo\..{10}\.js$/);
     expect(adapter.calls.setup).toHaveLength(1);
+    expect(adapter.calls.setup[0]!.options.kind).toBe('shared');
     expect(adapter.calls.dispose).toHaveLength(1);
     // metadata persisted through the injected io
     expect(mem.exists(path.join('/cache', 'shared.meta.json'))).toBe(true);

@@ -24,6 +24,7 @@ export type {
   NFBuildAdapterResult,
   NFBuildAdapterContext,
   NFAdapterInput,
+  NFBundleKind,
 } from './build-adapter.contract.js';
 export { CHUNK_PREFIX, toChunkImport } from './chunk.js';
 export type { FederationCache } from './federation-cache.contract.js';

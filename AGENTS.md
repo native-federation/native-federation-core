@@ -114,6 +114,10 @@ to follow a few rules that `build-adapter.contract.ts` states where they apply:
   { externals: adapter.externals })`. The cache moves into `NFAdapterInput` in v5. From there they
   are ordinary externals: every bundle's `external`, the bare import check, `matchesExternal`. Keep
   them exact or scoped: one that covers a shared package would hide its pruned entry points.
+- `setup` receives the bundle's `kind` (`'shared' | 'mapping' | 'exposed'`). It replaces
+  `isMappingOrExposed`; that and `optimizedMappings`, which no published adapter acts on, are
+  deprecated in 4.9 and removed in v5. `NFBuildAdapterContext.isMappingOrExposed` is deprecated
+  too: core never reads that context, and the type moves to the adapters in v5.
 
 `outputPath` is resolved against `workspaceRoot` (`resolveOutputPath`) and may be absolute. Every
 writer goes through that helper, and the adapter receives the resolved `outdir`, so all output

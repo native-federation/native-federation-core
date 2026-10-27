@@ -228,6 +228,7 @@ export async function bundleSharedCore(
       outdir: bundleCache.dir,
       mappedPaths: config.sharedMappings,
       dev: fedOptions.dev,
+      kind: 'shared',
       isMappingOrExposed: false,
       hash: false,
       chunks: buildOptions.chunks,
