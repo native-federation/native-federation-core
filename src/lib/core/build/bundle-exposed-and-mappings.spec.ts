@@ -1218,7 +1218,7 @@ describe('mapping output with declared packages', () => {
   ];
 
   it.each(dense)(
-    'bundles each package on its own (denseExternals: %s, denseChunking: %s)',
+    'bundles declared packages with the other mappings (denseExternals: %s, denseChunking: %s)',
     async (dx, dc) => {
       const { adapter } = await build(dx, dc);
 
@@ -1229,13 +1229,17 @@ describe('mapping output with declared packages', () => {
           c.options.entryPoints.map(ep => ep.outName),
         ])
       ).toEqual([
-        ['mapping-bundle', true, ['_org_library.js']],
         [
-          'mapping-single-entry',
-          false,
-          ['_shared_components_table.js', '_shared_components_collapse.js'],
+          'mapping-bundle',
+          true,
+          [
+            '_shared_components_table.js',
+            '_shared_components_collapse.js',
+            '_org_lib.js',
+            '_org_lib_testing.js',
+            '_org_library.js',
+          ],
         ],
-        ['mapping-pkg-org_lib', true, ['_org_lib.js', '_org_lib_testing.js']],
       ]);
     }
   );
@@ -1246,28 +1250,27 @@ describe('mapping output with declared packages', () => {
       const { info } = await build(true, denseChunking);
 
       expect(info.shared.map(s => ('entries' in s ? [s.packageName, s.entries] : s))).toEqual([
-        ['@org/library', { '@org/library': '_org_library.js' }],
         ['@shared/components/table', { '@shared/components/table': '_shared_components_table.js' }],
         [
           '@shared/components/collapse',
           { '@shared/components/collapse': '_shared_components_collapse.js' },
         ],
         ['@org/lib', { '@org/lib': '_org_lib.js', '@org/lib/testing': '_org_lib_testing.js' }],
+        ['@org/library', { '@org/library': '_org_library.js' }],
       ]);
     }
   );
 
-  // A flat record carries no package group, so only the bundling follows the declarations
-  // (normalize warns about it).
+  // A flat record carries no package group (normalize warns about it).
   it('keeps flat records per mapping', async () => {
     const { info } = await build(false, true);
 
     expect(info.shared.map(s => [s.packageName, 'bundle' in s && s.bundle])).toEqual([
+      ['@shared/components/table', 'mapping-bundle'],
+      ['@shared/components/collapse', 'mapping-bundle'],
+      ['@org/lib', 'mapping-bundle'],
+      ['@org/lib/testing', 'mapping-bundle'],
       ['@org/library', 'mapping-bundle'],
-      ['@shared/components/table', 'mapping-single-entry'],
-      ['@shared/components/collapse', 'mapping-single-entry'],
-      ['@org/lib', 'mapping-pkg-org_lib'],
-      ['@org/lib/testing', 'mapping-pkg-org_lib'],
     ]);
   });
 

@@ -34,7 +34,8 @@ import {
 import { isScript } from '../../utils/script-file.js';
 
 // Shared mappings and exposed modules build separately so the bundler cannot factor one chunk out
-// of both: a chunk spanning them is reached through two import trails and evaluated twice.
+// of both: the exposed module would keep this build's copy while the import map may serve the
+// mapping from another remote, with a copy of its own.
 // The exposed build's name is hard-coded in the orchestrator, which registers it for every remote.
 const EXPOSED_BUNDLE = 'mapping-or-exposed';
 

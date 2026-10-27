@@ -160,7 +160,7 @@ function partitionEntries(entries: SharedMappingEntry[]): {
     if ((config as MappingConfigInput).build !== undefined) {
       throw new Error(
         `Shared mapping package '${prefix}' sets build, which a declared package does not take: ` +
-          `its entry points are always bundled as one package.`
+          `its entry points are always built in one bundle.`
       );
     }
     const seen = packages[prefix];
