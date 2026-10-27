@@ -53,7 +53,7 @@ export interface NormalizedMappingConfig {
 export type NormalizedSharedMappingConfigs = Record<string, NormalizedMappingConfig>;
 
 // A prefix covers itself and its subpaths, and its config outranks every sharedMappingsConfig pattern.
-export type NormalizedSharedMappingPackages = Record<string, NormalizedMappingConfig>;
+type NormalizedSharedMappingPackages = Record<string, NormalizedMappingConfig>;
 
 export interface FederationConfig {
   name?: string;
