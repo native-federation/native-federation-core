@@ -70,10 +70,6 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
   config: NormalizedFederationConfig;
   options: NormalizedFederationOptions<TBundlerCache>;
 }> {
-  /**
-   * Step 1: normalizing config
-   */
-
   const workspaceRoot = toDiskCase(deps.io, options.workspaceRoot);
   const packageJson = options.packageJson && toDiskCase(deps.io, options.packageJson);
 
@@ -89,9 +85,6 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
     deps.io
   );
 
-  /**
-   * Step 2: normalizing options
-   */
   const projectName = resolveProjectName(options.projectName ?? config.name);
 
   const suppliedCache =
@@ -114,10 +107,6 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
     watchLinkedDeps: options.watchLinkedDeps ?? false,
     federationCache,
   };
-
-  /**
-   * Step 3: Remove unused deps
-   */
 
   const nothingShared =
     Object.keys(config.shared).length === 0 && Object.keys(config.sharedMappings).length === 0;
