@@ -10,12 +10,20 @@ import type { ConfigBuilder } from './config-builders.contract.js';
 
 export type ExposeEntry = { file: string; element?: string };
 
-// `build: 'paths'` takes the package from the tsconfig `paths` keys (core#198).
-export type MappingConfigInput = Omit<ExternalConfigInput, 'build'> & {
-  build?: 'separate' | 'package' | 'paths';
+export type MappingConfigInput = Omit<
+  ExternalConfigInput,
+  'build' | 'platform' | 'chunks' | 'packageInfo'
+> & {
+  build?: 'separate' | 'package';
 };
 
-export type SharedMappingEntry = string | [string[], MappingConfigInput];
+// Declares a package by prefix, see `mappingsFromWorkspace().package()`. It selects nothing.
+export type SharedMappingPackageEntry = Omit<MappingConfigInput, 'build'> & { package: string };
+
+export type SharedMappingEntry =
+  | string
+  | [string[], MappingConfigInput]
+  | SharedMappingPackageEntry;
 
 /** Selection pattern -> config, kept in declaration order: first match wins. */
 export type SharedMappingConfigs = Record<string, MappingConfigInput>;
@@ -33,7 +41,7 @@ export type SharedMappingConfigs = Record<string, MappingConfigInput>;
 export interface NormalizedMappingConfig {
   singleton: boolean;
   strictVersion: boolean;
-  build?: 'separate' | 'package' | 'paths';
+  build?: 'separate' | 'package';
   requiredVersion?: string | AutoRequiredOptions;
   version?: string;
   shareScope?: string;
@@ -43,6 +51,9 @@ export interface NormalizedMappingConfig {
 }
 
 export type NormalizedSharedMappingConfigs = Record<string, NormalizedMappingConfig>;
+
+// A prefix covers itself and its subpaths, and its config outranks every sharedMappingsConfig pattern.
+type NormalizedSharedMappingPackages = Record<string, NormalizedMappingConfig>;
 
 export interface FederationConfig {
   name?: string;
@@ -70,10 +81,12 @@ export interface NormalizedFederationConfig {
   name: string;
   exposes: Record<string, ExposeEntry>;
   shared: NormalizedSharedExternalsConfig;
+  /** In v5 each entry also carries its resolved package and config, replacing the two fields below. */
   sharedMappings: PathToImport;
+  /** Removed in v5: read the config from the `sharedMappings` entry. */
   sharedMappingsConfig: NormalizedSharedMappingConfigs;
-  // Every tsconfig `paths` key, selected or not; optional for configs built by hand.
-  sharedMappingKeys?: string[];
+  /** Removed in v5: read the package from the `sharedMappings` entry. */
+  sharedMappingPackages?: NormalizedSharedMappingPackages;
   skip: PreparedSkipList;
   chunks: boolean;
   externals: string[];

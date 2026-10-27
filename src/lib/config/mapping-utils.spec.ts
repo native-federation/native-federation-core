@@ -1,5 +1,11 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { mappingsFromWorkspace, pathsPackageOf, resolveMappingConfig } from './mapping-utils.js';
+import {
+  declaredPackageOf,
+  mappingPackageByImport,
+  mappingsFromWorkspace,
+  resolveMappingConfig,
+} from './mapping-utils.js';
+import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
 import { logger } from '../utils/logger.js';
 
 const BASE = { singleton: true, strictVersion: true };
@@ -59,6 +65,58 @@ describe('mappingsFromWorkspace', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('@other/x'));
   });
 
+  // A declaration is not a selection, so filter() does not have to cover it: one shared module
+  // can declare packages for remotes that select different libraries.
+  it('emits package declarations ahead of patches and the selection', () => {
+    const result = mappingsFromWorkspace(BASE)
+      .filter(['@org/ui'])
+      .patch(['@org/ui'], { pool: 'ui' })
+      .package('@org/lib')
+      .package('@org/data')
+      .get();
+
+    expect(result).toEqual([
+      { ...BASE, package: '@org/lib' },
+      { ...BASE, package: '@org/data' },
+      [['@org/ui'], { ...BASE, pool: 'ui' }],
+      [['@org/ui'], BASE],
+    ]);
+  });
+
+  it('merges the package config over the base config', () => {
+    expect(mappingsFromWorkspace(BASE).package('@org/lib', { pool: 'lib' }).get()[0]).toEqual({
+      ...BASE,
+      pool: 'lib',
+      package: '@org/lib',
+    });
+  });
+
+  // A declared package is always bundled as one, so a base build must not leak into it.
+  it('leaves the base build out of a package', () => {
+    const result = mappingsFromWorkspace({ ...BASE, build: 'separate' })
+      .package('@org/lib')
+      .get();
+
+    expect(result[0]).toEqual({ ...BASE, package: '@org/lib' });
+    expect(result[1]).toEqual([['*'], { ...BASE, build: 'separate' }]);
+  });
+
+  // The package's config applies to them, and a config here would contradict it.
+  it('emits a selected pattern under a declared package without a config', () => {
+    const result = mappingsFromWorkspace(BASE)
+      .filter(['@org/lib/*', '@org/ui'])
+      .package('@org/lib')
+      .get();
+
+    expect(result).toEqual([{ ...BASE, package: '@org/lib' }, '@org/lib/*', [['@org/ui'], BASE]]);
+  });
+
+  it('emits no base selection when every selected pattern is under a package', () => {
+    const result = mappingsFromWorkspace(BASE).filter(['@org/lib']).package('@org/lib').get();
+
+    expect(result).toEqual([{ ...BASE, package: '@org/lib' }, '@org/lib']);
+  });
+
   it('keeps a patch whose pattern falls under a wildcard filter', () => {
     const result = mappingsFromWorkspace(BASE)
       .filter(['@org/*'])
@@ -74,80 +132,126 @@ describe('mappingsFromWorkspace', () => {
 
 describe('resolveMappingConfig', () => {
   const cfg = (pool: string) => ({ singleton: true, strictVersion: true, pool });
+  const resolve = (
+    importName: string,
+    sharedMappingsConfig: NormalizedFederationConfig['sharedMappingsConfig'],
+    mappingVersion: boolean,
+    sharedMappingPackages?: NormalizedFederationConfig['sharedMappingPackages']
+  ) =>
+    resolveMappingConfig(importName, {
+      sharedMappingsConfig,
+      sharedMappingPackages,
+      features: { mappingVersion } as NormalizedFederationConfig['features'],
+    });
 
   // Falls back to the defaults rather than undefined, so callers never re-state them.
   it('returns the defaults when nothing matches', () => {
-    expect(resolveMappingConfig('@org/ui', { '@other/*': cfg('a') }, true)).toEqual({
+    expect(resolve('@org/ui', { '@other/*': cfg('a') }, true)).toEqual({
       singleton: true,
       strictVersion: true,
     });
   });
 
   it('tracks the mappingVersion flag in the fallback defaults', () => {
-    expect(resolveMappingConfig('@org/ui', {}, false)).toEqual({
+    expect(resolve('@org/ui', {}, false)).toEqual({
       singleton: true,
       strictVersion: false,
     });
   });
 
   it('matches an exact pattern', () => {
-    expect(resolveMappingConfig('@org/ui', { '@org/ui': cfg('a') }, true)).toEqual(cfg('a'));
+    expect(resolve('@org/ui', { '@org/ui': cfg('a') }, true)).toEqual(cfg('a'));
   });
 
   // The build sees resolved imports; the table is keyed by the pattern the user wrote.
   it('matches a resolved import against the wildcard pattern it came from', () => {
-    expect(resolveMappingConfig('@org/ui/button', { '@org/ui/*': cfg('a') }, true)).toEqual(cfg('a'));
+    expect(resolve('@org/ui/button', { '@org/ui/*': cfg('a') }, true)).toEqual(cfg('a'));
   });
 
   it("treats '*' as a catch-all", () => {
-    expect(resolveMappingConfig('@anything/at/all', { '*': cfg('a') }, true)).toEqual(cfg('a'));
+    expect(resolve('@anything/at/all', { '*': cfg('a') }, true)).toEqual(cfg('a'));
   });
 
   it('lets an exact pattern declared first beat a later wildcard', () => {
     const configs = { '@org/ui': cfg('exact'), '@org/*': cfg('wild') };
-    expect(resolveMappingConfig('@org/ui', configs, true)).toEqual(cfg('exact'));
+    expect(resolve('@org/ui', configs, true)).toEqual(cfg('exact'));
   });
 
   // Declaration order is the rule, not specificity — the builder relies on emitting patches first.
   it('lets a wildcard declared first beat a later exact pattern', () => {
     const configs = { '@org/*': cfg('wild'), '@org/ui': cfg('exact') };
-    expect(resolveMappingConfig('@org/ui', configs, true)).toEqual(cfg('wild'));
+    expect(resolve('@org/ui', configs, true)).toEqual(cfg('wild'));
+  });
+
+  // One config per declared package holds by construction: it goes ahead of every pattern.
+  it.each([['@org/lib'], ['@org/lib/testing'], ['@org/lib/a/b']])(
+    'gives %s the config of its declared package, ahead of every pattern',
+    importName => {
+      const configs = { '*': cfg('base'), '@org/lib/testing': cfg('patch') };
+      expect(resolve(importName, configs, true, { '@org/lib': cfg('pkg') })).toEqual(cfg('pkg'));
+    }
+  );
+
+  it("leaves an import that only shares the prefix's characters to the patterns", () => {
+    expect(resolve('@org/library', { '*': cfg('base') }, true, { '@org/lib': cfg('pkg') })).toEqual(
+      cfg('base')
+    );
+  });
+
+  it('gives an import the config of the longest declared package', () => {
+    const packages = { '@org/lib': cfg('outer'), '@org/lib/testing': cfg('inner') };
+    expect(resolve('@org/lib/testing/x', {}, true, packages)).toEqual(cfg('inner'));
+    expect(resolve('@org/lib/other', {}, true, packages)).toEqual(cfg('outer'));
+  });
+
+  // A pattern outside the prefix keeps its own config; only the imports under the prefix take the
+  // package's (AGENTS.md, mappingsFromWorkspace().package()).
+  it('gives a wildcard outside a declared package only the imports outside it', () => {
+    const packages = { '@org/ui': cfg('pkg') };
+    expect(resolve('@org/uikit', { '@org/ui*': cfg('wild') }, true, packages)).toEqual(cfg('wild'));
+    expect(resolve('@org/ui/button', { '@org/ui*': cfg('wild') }, true, packages)).toEqual(
+      cfg('pkg')
+    );
   });
 });
 
-// Fixtures are tsconfig `paths` keys as workspaces write them (core#198).
-describe('pathsPackageOf', () => {
+describe('declaredPackageOf', () => {
   it.each([
-    // [keys, import, package]
-    [['@org/lib', '@org/lib/*'], '@org/lib', '@org/lib'],
-    [['@org/lib', '@org/lib/*'], '@org/lib/testing', '@org/lib'],
-    [['@org/lib/*'], '@org/lib/testing', '@org/lib'],
-    // An explicit secondary key is its own package; whether it should join is a v5 question.
-    [['@org/lib/*', '@org/lib/testing'], '@org/lib/testing', '@org/lib/testing'],
-    [['@org/lib/*', '@org/lib/testing'], '@org/lib/other', '@org/lib'],
-    // #176's layout: one key per library, deeper than the name rule.
-    [['@shared/components/table'], '@shared/components/table', '@shared/components/table'],
-    [['@shared/components/*'], '@shared/components/table', '@shared/components'],
-    // A key coarser than the name rule leaves the name rule in charge.
-    [['@shared/*'], '@shared/components/table', '@shared/components'],
-    [['@a/*/index'], '@a/foo/index', '@a/foo'],
-    [['@org/ui-*'], '@org/ui-table', '@org/ui-table'],
-    [['@org/ui/x-*'], '@org/ui/x-table', '@org/ui'],
-    [['*'], '@org/x/y', '@org/x'],
-    [['libs/ui/*'], 'libs/ui/table', 'libs/ui'],
-    // The longest prefix wins, in either key order.
-    [['@org/*', '@org/ui/*'], '@org/ui/table/cell', '@org/ui'],
-    [['@org/ui/*', '@org/*'], '@org/ui/table/cell', '@org/ui'],
-    // No key matches: the name rule.
-    [['@org/lib'], '@other/x/y', '@other/x'],
-    [[], '@org/x/y', '@org/x'],
-  ])('reads %j for %s as %s', (keys, importName, expected) => {
-    expect(pathsPackageOf(importName, keys)).toBe(expected);
+    // [prefixes, import, package]
+    [['@org/lib'], '@org/lib', '@org/lib'],
+    [['@org/lib'], '@org/lib/testing', '@org/lib'],
+    [['@org/lib'], '@org/lib/a/b', '@org/lib'],
+    // '/'-aligned: a sibling that only shares the characters stays out.
+    [['@org/lib'], '@org/library', undefined],
+    // Finer than the name rule: #176's domain layout.
+    [['@events/evaluation/core'], '@events/evaluation/core/x', '@events/evaluation/core'],
+    [['@events/evaluation/core'], '@events/evaluation/other', undefined],
+    // The longest declaration wins, in either order.
+    [['@s/c', '@s/c/t'], '@s/c/t/sort', '@s/c/t'],
+    [['@s/c/t', '@s/c'], '@s/c/t/sort', '@s/c/t'],
+    [['@s/c', '@s/c/t'], '@s/c/u', '@s/c'],
+    [[], '@org/lib', undefined],
+  ])('reads %j for %s as %s', (prefixes, importName, expected) => {
+    expect(declaredPackageOf(importName, prefixes)).toBe(expected);
   });
+});
 
-  // `@a/b/c/index` starts with the prefix `@a/b/c/` and ends with the suffix `/index`, but only by
-  // sharing their '/'; TypeScript does not resolve it through the key, so neither does the package.
-  it('does not match a wildcard key whose prefix and suffix overlap', () => {
-    expect(pathsPackageOf('@a/b/c/index', ['@a/b/c/*/index'])).toBe('@a/b');
+describe('mappingPackageByImport', () => {
+  it('maps only the mappings under a declared package', () => {
+    const config = {
+      sharedMappings: {
+        '/libs/lib/index.ts': '@org/lib',
+        '/libs/lib/testing/index.ts': '@org/lib/testing',
+        '/libs/library/index.ts': '@org/library',
+      },
+      sharedMappingPackages: { '@org/lib': BASE },
+    } as unknown as NormalizedFederationConfig;
+
+    expect(mappingPackageByImport(config)).toEqual(
+      new Map([
+        ['@org/lib', '@org/lib'],
+        ['@org/lib/testing', '@org/lib'],
+      ])
+    );
   });
 });

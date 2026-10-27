@@ -1,7 +1,6 @@
 import type { SharedInfo, DenseSharedInfo } from '../../domain/core/federation-info.contract.js';
 import { CHUNK_PREFIX } from '../../domain/core/chunk.js';
 import { inferPackageFromSecondary } from '../../utils/normalize.js';
-import { formatDifference } from '../../utils/format-list.js';
 
 function isDense(entry: SharedInfo | DenseSharedInfo): entry is DenseSharedInfo {
   return 'entries' in entry;
@@ -19,11 +18,10 @@ function isFlatChunk(entry: SharedInfo): boolean {
  */
 export function densifyExternals(
   shared: Array<SharedInfo | DenseSharedInfo>,
-  pathsPackages: ReadonlyMap<string, string> = new Map()
+  declaredPackages: ReadonlyMap<string, string>
 ): Array<SharedInfo | DenseSharedInfo> {
   const result: Array<SharedInfo | DenseSharedInfo> = [];
   const groupIndex = new Map<string, number>();
-  const pathsRecords = new Map<string, { packageName: string; meta: object }>();
 
   for (const entry of shared) {
     if (isDense(entry)) {
@@ -38,26 +36,10 @@ export function densifyExternals(
     }
 
     const { outFileName, packageName, dev, ...meta } = entry;
-    const pathsPackage = pathsPackages.get(packageName);
-    const parent = pathsPackage ?? inferPackageFromSecondary(packageName);
+    // A declared package publishes one record: its entry points agree, checked before bundling.
+    const parent = declaredPackages.get(packageName) ?? inferPackageFromSecondary(packageName);
     // Denylist, so a field added to SharedInfo later splits groups instead of being dropped.
     const sig = JSON.stringify(meta, Object.keys(meta).sort());
-
-    // The config is checked before bundling; only a version read from package.json gets here.
-    if (pathsPackage !== undefined) {
-      const first = pathsRecords.get(pathsPackage);
-      const difference = first && formatDifference(first.meta, meta);
-      if (!first) {
-        pathsRecords.set(pathsPackage, { packageName, meta });
-      } else if (difference) {
-        throw new Error(
-          `Shared mappings '${first.packageName}' and '${packageName}' belong to tsconfig paths ` +
-            `package '${pathsPackage}' but publish different metadata (${difference}). A package ` +
-            `publishes one record: set one version on its mappings, or align the libraries' ` +
-            `package.json versions.`
-        );
-      }
-    }
 
     const key = parent + ' ' + sig;
 

@@ -433,19 +433,19 @@ describe('normalizeFederationOptionsCore', () => {
     vi.restoreAllMocks();
   });
 
-  // core#198: checked before any bundle runs, on the mappings that survived pruning.
-  it('throws for a build: paths package whose mappings are configured differently', async () => {
+  // Flat records leave a declared package's entry points to separate remotes at runtime.
+  it('fails a strict build that publishes a declared package without denseExternals', async () => {
     const io = createMemoryIo().setFile(CONFIG_PATH, '');
-    const paths = { singleton: true, strictVersion: false, build: 'paths' as const };
+    const base = makeConfig();
     const config = makeConfig({
-      sharedMappings: { '/ws/libs/lib/index.ts': '@org/lib', '/ws/libs/lib/x.ts': '@org/lib/x' },
-      sharedMappingsConfig: { '@org/lib': paths, '@org/lib/*': { ...paths, singleton: false } },
-      sharedMappingKeys: ['@org/lib', '@org/lib/*'],
+      sharedMappings: { '/ws/libs/lib/index.ts': '@org/lib' },
+      sharedMappingPackages: { '@org/lib': { singleton: true, strictVersion: false } },
+      features: { ...base.features, ignoreUnusedDeps: false, strictImports: true },
     });
 
     await expect(
       normalizeFederationOptionsCore({ io, loadConfig: loaderFor(config) }, baseOptions, cache)
-    ).rejects.toThrow(/configured differently \(singleton: true vs false\)/);
+    ).rejects.toThrow(/features.denseExternals is off/);
   });
 
   // angular-adapter#117: Nx reports workspaceRoot with the invoking shell's drive-letter

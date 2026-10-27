@@ -10,6 +10,11 @@ import type {
 } from '../domain/config/federation-config.contract.js';
 import { isInSkipList, prepareSkipList } from './default-skip-list.js';
 import { normalizeMappingConfig, withoutSkippedMappings } from './mapping-utils.js';
+import {
+  assertMappingPackagePrefixes,
+  assertNoConfigUnderMappingPackage,
+  warnUnmatchedMappingPackages,
+} from './validate-mappings.js';
 import { type PreparedSkipList } from '../domain/config/skip-list.contract.js';
 import type { ConfigBuilder } from '../domain/config/config-builders.contract.js';
 import type {
@@ -25,10 +30,17 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
   const chunks = config.chunks ?? true;
   const mappingVersion = config.features?.mappingVersion ?? true;
 
-  const { paths, configs, keys } = getRawMappedPaths(
+  const { paths, configs, keys, packages } = getRawMappedPaths(
     findMappingsTsConfig(),
     fromBuilder(config.sharedMappings)
   );
+  const prefixes = Object.keys(packages);
+  assertMappingPackagePrefixes(prefixes);
+  assertNoConfigUnderMappingPackage(
+    Object.keys(configs).filter(pattern => Object.keys(configs[pattern]!).length > 0),
+    prefixes
+  );
+  warnUnmatchedMappingPackages(prefixes, keys);
 
   const normalized: NormalizedFederationConfig = {
     $type: 'classic',
@@ -37,7 +49,6 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
     shared: normalizeShared(config, skip, chunks),
     sharedMappings: withoutSkippedMappings(paths, skip),
     sharedMappingsConfig: normalizeMappingConfigs(configs, mappingVersion),
-    sharedMappingKeys: keys,
     chunks,
     skip,
     externals: config.externals ?? [],
@@ -51,6 +62,9 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
       strictImports: config.features?.strictImports ?? false,
     },
     ...(config.shareScope && { shareScope: config.shareScope }),
+    ...(prefixes.length > 0 && {
+      sharedMappingPackages: normalizeMappingConfigs(packages, mappingVersion),
+    }),
   };
 
   return normalized;
@@ -93,13 +107,6 @@ function normalizeShared(
     const key = cur.replace(/\\/g, '/');
     const sharedConfig = shared[cur]!;
 
-    // An untyped config can still set it, and planSharedBundles would read it as 'package'.
-    if ((sharedConfig.build as string | undefined) === 'paths') {
-      throw new Error(
-        `Shared external '${cur}' sets build: 'paths', which only sharedMappings take: an npm package is named by its package.json.`
-      );
-    }
-
     if (!!sharedConfig.chunks && !sharedConfig.build && sharedConfig.chunks !== chunks) {
       logger.warn(
         `External '${cur}' has explicit chunk settings, consider switching build type to { build: 'package' }.`
@@ -136,21 +143,22 @@ function normalizeShared(
   return result;
 }
 
-const IGNORED_MAPPING_PROPS = ['platform', 'chunks', 'packageInfo'] as const;
+const MAPPING_BUILDS = new Set([undefined, 'separate', 'package']);
 
 function normalizeMappingConfigs(
   configs: SharedMappingConfigs,
   mappingVersion: boolean
 ): NormalizedSharedMappingConfigs {
   return Object.entries(configs).reduce((acc, [pattern, cfg]) => {
-    const ignored = IGNORED_MAPPING_PROPS.filter(prop => cfg[prop] !== undefined);
-    if (ignored.length > 0) {
-      logger.warn(
-        `Mapping '${pattern}' sets ${ignored.join(', ')}, which mapped paths do not honour. Ignored.`
+    if (!MAPPING_BUILDS.has(cfg.build)) {
+      throw new Error(
+        `Mapping '${pattern}' sets build: '${cfg.build}'; a mapping takes 'separate' or 'package'. ` +
+          `To bundle and publish a library's entry points as one package, declare it with ` +
+          `mappingsFromWorkspace().package('<library>').`
       );
     }
 
     acc[pattern] = normalizeMappingConfig(cfg, mappingVersion);
     return acc;
-  }, {} as NormalizedSharedMappingConfigs);
+  }, Object.create(null) as NormalizedSharedMappingConfigs);
 }

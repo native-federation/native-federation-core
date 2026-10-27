@@ -3,13 +3,13 @@ import type {
   NormalizedMappingConfig,
 } from '../../domain/config/federation-config.contract.js';
 import type { PathToImport } from '../../domain/utils/mapped-path.contract.js';
-import { pathsMappingPackages, resolveMappingConfig } from '../../config/mapping-utils.js';
+import { mappingPackageByImport, resolveMappingConfig } from '../../config/mapping-utils.js';
 import { inferPackageFromSecondary, normalizePackageName } from '../../utils/normalize.js';
 
 const DEFAULT_MAPPING_BUNDLE = 'mapping-bundle';
 // normalizePackageName never emits '-', so neither name can meet a `mapping-<name>` bundle.
 const SINGLE_ENTRY_BUNDLE = 'mapping-single-entry';
-const PATHS_BUNDLE_PREFIX = 'mapping-pkg-';
+const PACKAGE_BUNDLE_PREFIX = 'mapping-pkg-';
 
 export interface MappingBundlePlan {
   bundleName: string;
@@ -19,9 +19,9 @@ export interface MappingBundlePlan {
 
 /** Single source of truth for mapping -> bundle(name), the counterpart of `planSharedBundles`.
  *  'separate' gives one bundle per entry point, 'package' one per mapped package, so the
- *  expansions of a wildcard mapping stay together. 'paths' packages: AGENTS.md, Chunks. */
+ *  expansions of a wildcard mapping stay together. Declared packages: AGENTS.md, Chunks. */
 export function planMappingBundles(config: NormalizedFederationConfig): MappingBundlePlan[] {
-  const packages = pathsMappingPackages(config);
+  const packages = mappingPackageByImport(config);
   const entriesByBundle = new Map<string, PathToImport>();
   const entriesByPackage = new Map<string, PathToImport>();
 
@@ -31,11 +31,7 @@ export function planMappingBundles(config: NormalizedFederationConfig): MappingB
       addEntry(entriesByPackage, packageName, mappedPath, mappedImport);
       continue;
     }
-    const { build } = resolveMappingConfig(
-      mappedImport,
-      config.sharedMappingsConfig,
-      config.features.mappingVersion
-    );
+    const { build } = resolveMappingConfig(mappedImport, config);
     addEntry(entriesByBundle, bundleNameFor(build, mappedImport), mappedPath, mappedImport);
   }
 
@@ -44,10 +40,10 @@ export function planMappingBundles(config: NormalizedFederationConfig): MappingB
     chunks: config.chunks,
     entries,
   }));
-  return [...plans, ...planPathsPackages(entriesByPackage, config.chunks)];
+  return [...plans, ...planDeclaredPackages(entriesByPackage, config.chunks)];
 }
 
-function planPathsPackages(
+function planDeclaredPackages(
   entriesByPackage: Map<string, PathToImport>,
   chunks: boolean
 ): MappingBundlePlan[] {
@@ -61,11 +57,11 @@ function planPathsPackages(
       continue;
     }
 
-    const bundleName = PATHS_BUNDLE_PREFIX + normalizePackageName(packageName);
+    const bundleName = PACKAGE_BUNDLE_PREFIX + normalizePackageName(packageName);
     const claimant = claimedBy.get(bundleName);
     if (claimant) {
       throw new Error(
-        `The tsconfig paths packages '${claimant}' and '${packageName}' would both be bundled as '${bundleName}'. Rename one of their keys.`
+        `The declared packages '${claimant}' and '${packageName}' would both be bundled as '${bundleName}'. Change one of the .package() prefixes.`
       );
     }
     claimedBy.set(bundleName, packageName);
@@ -87,7 +83,7 @@ function addEntry(
   groups.set(key, entries);
 }
 
-// 'paths' mappings never get here: they are planned by package above.
+// Mappings under a declared package never get here: they are planned by package above.
 function bundleNameFor(build: NormalizedMappingConfig['build'], mappedImport: string): string {
   if (!build) return DEFAULT_MAPPING_BUNDLE;
   return `mapping-${normalizePackageName(

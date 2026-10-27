@@ -21,4 +21,5 @@ export interface PackageJsonExternalsBuilder extends ConfigBuilder<ResolvedShare
 export interface WorkspaceMappingsBuilder extends ConfigBuilder<SharedMappingEntry[]> {
   filter(patterns: string[]): WorkspaceMappingsBuilder;
   patch(patterns: string[], cfg: Partial<MappingConfigInput>): WorkspaceMappingsBuilder;
+  package(prefix: string, cfg?: Omit<MappingConfigInput, 'build'>): WorkspaceMappingsBuilder;
 }

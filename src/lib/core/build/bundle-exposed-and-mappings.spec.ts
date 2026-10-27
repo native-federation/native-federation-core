@@ -1,11 +1,8 @@
-import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import * as fs from 'fs';
-import * as os from 'os';
+import { describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
 
 import {
   bundleExposedAndMappingsCore,
-  getMappingVersion,
   getMappingVersionCore,
 } from './bundle-exposed-and-mappings.js';
 import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
@@ -19,93 +16,26 @@ import type {
 } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
 
-describe('getMappingVersion', () => {
-  let tmpRoot: string;
-
-  beforeEach(() => {
-    tmpRoot = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'mapping-version-'));
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpRoot, { recursive: true, force: true });
-    vi.restoreAllMocks();
-  });
-
-  function write(relPath: string, contents: string) {
-    const full = path.join(tmpRoot, relPath);
-    fs.mkdirSync(path.dirname(full), { recursive: true });
-    fs.writeFileSync(full, contents);
-    return full;
-  }
-
-  it('returns version from the nearest package.json walking up from a deep entry', () => {
-    write('libs/shared/package.json', JSON.stringify({ version: '1.2.3' }));
-    const entry = write('libs/shared/src/lib/index.ts', '');
-
-    expect(getMappingVersion(entry, tmpRoot)).toBe('1.2.3');
-  });
-
-  it('returns version when package.json sits next to the entry file', () => {
-    write('libs/shared/package.json', JSON.stringify({ version: '4.5.6' }));
-    const entry = write('libs/shared/index.ts', '');
-
-    expect(getMappingVersion(entry, tmpRoot)).toBe('4.5.6');
-  });
-
-  it('falls back to the workspace package.json when no closer one is found', () => {
-    write('package.json', JSON.stringify({ version: '9.9.9' }));
-    const entry = write('libs/shared/src/lib/index.ts', '');
-
-    expect(getMappingVersion(entry, tmpRoot)).toBe('9.9.9');
-  });
-
-  it('skips a package.json without a version and keeps walking up', () => {
-    write('libs/shared/package.json', JSON.stringify({ name: 'shared' }));
-    write('package.json', JSON.stringify({ version: '7.0.0' }));
-    const entry = write('libs/shared/src/index.ts', '');
-
-    expect(getMappingVersion(entry, tmpRoot)).toBe('7.0.0');
-  });
-
-  it('returns "" and warns when a package.json is malformed', () => {
-    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-    write('libs/shared/package.json', '{ not json');
-    const entry = write('libs/shared/src/index.ts', '');
-
-    expect(getMappingVersion(entry, tmpRoot)).toBe('');
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to parse'));
-  });
-
-  it('returns "" when no package.json exists at or above the entry within the workspace', () => {
-    const entry = write('libs/shared/src/index.ts', '');
-
-    expect(getMappingVersion(entry, tmpRoot)).toBe('');
-  });
-
-  it('does not walk above workspaceRoot', () => {
-    const outerVersion = JSON.stringify({ version: 'should-not-be-used' });
-    const outer = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'mapping-version-outer-'));
-    fs.writeFileSync(path.join(outer, 'package.json'), outerVersion);
-    const innerRoot = path.join(outer, 'workspace');
-    fs.mkdirSync(innerRoot);
-    const entry = path.join(innerRoot, 'libs/shared/src/index.ts');
-    fs.mkdirSync(path.dirname(entry), { recursive: true });
-    fs.writeFileSync(entry, '');
-
-    try {
-      expect(getMappingVersion(entry, innerRoot)).toBe('');
-    } finally {
-      fs.rmSync(outer, { recursive: true, force: true });
-    }
-  });
-});
-
 describe('getMappingVersionCore', () => {
   it('returns the version from the nearest package.json walking up', () => {
     const io = createMemoryIo()
       .setFile('/ws/libs/shared/package.json', JSON.stringify({ version: '1.2.3' }))
       .setFile('/ws/libs/shared/src/lib/index.ts', '');
     expect(getMappingVersionCore(io, '/ws/libs/shared/src/lib/index.ts', '/ws')).toBe('1.2.3');
+  });
+
+  it('returns the version when package.json sits next to the entry file', () => {
+    const io = createMemoryIo()
+      .setFile('/ws/libs/shared/package.json', JSON.stringify({ version: '4.5.6' }))
+      .setFile('/ws/libs/shared/index.ts', '');
+    expect(getMappingVersionCore(io, '/ws/libs/shared/index.ts', '/ws')).toBe('4.5.6');
+  });
+
+  it('falls back to the workspace package.json when no closer one is found', () => {
+    const io = createMemoryIo()
+      .setFile('/ws/package.json', JSON.stringify({ version: '9.9.9' }))
+      .setFile('/ws/libs/shared/src/lib/index.ts', '');
+    expect(getMappingVersionCore(io, '/ws/libs/shared/src/lib/index.ts', '/ws')).toBe('9.9.9');
   });
 
   it('skips a package.json without a version and keeps walking up', () => {
@@ -204,8 +134,8 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     expect(adapter.calls.build.map(c => c.name)).toEqual(['mapping-bundle', 'mapping-or-exposed']);
   });
 
-  // Pins what each bundle's setup receives before mapping plans choose their own chunks
-  // (core#198): a config without build: 'paths' must keep exactly these calls.
+  // Pins what each bundle's setup receives now that mapping plans choose their own chunks
+  // (core#198): a config without declared packages must keep exactly these calls.
   it.each([true, false])(
     'sets up every bundle with the global chunks setting (%s)',
     async chunks => {
@@ -1109,9 +1039,9 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
   });
 });
 
-// Pins the mapping output of every existing build mode before `build: 'paths'` (core#198) lands:
-// a config without it must keep these bundles, `bundle` fields and published records.
-describe('mapping output without build: paths', () => {
+// Pins the mapping output of every build mode without declared packages (core#198): such a config
+// must keep these bundles, `bundle` fields and published records.
+describe('mapping output without declared packages', () => {
   const cfg = { singleton: true, strictVersion: false };
   // Shaped like discussion #176: domain-named libraries that the name rule groups by their first
   // two segments, a library next to its own secondary, one mapping in each other build mode, and a
@@ -1248,9 +1178,10 @@ describe('mapping output without build: paths', () => {
   });
 });
 
-// core#198, end to end through bundling and remoteEntry.json assembly.
-describe("mapping output with build: 'paths'", () => {
-  const paths = { singleton: true, strictVersion: false, build: 'paths' as const };
+// End to end through bundling and remoteEntry.json assembly; `@org/lib` is #213's Nx layout, an
+// exact tsconfig key per entry point joined by one declaration.
+describe('mapping output with declared packages', () => {
+  const pkg: NormalizedMappingConfig = { singleton: true, strictVersion: false };
   const config = (denseExternals: boolean, denseChunking: boolean) =>
     makeConfig({
       chunks: true,
@@ -1259,17 +1190,14 @@ describe("mapping output with build: 'paths'", () => {
         './libs/components/collapse': '@shared/components/collapse',
         './libs/lib': '@org/lib',
         './libs/lib/testing': '@org/lib/testing',
-        './libs/other': '@other/a',
+        './libs/library': '@org/library',
       },
-      sharedMappingsConfig: { '@shared/*': paths, '@org/lib': paths, '@org/lib/*': paths },
-      // One key per #176-style library, and a library with its secondaries under `X/*`.
-      sharedMappingKeys: [
-        '@shared/components/table',
-        '@shared/components/collapse',
-        '@org/lib',
-        '@org/lib/*',
-        '@other/a',
-      ],
+      sharedMappingsConfig: { '*': pkg },
+      sharedMappingPackages: {
+        '@shared/components/table': pkg,
+        '@shared/components/collapse': pkg,
+        '@org/lib': pkg,
+      },
       features: { ...makeConfig().features, denseExternals, denseChunking },
     });
 
@@ -1301,7 +1229,7 @@ describe("mapping output with build: 'paths'", () => {
           c.options.entryPoints.map(ep => ep.outName),
         ])
       ).toEqual([
-        ['mapping-bundle', true, ['_other_a.js']],
+        ['mapping-bundle', true, ['_org_library.js']],
         [
           'mapping-single-entry',
           false,
@@ -1313,12 +1241,12 @@ describe("mapping output with build: 'paths'", () => {
   );
 
   it.each([false, true])(
-    'publishes dense records under the paths package (denseChunking: %s)',
+    'publishes one dense record per declared package (denseChunking: %s)',
     async denseChunking => {
       const { info } = await build(true, denseChunking);
 
       expect(info.shared.map(s => ('entries' in s ? [s.packageName, s.entries] : s))).toEqual([
-        ['@other/a', { '@other/a': '_other_a.js' }],
+        ['@org/library', { '@org/library': '_org_library.js' }],
         ['@shared/components/table', { '@shared/components/table': '_shared_components_table.js' }],
         [
           '@shared/components/collapse',
@@ -1329,16 +1257,66 @@ describe("mapping output with build: 'paths'", () => {
     }
   );
 
-  // A flat record carries no package group, so only the bundling follows the paths packages.
+  // A flat record carries no package group, so only the bundling follows the declarations
+  // (normalize warns about it).
   it('keeps flat records per mapping', async () => {
     const { info } = await build(false, true);
 
     expect(info.shared.map(s => [s.packageName, 'bundle' in s && s.bundle])).toEqual([
-      ['@other/a', 'mapping-bundle'],
+      ['@org/library', 'mapping-bundle'],
       ['@shared/components/table', 'mapping-single-entry'],
       ['@shared/components/collapse', 'mapping-single-entry'],
       ['@org/lib', 'mapping-pkg-org_lib'],
       ['@org/lib/testing', 'mapping-pkg-org_lib'],
     ]);
+  });
+
+  // The config is one per package, but each entry point reads its version from its own
+  // package.json; a mismatch has to fail before anything is written.
+  describe('versions', () => {
+    async function buildVersions(testingPackageJson: string) {
+      const io = createMemoryIo()
+        .setFile('/ws/libs/lib/package.json', JSON.stringify({ version: '1.0.0' }))
+        .setFile('/ws/libs/lib/index.ts', '')
+        .setFile('/ws/libs/lib/testing/package.json', testingPackageJson)
+        .setFile('/ws/libs/lib/testing/index.ts', '');
+      const adapter = createFakeBuildAdapter({ io });
+      const cfg = makeConfig({
+        sharedMappings: {
+          '/ws/libs/lib/index.ts': '@org/lib',
+          '/ws/libs/lib/testing/index.ts': '@org/lib/testing',
+        },
+        sharedMappingPackages: { '@org/lib': pkg },
+        features: { ...makeConfig().features, mappingVersion: true },
+      });
+      const fedOptions = makeFedOptions({ dev: false, workspaceRoot: '/ws' });
+      const run = bundleExposedAndMappingsCore({ adapter, io }, cfg, fedOptions, []);
+      return { adapter, run };
+    }
+
+    it('rejects a declared package whose entry points read different versions', async () => {
+      const { adapter, run } = await buildVersions(JSON.stringify({ version: '2.0.0' }));
+
+      await expect(run).rejects.toThrow(
+        /'@org\/lib' and '@org\/lib\/testing' belong to declared package '@org\/lib' but publish different metadata \(requiredVersion: "~1\.0\.0" vs "~2\.0\.0", version: "1\.0\.0" vs "2\.0\.0"\)/
+      );
+      expect(adapter.calls.setup).toEqual([]);
+    });
+
+    it('builds a declared package whose entry points agree', async () => {
+      const { run } = await buildVersions(JSON.stringify({ version: '1.0.0' }));
+      await expect(run).resolves.toBeDefined();
+    });
+
+    // The check and the published record share one read of each package.json.
+    it('warns once about a malformed package.json', async () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const { run } = await buildVersions('{ not json');
+      await run.catch(() => undefined);
+
+      expect(warn.mock.calls.filter(([m]) => String(m).includes('Failed to parse'))).toHaveLength(
+        1
+      );
+    });
   });
 });

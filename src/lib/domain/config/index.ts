@@ -16,5 +16,6 @@ export type {
   FederationConfig,
   MappingConfigInput,
   SharedMappingEntry,
+  SharedMappingPackageEntry,
 } from './federation-config.contract.js';
 export type { PreparedSkipList, SkipFn, SkipList, SkipListEntry } from './skip-list.contract.js';
