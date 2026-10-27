@@ -312,7 +312,8 @@ export function createMappingImportResolver(
   ): void => {
     if (!mapping) return;
 
-    // Marked before the verdict: esbuild re-resolves the whole graph, and the answer is fixed.
+    // Marked before the verdict: every importer of the target asks again within a build, and the
+    // answer does not change until reset().
     const key = `${target}\0${mapping.importName}`;
     if (warned.has(key)) return;
     warned.add(key);

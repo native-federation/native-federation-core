@@ -32,8 +32,11 @@ This package is the low-level builder. Most apps use it through an adapter:
 ## Install
 
 ```bash
-npm i @softarc/native-federation
+npm i @softarc/native-federation @softarc/native-federation-esbuild esbuild
 ```
+
+The usage below builds with esbuild. Core does not install a bundler, so install the one your build
+script imports next to its adapter.
 
 ## Usage
 

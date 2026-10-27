@@ -418,8 +418,8 @@ describe('removeUnusedDeps', () => {
     });
   });
 
-  // esbuild keeps every subpath of an external verbatim and the import map has no key for it, so
-  // the warning is about what remoteEntry.json publishes, not about what reachability found.
+  // An external covers its subpaths, so the import stays bare and the import map has no key for
+  // it: the warning is about what remoteEntry.json publishes, not about what reachability found.
   describe('subpath-of-a-published-mapping warning', () => {
     const subpath = /a subpath of the shared mapping '@org\/ui'/;
     const mappingImports = new Map([['@org/ui/button.js', 'libs/feature/index.ts']]);

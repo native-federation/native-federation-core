@@ -20,9 +20,6 @@ importers:
       es-module-lexer:
         specifier: ^2.3.2
         version: 2.3.2
-      esbuild:
-        specifier: ^0.28.0
-        version: 0.28.2
       tinyglobby:
         specifier: ^0.2.17
         version: 0.2.17
@@ -42,6 +39,9 @@ importers:
       '@vitest/ui':
         specifier: ^4.1.11
         version: 4.1.12(vitest@4.1.12)
+      esbuild:
+        specifier: ^0.28.0
+        version: 0.28.2
       eslint:
         specifier: ^10.10.0
         version: 10.13.0(jiti@2.7.0)(supports-color@7.2.0)

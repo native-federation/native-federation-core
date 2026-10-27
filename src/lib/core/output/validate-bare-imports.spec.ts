@@ -224,10 +224,18 @@ describe('findUnresolvedImportsCore', () => {
     expect(result.map(r => r.specifier)).toEqual(['@host/sdk-extra']);
   });
 
-  // Captured esbuild 0.28.2 output: hand-written fixtures are not minified.
-  it('reads real minified esbuild output, re-exports and dynamic imports included', () => {
-    const bundle =
-      'export*from"@angular/common/http";import{a as e}from"@angular/common/testing";import"@angular/common";var o=()=>import("@angular/common/locales/de");export{e as a,o as l};';
+  // Output captured once per bundler from the same entry: hand-written fixtures are not minified,
+  // and Rolldown writes the dynamic import as a backtick literal.
+  it.each([
+    [
+      'esbuild 0.28.2',
+      'export*from"@angular/common/http";import{a as e}from"@angular/common/testing";import"@angular/common";var o=()=>import("@angular/common/locales/de");export{e as a,o as l};',
+    ],
+    [
+      'rolldown 1.2.14',
+      'import{a as e}from"@angular/common/testing";import"@angular/common";export*from"@angular/common/http";const t=()=>import(`@angular/common/locales/de`);export{e as a,t as l};',
+    ],
+  ])('reads real minified %s output, re-exports and dynamic imports included', (_, bundle) => {
     const io = createMemoryIo().setFile(out('main.js'), bundle);
 
     const result = unresolvedImports(
@@ -243,6 +251,25 @@ describe('findUnresolvedImportsCore', () => {
       '@angular/common/locales/de',
       '@angular/common/testing',
     ]);
+  });
+
+  // A documented limitation (AGENTS.md, "Unresolvable bare imports"): only ESM imports are read.
+  // A bundler's require shim keeps a CommonJS require of an external as a call the lexer never
+  // sees, so this pins it: reporting it has to be a deliberate change.
+  it('does not report a CommonJS require of an external', () => {
+    const bundle =
+      'var e=__require("@angular/common/testing");import"@angular/common";export{e as a};';
+    const io = createMemoryIo().setFile(out('main.js'), bundle);
+
+    const result = unresolvedImports(
+      io,
+      OUT,
+      browser('main.js'),
+      makeConfig({ shared: { '@angular/common': ext() } }),
+      info({ shared: [shared('@angular/common', 'common.js')] })
+    );
+
+    expect(result).toEqual([]);
   });
 
   it('accepts dense chunks and chunks published as externals', () => {

@@ -70,8 +70,8 @@ export function getExternalImportsCore(io: FileReaderPort, entryFilePath: string
         handleSpecifier(node.arguments[0].text, fromFile);
       }
 
-      // esbuild keeps a lazily imported subpath of a shared package external, so pruning it
-      // leaves a bare import the import map cannot resolve (core#168).
+      // An external covers its subpaths, so a lazy import of one stays bare, and pruning it
+      // leaves an import the import map cannot resolve (core#168).
       if (
         ts.isCallExpression(node) &&
         node.expression.kind === ts.SyntaxKind.ImportKeyword &&
