@@ -1,6 +1,5 @@
 import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
-import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
-import { declaredPackageOf, mappingPackageByImport } from './mapping-utils.js';
+import { declaredPackageOf } from './mapping-utils.js';
 import { matchesExternal, parseWildcard } from '../utils/path-patterns.js';
 import { logger } from '../utils/logger.js';
 import { inferPackageFromSecondary } from '../utils/normalize.js';
@@ -145,20 +144,4 @@ function keyReaches(key: string, prefix: string): boolean {
   return (
     literal.length > 0 && (literal.startsWith(prefix + '/') || (prefix + '/').startsWith(literal))
   );
-}
-
-// Flat records keep every entry point its own external, so a host can still take a package's entry
-// points from different remotes and evaluate the code they share twice.
-export function warnMappingPackagesWithoutDenseExternals(config: NormalizedFederationConfig): void {
-  if (config.features.denseExternals) return;
-  const published = new Set(mappingPackageByImport(config).values());
-  if (published.size === 0) return;
-
-  const message =
-    `Shared mapping packages ${formatList([...published], MAX_LISTED)} ` +
-    `are bundled as packages but published entry point by entry point, because ` +
-    `features.denseExternals is off: a host can load them from different remotes and evaluate ` +
-    `their shared code twice. Enable denseExternals.`;
-  if (config.features.strictImports) throw new Error(message);
-  logger.warn(message);
 }

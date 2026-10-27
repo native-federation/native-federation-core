@@ -34,7 +34,8 @@ import {
 import { isScript } from '../../utils/script-file.js';
 
 // Shared mappings and exposed modules build separately so the bundler cannot factor one chunk out
-// of both: a chunk spanning them is reached through two import trails and evaluated twice.
+// of both: the exposed module would keep this build's copy while the import map may serve the
+// mapping from another remote, with a copy of its own.
 // The exposed build's name is hard-coded in the orchestrator, which registers it for every remote.
 const EXPOSED_BUNDLE = 'mapping-or-exposed';
 
@@ -150,7 +151,7 @@ export async function bundleExposedAndMappingsCore(
     );
   };
 
-  const dense = config.chunks && config.features.denseChunking;
+  const isDense = (chunks: boolean) => chunks && config.features.denseChunking;
   const exportedChunks: ChunkInfo = {};
   const written: string[] = [];
 
@@ -158,7 +159,8 @@ export async function bundleExposedAndMappingsCore(
   const collectBundleOutputs = (
     bundleName: string,
     resultMap: Record<string, string>,
-    entries: string[]
+    entries: string[],
+    dense: boolean
   ) => {
     const { files, chunks } = finalizeBundleOutputs(io, resultMap, entries, {
       dense,
@@ -186,12 +188,12 @@ export async function bundleExposedAndMappingsCore(
         records.get(item.fileName)!,
         fedOptions
       );
-      if (dense) mapping.bundle = plan.bundleName;
+      if (isDense(plan.chunks)) mapping.bundle = plan.bundleName;
       sharedResult.push(mapping);
       files.push(distEntryFile);
     }
 
-    collectBundleOutputs(plan.bundleName, results, files);
+    collectBundleOutputs(plan.bundleName, results, files, isDense(plan.chunks));
     logger.measure(start, `Bundling '${plan.bundleName}' shared mappings`);
   }
 
@@ -219,7 +221,7 @@ export async function bundleExposedAndMappingsCore(
     exposedFiles.push(distEntryFile);
   }
 
-  collectBundleOutputs(EXPOSED_BUNDLE, exposedResults, exposedFiles);
+  collectBundleOutputs(EXPOSED_BUNDLE, exposedResults, exposedFiles, isDense(config.chunks));
   if (exposes.length > 0) logger.measure(exposedStart, 'Bundling exposed modules');
 
   const outputPaths = [...new Set(written)];

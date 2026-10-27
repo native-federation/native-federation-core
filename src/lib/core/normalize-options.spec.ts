@@ -433,21 +433,6 @@ describe('normalizeFederationOptionsCore', () => {
     vi.restoreAllMocks();
   });
 
-  // Flat records leave a declared package's entry points to separate remotes at runtime.
-  it('fails a strict build that publishes a declared package without denseExternals', async () => {
-    const io = createMemoryIo().setFile(CONFIG_PATH, '');
-    const base = makeConfig();
-    const config = makeConfig({
-      sharedMappings: { '/ws/libs/lib/index.ts': '@org/lib' },
-      sharedMappingPackages: { '@org/lib': { singleton: true, strictVersion: false } },
-      features: { ...base.features, ignoreUnusedDeps: false, strictImports: true },
-    });
-
-    await expect(
-      normalizeFederationOptionsCore({ io, loadConfig: loaderFor(config) }, baseOptions, cache)
-    ).rejects.toThrow(/features.denseExternals is off/);
-  });
-
   // angular-adapter#117: Nx reports workspaceRoot with the invoking shell's drive-letter
   // case, while the sharedMappings keys descend from cwd(). Every mapping then compares
   // unequal, gets classified unused, and the build silently ships without its workspace

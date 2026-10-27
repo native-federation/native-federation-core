@@ -3,6 +3,7 @@ import {
   declaredPackageOf,
   mappingPackageByImport,
   mappingsFromWorkspace,
+  normalizeMappingConfig,
   resolveMappingConfig,
 } from './mapping-utils.js';
 import type { NormalizedFederationConfig } from '../domain/config/federation-config.contract.js';
@@ -84,9 +85,12 @@ describe('mappingsFromWorkspace', () => {
   });
 
   it('merges the package config over the base config', () => {
-    expect(mappingsFromWorkspace(BASE).package('@org/lib', { pool: 'lib' }).get()[0]).toEqual({
+    expect(
+      mappingsFromWorkspace(BASE).package('@org/lib', { pool: 'lib', chunks: false }).get()[0]
+    ).toEqual({
       ...BASE,
       pool: 'lib',
+      chunks: false,
       package: '@org/lib',
     });
   });
@@ -127,6 +131,14 @@ describe('mappingsFromWorkspace', () => {
       [['@org/ui/*'], { singleton: false, strictVersion: true }],
       [['@org/*'], BASE],
     ]);
+  });
+});
+
+// An absent chunks is what lets the planner fall back to the global value.
+describe('normalizeMappingConfig', () => {
+  it('keeps an explicit chunks and leaves an absent one out', () => {
+    expect(normalizeMappingConfig({ chunks: false }, false)).toMatchObject({ chunks: false });
+    expect(normalizeMappingConfig({}, false)).not.toHaveProperty('chunks');
   });
 });
 

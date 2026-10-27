@@ -134,8 +134,8 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     expect(adapter.calls.build.map(c => c.name)).toEqual(['mapping-bundle', 'mapping-or-exposed']);
   });
 
-  // Pins what each bundle's setup receives now that mapping plans choose their own chunks
-  // (core#198): a config without declared packages must keep exactly these calls.
+  // Pins what each bundle's setup receives when no mapping sets chunks: the global value, for
+  // every bundle.
   it.each([true, false])(
     'sets up every bundle with the global chunks setting (%s)',
     async chunks => {
@@ -655,6 +655,64 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
       expect.objectContaining({ packageName: '@org/a', bundle: 'mapping-org_a' }),
       expect.objectContaining({ packageName: '@org/b', bundle: 'mapping-bundle' }),
     ]);
+  });
+
+  it('sets up a mapping bundle with its own chunks and the exposed bundle with the global', async () => {
+    const config = makeConfig({
+      chunks: true,
+      exposes: { './Comp': { file: './src/comp.ts' } },
+      sharedMappings: { './libs/a': '@org/a', './libs/b': '@org/b' },
+      sharedMappingsConfig: {
+        '@org/a': { singleton: true, strictVersion: false, build: 'separate', chunks: false },
+      },
+    });
+    const adapter = createFakeBuildAdapter();
+
+    await bundleExposedAndMappingsCore({ adapter }, config, makeFedOptions(), []);
+
+    expect(adapter.calls.setup.map(c => [c.name, c.options.chunks])).toEqual([
+      ['mapping-org_a', false],
+      ['mapping-bundle', true],
+      ['mapping-or-exposed', true],
+    ]);
+  });
+
+  // Dense chunking follows each bundle's own chunks, so a mapping that splits while the global
+  // setting does not still publishes its chunks by name.
+  it('publishes the chunks of a mapping that splits when the global setting does not', async () => {
+    const io = createMemoryIo();
+    const config = makeConfig({
+      exposes: { './Comp': { file: './src/comp.ts' } },
+      sharedMappings: { './libs/foo': 'foo' },
+      sharedMappingsConfig: { foo: { singleton: true, strictVersion: false, chunks: true } },
+      chunks: false,
+      features: { ...makeConfig().features, denseChunking: true },
+    });
+    const adapter = createFakeBuildAdapter({
+      results: name => {
+        if (name !== 'mapping-bundle') {
+          io.setFile('/ws/dist/Comp.js', 'export {};\n');
+          return [{ fileName: '/ws/dist/Comp.js' }];
+        }
+        io.setFile('/ws/dist/foo.js', "export * from './chunk-AAAAAAAA.js';\n");
+        io.setFile('/ws/dist/chunk-AAAAAAAA.js', 'export const m = 1;\n');
+        return [{ fileName: '/ws/dist/foo.js' }, { fileName: '/ws/dist/chunk-AAAAAAAA.js' }];
+      },
+    });
+
+    const result = await bundleExposedAndMappingsCore(
+      { adapter, io },
+      config,
+      makeFedOptions(),
+      []
+    );
+
+    expect(Object.keys(result.chunks!)).toEqual(['mapping-bundle']);
+    expect(result.chunks!['mapping-bundle']).toEqual([
+      expect.stringMatching(/^chunk-[A-Z2-7]{8}\.js$/),
+    ]);
+    expect(io.readText('/ws/dist/foo.js')).toMatch(/from '@nf-internal\/chunk-[A-Z2-7]{8}'/);
+    expect(result.mappings[0]).toMatchObject({ packageName: 'foo', bundle: 'mapping-bundle' });
   });
 
   it('keeps a mapping chunk and an exposed chunk in separate bundles', async () => {
@@ -1218,7 +1276,7 @@ describe('mapping output with declared packages', () => {
   ];
 
   it.each(dense)(
-    'bundles each package on its own (denseExternals: %s, denseChunking: %s)',
+    'bundles declared packages with the other mappings (denseExternals: %s, denseChunking: %s)',
     async (dx, dc) => {
       const { adapter } = await build(dx, dc);
 
@@ -1229,13 +1287,17 @@ describe('mapping output with declared packages', () => {
           c.options.entryPoints.map(ep => ep.outName),
         ])
       ).toEqual([
-        ['mapping-bundle', true, ['_org_library.js']],
         [
-          'mapping-single-entry',
-          false,
-          ['_shared_components_table.js', '_shared_components_collapse.js'],
+          'mapping-bundle',
+          true,
+          [
+            '_shared_components_table.js',
+            '_shared_components_collapse.js',
+            '_org_lib.js',
+            '_org_lib_testing.js',
+            '_org_library.js',
+          ],
         ],
-        ['mapping-pkg-org_lib', true, ['_org_lib.js', '_org_lib_testing.js']],
       ]);
     }
   );
@@ -1246,28 +1308,27 @@ describe('mapping output with declared packages', () => {
       const { info } = await build(true, denseChunking);
 
       expect(info.shared.map(s => ('entries' in s ? [s.packageName, s.entries] : s))).toEqual([
-        ['@org/library', { '@org/library': '_org_library.js' }],
         ['@shared/components/table', { '@shared/components/table': '_shared_components_table.js' }],
         [
           '@shared/components/collapse',
           { '@shared/components/collapse': '_shared_components_collapse.js' },
         ],
         ['@org/lib', { '@org/lib': '_org_lib.js', '@org/lib/testing': '_org_lib_testing.js' }],
+        ['@org/library', { '@org/library': '_org_library.js' }],
       ]);
     }
   );
 
-  // A flat record carries no package group, so only the bundling follows the declarations
-  // (normalize warns about it).
+  // A flat record carries no package group (normalize warns about it).
   it('keeps flat records per mapping', async () => {
     const { info } = await build(false, true);
 
     expect(info.shared.map(s => [s.packageName, 'bundle' in s && s.bundle])).toEqual([
+      ['@shared/components/table', 'mapping-bundle'],
+      ['@shared/components/collapse', 'mapping-bundle'],
+      ['@org/lib', 'mapping-bundle'],
+      ['@org/lib/testing', 'mapping-bundle'],
       ['@org/library', 'mapping-bundle'],
-      ['@shared/components/table', 'mapping-single-entry'],
-      ['@shared/components/collapse', 'mapping-single-entry'],
-      ['@org/lib', 'mapping-pkg-org_lib'],
-      ['@org/lib/testing', 'mapping-pkg-org_lib'],
     ]);
   });
 

@@ -3,13 +3,10 @@ import type {
   NormalizedMappingConfig,
 } from '../../domain/config/federation-config.contract.js';
 import type { PathToImport } from '../../domain/utils/mapped-path.contract.js';
-import { mappingPackageByImport, resolveMappingConfig } from '../../config/mapping-utils.js';
+import { resolveMappingConfig } from '../../config/mapping-utils.js';
 import { inferPackageFromSecondary, normalizePackageName } from '../../utils/normalize.js';
 
 const DEFAULT_MAPPING_BUNDLE = 'mapping-bundle';
-// normalizePackageName never emits '-', so neither name can meet a `mapping-<name>` bundle.
-const SINGLE_ENTRY_BUNDLE = 'mapping-single-entry';
-const PACKAGE_BUNDLE_PREFIX = 'mapping-pkg-';
 
 export interface MappingBundlePlan {
   bundleName: string;
@@ -17,73 +14,52 @@ export interface MappingBundlePlan {
   entries: PathToImport;
 }
 
+interface MappingGroup {
+  entries: PathToImport;
+  chunks?: { value: boolean; setBy: string };
+}
+
 /** Single source of truth for mapping -> bundle(name), the counterpart of `planSharedBundles`.
  *  'separate' gives one bundle per entry point, 'package' one per mapped package, so the
- *  expansions of a wildcard mapping stay together. Declared packages: AGENTS.md, Chunks. */
+ *  expansions of a wildcard mapping stay together. A declared package selects no bundle. */
 export function planMappingBundles(config: NormalizedFederationConfig): MappingBundlePlan[] {
-  const packages = mappingPackageByImport(config);
-  const entriesByBundle = new Map<string, PathToImport>();
-  const entriesByPackage = new Map<string, PathToImport>();
+  const groups = new Map<string, MappingGroup>();
 
   for (const [mappedPath, mappedImport] of Object.entries(config.sharedMappings)) {
-    const packageName = packages.get(mappedImport);
-    if (packageName !== undefined) {
-      addEntry(entriesByPackage, packageName, mappedPath, mappedImport);
-      continue;
-    }
-    const { build } = resolveMappingConfig(mappedImport, config);
-    addEntry(entriesByBundle, bundleNameFor(build, mappedImport), mappedPath, mappedImport);
+    const { build, chunks } = resolveMappingConfig(mappedImport, config);
+    const bundleName = bundleNameFor(build, mappedImport);
+    const group = groups.get(bundleName) ?? { entries: {} };
+    group.entries[mappedPath] = mappedImport;
+    if (chunks !== undefined) group.chunks = agreeOnChunks(group, bundleName, chunks, mappedImport);
+    groups.set(bundleName, group);
   }
 
-  const plans = [...entriesByBundle].map(([bundleName, entries]) => ({
+  return [...groups].map(([bundleName, { entries, chunks }]) => ({
     bundleName,
-    chunks: config.chunks,
+    chunks: chunks?.value ?? config.chunks,
     entries,
   }));
-  return [...plans, ...planDeclaredPackages(entriesByPackage, config.chunks)];
 }
 
-function planDeclaredPackages(
-  entriesByPackage: Map<string, PathToImport>,
-  chunks: boolean
-): MappingBundlePlan[] {
-  const singleEntry: PathToImport = {};
-  const plans: MappingBundlePlan[] = [];
-  const claimedBy = new Map<string, string>();
-
-  for (const [packageName, entries] of entriesByPackage) {
-    if (Object.keys(entries).length === 1) {
-      Object.assign(singleEntry, entries);
-      continue;
-    }
-
-    const bundleName = PACKAGE_BUNDLE_PREFIX + normalizePackageName(packageName);
-    const claimant = claimedBy.get(bundleName);
-    if (claimant) {
-      throw new Error(
-        `The declared packages '${claimant}' and '${packageName}' would both be bundled as '${bundleName}'. Change one of the .package() prefixes.`
-      );
-    }
-    claimedBy.set(bundleName, packageName);
-    plans.push({ bundleName, chunks, entries });
-  }
-
-  if (Object.keys(singleEntry).length === 0) return plans;
-  return [{ bundleName: SINGLE_ENTRY_BUNDLE, chunks: false, entries: singleEntry }, ...plans];
-}
-
-function addEntry(
-  groups: Map<string, PathToImport>,
-  key: string,
-  mappedPath: string,
+// `chunks` is set per bundle, so the mappings in one must agree; a mapping that leaves it out
+// takes whatever the others set.
+function agreeOnChunks(
+  group: MappingGroup,
+  bundleName: string,
+  value: boolean,
   mappedImport: string
-): void {
-  const entries = groups.get(key) ?? {};
-  entries[mappedPath] = mappedImport;
-  groups.set(key, entries);
+): MappingGroup['chunks'] {
+  const agreed = group.chunks;
+  if (!agreed) return { value, setBy: mappedImport };
+  if (agreed.value === value) return agreed;
+  throw new Error(
+    `Shared mappings '${agreed.setBy}' (chunks: ${agreed.value}) and '${mappedImport}' ` +
+      `(chunks: ${value}) are built in one bundle, '${bundleName}', which can only take one ` +
+      `chunks setting. Set the same value, or give a mapping outside a declared package a bundle ` +
+      `of its own with build: 'separate' or 'package'.`
+  );
 }
 
-// Mappings under a declared package never get here: they are planned by package above.
 function bundleNameFor(build: NormalizedMappingConfig['build'], mappedImport: string): string {
   if (!build) return DEFAULT_MAPPING_BUNDLE;
   return `mapping-${normalizePackageName(

@@ -12,7 +12,7 @@ export type ExposeEntry = { file: string; element?: string };
 
 export type MappingConfigInput = Omit<
   ExternalConfigInput,
-  'build' | 'platform' | 'chunks' | 'packageInfo'
+  'build' | 'platform' | 'packageInfo'
 > & {
   build?: 'separate' | 'package';
 };
@@ -30,9 +30,10 @@ export type SharedMappingConfigs = Record<string, MappingConfigInput>;
 
 /**
  * Only the subset of `ExternalConfig` a mapping can act on — `build` picks a bundle of its own,
- * but `platform`/`chunks`/`packageInfo` have nothing to select. `requiredVersion` and `version` stay optional because their
- * defaults are read from the mapped lib's package.json at build time, which is also why an
- * `AutoRequiredOptions` reaches this far unresolved.
+ * `chunks` applies to the bundle the mapping is built in (absent: the global `chunks`), and
+ * `platform`/`packageInfo` have nothing to select. `requiredVersion` and `version` stay optional
+ * because their defaults are read from the mapped lib's package.json at build time, which is also
+ * why an `AutoRequiredOptions` reaches this far unresolved.
  *
  * `includeSecondaries` collapses to a boolean meaning "exempt from `ignoreUnusedDeps`
  * pruning" — stronger than on a shared external, where it only exempts the secondaries.
@@ -42,6 +43,7 @@ export interface NormalizedMappingConfig {
   singleton: boolean;
   strictVersion: boolean;
   build?: 'separate' | 'package';
+  chunks?: boolean;
   requiredVersion?: string | AutoRequiredOptions;
   version?: string;
   shareScope?: string;
