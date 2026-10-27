@@ -235,6 +235,27 @@ describe('getChecksumCore', () => {
     });
   });
 
+  // `chunks` decides which files a bundle writes, so a bundle cached under the other value is stale
+  // (core#216).
+  describe('chunks', () => {
+    const base = { react: ext('18') };
+    const withChunks = (chunks?: boolean) =>
+      getChecksumCore(io, base, '0', '2.0.0', {}, {}, {}, undefined, [], chunks);
+
+    it('is byte-identical to the checksum before chunks was hashed when omitted', () => {
+      expect(withChunks()).toBe(getChecksumCore(io, base, '0', '2.0.0'));
+    });
+
+    it('changes when chunks flips', () => {
+      expect(withChunks(true)).not.toBe(withChunks(false));
+    });
+
+    it('distinguishes either value from an absent one', () => {
+      expect(withChunks(true)).not.toBe(withChunks());
+      expect(withChunks(false)).not.toBe(withChunks());
+    });
+  });
+
   it('changes when a content signal changes but is stable when it does not', () => {
     const base = { '@scope/lib': ext('1.0.0') };
     const a = getChecksumCore(io, base, '0', '', {}, { '@scope/lib': '111' });

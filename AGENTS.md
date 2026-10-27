@@ -445,7 +445,8 @@ Native Federation uses an intelligent caching system to speed up builds:
   bundles, so a shared folder would let one bundle's chunk rename or `clear()` delete a file
   another bundle still lists (core#154). `clear()` therefore removes the whole bundle folder.
 - Keyed by a checksum over the external names, their installed versions, the builder version,
-  the relevant feature flags and the adapter's `externalsCacheKey` (`getChecksum`)
+  the relevant feature flags, the bundle's `chunks` and the adapter's `externalsCacheKey`
+  (`getChecksum`)
 - Stored in `node_modules/.cache/native-federation` by default (`getDefaultCachePath`)
 - On a checksum match the cached artifacts are copied straight into the output path
 
