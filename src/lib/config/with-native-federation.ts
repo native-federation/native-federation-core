@@ -23,6 +23,7 @@ import type {
   SharedExternalsConfig,
 } from '../domain/config/external-config.contract.js';
 import { logger } from '../utils/logger.js';
+import { inferPackageFromSecondary } from '../utils/normalize.js';
 
 export function withNativeFederation(config: FederationConfig): NormalizedFederationConfig {
   const skip = prepareSkipList(config.skip ?? []);
@@ -103,15 +104,19 @@ function normalizeShared(
       platform: 'browser',
     }).get() as NormalizedSharedExternalsConfig);
 
+  const ignoredChunks: string[] = [];
+
   result = Object.keys(shared).reduce<NormalizedSharedExternalsConfig>((acc, cur) => {
     const key = cur.replace(/\\/g, '/');
     const sharedConfig = shared[cur]!;
 
-    if (!!sharedConfig.chunks && !sharedConfig.build && sharedConfig.chunks !== chunks) {
-      logger.warn(
-        `External '${cur}' has explicit chunk settings, consider switching build type to { build: 'package' }.`
-      );
-      sharedConfig.chunks = chunks;
+    // Without a bundle of its own, an external is built with the global `chunks`.
+    if (
+      !sharedConfig.build &&
+      sharedConfig.chunks !== undefined &&
+      sharedConfig.chunks !== chunks
+    ) {
+      ignoredChunks.push(key);
     }
 
     const normalizedConfig: NormalizedExternalConfig = {
@@ -119,7 +124,8 @@ function normalizeShared(
       singleton: sharedConfig.singleton ?? false,
       strictVersion: sharedConfig.strictVersion ?? false,
       version: sharedConfig.version,
-      chunks: sharedConfig.chunks ?? chunks,
+      ...(sharedConfig.build &&
+        sharedConfig.chunks !== undefined && { chunks: sharedConfig.chunks }),
       includeSecondaries:
         typeof sharedConfig.includeSecondaries === 'object'
           ? !!sharedConfig.includeSecondaries.keepAll
@@ -140,7 +146,24 @@ function normalizeShared(
     .filter(key => !isInSkipList(key, skip))
     .reduce((acc, cur) => ({ ...acc, [cur]: result[cur] }), {});
 
+  warnIgnoredChunks(
+    ignoredChunks.filter(key => key in result),
+    chunks
+  );
+
   return result;
+}
+
+// Secondaries inherit their package's config, so one setting is reported once per package.
+function warnIgnoredChunks(keys: string[], chunks: boolean): void {
+  if (keys.length === 0) return;
+  const packages = [...new Set(keys.map(inferPackageFromSecondary))];
+  logger.warn(
+    `Shared externals ${packages.map(p => `'${p}'`).join(', ')} set chunks: ${!chunks}, but ` +
+      `without build they are built in the shared bundle, which uses the global chunks: ` +
+      `${chunks}. Remove chunks, or give the external a bundle of its own with build: ` +
+      `'separate' or 'package'.`
+  );
 }
 
 const MAPPING_BUILDS = new Set([undefined, 'separate', 'package']);
