@@ -114,6 +114,20 @@ to follow a few rules that `build-adapter.contract.ts` states where they apply:
   { externals: adapter.externals })`. The cache moves into `NFAdapterInput` in v5. From there they
   are ordinary externals: every bundle's `external`, the bare import check, `matchesExternal`. Keep
   them exact or scoped: one that covers a shared package would hide its pruned entry points.
+- A shared bundle served from the externals cache runs no build. An adapter that needs something
+  from that build (the Angular adapter: the packages it inlined, for `3rdpartylicenses.txt`)
+  returns it from the optional `cacheData(name)`, which core reads right after `build`, before
+  `dispose`, and stores with the cache entry. The adapter reads it back from
+  `FederationCache.adapterData[bundleName]` (`federationBuilder.adapterData`), on a hit too, rather
+  than holding it itself: the field is staged with `externalFiles`, so a failed run keeps the last
+  complete set, a bundle that leaves the plan drops out, and a rebuild that skips the shared
+  bundles keeps it. The data goes through JSON on a fresh build too, so a `Set` reads as `{}`
+  either way, and an absent value is stored as `null`. It is deep-frozen, hit or not: an adapter
+  that edited it in place would read its own edit back on every rebuild that skips the shared
+  bundles. Treat the bundle names as opaque. Once an adapter implements `cacheData`, an
+  entry written without the field misses. Keep it small and free of absolute paths; change
+  `externalsCacheKey` when its shape changes. A hit serves what was stored, so collect it whatever
+  the adapter's options are, or put the option that decides it in the key.
 - `setup` receives the bundle's `kind` (`'shared' | 'mapping' | 'exposed'`). It replaces
   `isMappingOrExposed`; that and `optimizedMappings`, which no published adapter acts on, are
   deprecated in 4.9 and removed in v5. `NFBuildAdapterContext.isMappingOrExposed` is deprecated

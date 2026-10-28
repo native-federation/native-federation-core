@@ -11,6 +11,8 @@ export type FederationCache<TBundlerCache = unknown> = {
   integrity?: IntegrityMap;
   // Keyed by bundle name, so re-running a bundle replaces its files instead of adding them again.
   externalFiles?: Record<string, OutputFile[]>;
+  // What the adapter's cacheData returned per shared bundle, from the build or its cache entry.
+  adapterData?: Record<string, unknown>;
   // Replaced on every build, never merged.
   artifactFiles?: OutputFile[];
   // Core-owned: set while a shared bundle run is in flight, and left set when it fails.

@@ -58,10 +58,14 @@ export function dependencyClosureCore(
 export function staleCacheReason(
   metadata: CacheMetadata,
   external: readonly string[],
-  reachable: () => Set<string>
+  reachable: () => Set<string>,
+  expectsAdapterData = false
 ): string | undefined {
   if (!metadata.builtExternals || !metadata.externalImports) {
     return 'it does not record what it left external';
+  }
+  if (expectsAdapterData && !('adapterData' in metadata)) {
+    return "it holds no data from the adapter's cacheData";
   }
 
   const dropped = metadata.externalImports.find(s => !external.some(e => matchesExternal(s, e)));

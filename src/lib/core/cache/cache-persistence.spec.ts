@@ -297,12 +297,10 @@ describe('cacheEntryCore', () => {
   });
 
   it('copyFiles creates the output dir and copies the recorded files from the bundle folder', () => {
-    const io = createMemoryIo()
-      .setFile('/cache/x/a.js', 'A')
-      .setFile('/cache/x.meta.json', JSON.stringify(meta({ files: ['a.js'] })));
+    const io = createMemoryIo().setFile('/cache/x/a.js', 'A');
     const entry = cacheEntryCore(io, '/cache', 'x');
 
-    entry.copyFiles('/dist');
+    entry.copyFiles('/dist', meta({ files: ['a.js'] }));
 
     expect(io.isFile('/dist/a.js')).toBe(true);
     expect(io.readText('/dist/a.js')).toBe('A');
@@ -310,17 +308,12 @@ describe('cacheEntryCore', () => {
 
   // A reaped cache used to degrade into a silently incomplete dist.
   it('copyFiles throws when a recorded file is missing from the cache', () => {
-    const io = createMemoryIo()
-      .setFile('/cache/x/a.js', 'A')
-      .setFile('/cache/x.meta.json', JSON.stringify(meta({ files: ['a.js', 'missing.js'] })));
+    const io = createMemoryIo().setFile('/cache/x/a.js', 'A');
     const entry = cacheEntryCore(io, '/cache', 'x');
 
-    expect(() => entry.copyFiles('/dist')).toThrow(/'missing\.js'.*is missing/);
-  });
-
-  it('copyFiles throws when metadata is missing', () => {
-    const entry = cacheEntryCore(createMemoryIo(), '/cache', 'x');
-    expect(() => entry.copyFiles('/dist')).toThrow(/metadata file could not be found/);
+    expect(() => entry.copyFiles('/dist', meta({ files: ['a.js', 'missing.js'] }))).toThrow(
+      /'missing\.js'.*is missing/
+    );
   });
 
   it('clear creates the bundle folder when it does not exist', () => {
@@ -357,7 +350,8 @@ describe('cacheEntryCore', () => {
 
     cacheEntryCore(io, '/cache', 'a').clear();
 
-    expect(() => cacheEntryCore(io, '/cache', 'b').copyFiles('/dist')).not.toThrow();
+    const b = cacheEntryCore(io, '/cache', 'b');
+    expect(() => b.copyFiles('/dist', b.getMetadata('abc')!)).not.toThrow();
   });
 });
 

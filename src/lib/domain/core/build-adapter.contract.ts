@@ -42,6 +42,10 @@ export interface NFBuildAdapter {
   ): Promise<NFBuildAdapterResult[]>;
 
   dispose(name?: string): Promise<void>;
+
+  // Shared bundles only. Small JSON, no absolute paths: the cache may be restored into another
+  // checkout. See AGENTS.md, "Writing an adapter".
+  cacheData?(name: string): unknown | Promise<unknown>;
 }
 
 export interface EntryPoint {

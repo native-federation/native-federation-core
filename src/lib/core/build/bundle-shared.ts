@@ -27,6 +27,7 @@ import {
   getChecksumCore,
   parseBuilderVersion,
   readBuilderPackageJson,
+  type CacheMetadata,
 } from '../cache/cache-persistence.js';
 import {
   dependencyClosureCore,
@@ -60,6 +61,7 @@ export interface SharedBundleResult {
   chunks?: ChunkInfo;
   integrity?: IntegrityMap;
   outputFiles: OutputFile[];
+  adapterData?: unknown;
 }
 
 export async function bundleShared(
@@ -158,14 +160,17 @@ export async function bundleSharedCore(
     const cacheMetadata = bundleCache.getMetadata(checksum);
     const stale =
       cacheMetadata &&
-      staleCacheReason(cacheMetadata, external, () =>
-        dependencyClosureCore(deps.io, Object.keys(sharedBundles), folder, deps.repo)
+      staleCacheReason(
+        cacheMetadata,
+        external,
+        () => dependencyClosureCore(deps.io, Object.keys(sharedBundles), folder, deps.repo),
+        !!deps.adapter.cacheData
       );
     if (stale) {
       logger.info(`Cached ${buildOptions.bundleName} externals are stale (${stale}), rebuilding.`);
     } else if (cacheMetadata) {
       logger.info(`Checksum of ${buildOptions.bundleName} matched, re-using cached externals.`);
-      bundleCache.copyFiles(resolveOutputPath(fedOptions));
+      bundleCache.copyFiles(resolveOutputPath(fedOptions), cacheMetadata);
       let integrity = cacheMetadata.integrity;
       if (config.features.integrityHashes && !integrity) {
         integrity = computeIntegrityMapCore(deps.io, cacheMetadata.files, bundleCache.dir);
@@ -175,6 +180,7 @@ export async function bundleSharedCore(
         chunks: cacheMetadata.chunks,
         integrity,
         outputFiles: toOutputFiles(cacheMetadata.files, buildOptions.platform),
+        adapterData: deps.adapter.cacheData ? deepFreeze(cacheMetadata.adapterData) : undefined,
       };
     }
   }
@@ -218,10 +224,17 @@ export async function bundleSharedCore(
 
   const fullOutputPath = resolveOutputPath(fedOptions);
 
-  let bundleResult: NFBuildAdapterResult[];
+  const blamingPackage = async <T>(step: () => Promise<T>): Promise<T> => {
+    try {
+      return await step();
+    } catch (e) {
+      reportSharedBundleFailure(e, sharedBundles, config.features.ignoreUnusedDeps);
+      throw e;
+    }
+  };
 
-  try {
-    await deps.adapter.setup(buildOptions.bundleName, {
+  await blamingPackage(() =>
+    deps.adapter.setup(buildOptions.bundleName, {
       entryPoints,
       tsConfigPath: fedOptions.tsConfig,
       external,
@@ -235,41 +248,24 @@ export async function bundleSharedCore(
       platform: buildOptions.platform,
       optimizedMappings: config.features.ignoreUnusedDeps,
       cache: fedOptions.federationCache,
-    });
+    })
+  );
 
-    try {
-      bundleResult = await deps.adapter.build(buildOptions.bundleName);
-    } finally {
-      await deps.adapter.dispose(buildOptions.bundleName);
-    }
-  } catch (e) {
-    logger.error('Error bundling shared npm package');
-    if (e instanceof Error) {
-      logger.error(e.message);
-    }
-
-    logger.notice(
-      'Usually a shared Node.js package; Native Federation builds for the browser. ' +
-        "Move it to devDependencies or add it to 'skip'."
-    );
-    const keepingAll = packagesKeepingAllSecondaries(
-      sharedBundles,
-      config.features.ignoreUnusedDeps
-    );
-    if (keepingAll.length > 0) {
-      logger.notice(
-        `All entry points of ${keepingAll.join(', ')} are published, used or not ` +
-          "(keepAll or 'ignoreUnusedDeps: false'). One of them may import an uninstalled " +
-          "package, e.g. an optional peer. Add it to 'skip'."
+  let bundleResult: NFBuildAdapterResult[];
+  let adapterData: unknown;
+  try {
+    bundleResult = await blamingPackage(() => deps.adapter.build(buildOptions.bundleName));
+    if (deps.adapter.cacheData) {
+      adapterData = toCacheData(
+        await deps.adapter.cacheData(buildOptions.bundleName),
+        buildOptions.bundleName
       );
     }
-    logger.notice('Run in verbose mode for the full error. More details: https://bit.ly/nf-issue');
-
-    logger.verbose(e);
-    throw e;
+  } finally {
+    await deps.adapter.dispose(buildOptions.bundleName);
   }
 
-  // Past the catch: what the adapter wrote is not the package's fault, so no 'skip' hint.
+  // From here on, what the adapter wrote is not the package's fault, so no 'skip' hint.
   assertAbsoluteFileNames(bundleResult);
   assertWrittenToOutdir(
     deps.io,
@@ -325,7 +321,7 @@ export async function bundleSharedCore(
     ? computeIntegrityMapCore(deps.io, persistedFiles, bundleCache.dir)
     : undefined;
 
-  bundleCache.persist({
+  const metadata: CacheMetadata = {
     checksum,
     externals: result,
     files: persistedFiles,
@@ -335,16 +331,73 @@ export async function bundleSharedCore(
     externalImports: fedOptions.cacheExternalArtifacts
       ? externalImportsCore(deps.io, bundleCache.dir, persistedFiles, external)
       : undefined,
-  });
-
-  bundleCache.copyFiles(resolveOutputPath(fedOptions));
+    adapterData,
+  };
+  bundleCache.persist(metadata);
+  bundleCache.copyFiles(resolveOutputPath(fedOptions), metadata);
 
   return {
     externals: result,
     chunks: exportedChunks,
     integrity,
     outputFiles: toOutputFiles(persistedFiles, buildOptions.platform),
+    adapterData,
   };
+}
+
+function reportSharedBundleFailure(
+  e: unknown,
+  sharedBundles: Record<string, NormalizedExternalConfig>,
+  ignoreUnusedDeps: boolean
+): void {
+  logger.error('Error bundling shared npm package');
+  if (e instanceof Error) {
+    logger.error(e.message);
+  }
+
+  logger.notice(
+    'Usually a shared Node.js package; Native Federation builds for the browser. ' +
+      "Move it to devDependencies or add it to 'skip'."
+  );
+  const keepingAll = packagesKeepingAllSecondaries(sharedBundles, ignoreUnusedDeps);
+  if (keepingAll.length > 0) {
+    logger.notice(
+      `All entry points of ${keepingAll.join(', ')} are published, used or not ` +
+        "(keepAll or 'ignoreUnusedDeps: false'). One of them may import an uninstalled " +
+        "package, e.g. an optional peer. Add it to 'skip'."
+    );
+  }
+  logger.notice('Run in verbose mode for the full error. More details: https://bit.ly/nf-issue');
+
+  logger.verbose(e);
+}
+
+// Round-tripped on a fresh build too, so the adapter reads the shape a cache hit hands back (a Set
+// becomes {}). null keeps the key, whose absence marks an entry written without the data.
+function toCacheData(data: unknown, bundleName: string): unknown {
+  const notSerializable = (reason: string, cause?: unknown) =>
+    new Error(
+      `The build adapter's cacheData for '${bundleName}' is not JSON-serializable: ${reason}`,
+      { cause }
+    );
+
+  let json: string | undefined;
+  try {
+    json = JSON.stringify(data ?? null);
+  } catch (e) {
+    throw notSerializable((e as Error).message, e);
+  }
+  // A function or symbol stringifies to undefined instead of throwing.
+  if (json === undefined) throw notSerializable(`it returned a ${typeof data}`);
+  return deepFreeze(JSON.parse(json));
+}
+
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === 'object') {
+    Object.values(value).forEach(deepFreeze);
+    Object.freeze(value);
+  }
+  return value;
 }
 
 // Their secondaries are published whether or not anything imports them, so one that imports an

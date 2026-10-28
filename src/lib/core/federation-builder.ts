@@ -67,6 +67,9 @@ export const federationBuilder = {
   get outputFiles(): OutputFile[] | undefined {
     return options && collectOutputFiles(options.federationCache);
   },
+  get adapterData(): Record<string, unknown> | undefined {
+    return options?.federationCache.adapterData;
+  },
   get externals(): string[] {
     return externals;
   },
