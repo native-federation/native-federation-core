@@ -211,11 +211,10 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     expect(mem.exists('/ws/out')).toBe(false);
   });
 
-  // The Angular adapter keeps the packages a shared bundle inlined for 3rdpartylicenses.txt; a hit
+  // The Angular adapter needs the packages a shared bundle inlined for 3rdpartylicenses.txt; a hit
   // runs no build, so that data has to come back from the cache entry.
-  it('hands the data an adapter stored with a cache entry back on a hit', async () => {
-    const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
-    const sharedBundles: Record<string, NormalizedExternalConfig> = {
+  describe('adapter cacheData', () => {
+    const fooBundle: Record<string, NormalizedExternalConfig> = {
       foo: {
         singleton: true,
         strictVersion: false,
@@ -227,29 +226,105 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
         packageInfo: { entryPoint: 'foo/index.js', version: '1.0.0', esm: true },
       },
     };
-    const run = (adapter: NFBuildAdapter) =>
+    const run = (mem: ReturnType<typeof createMemoryIo>, adapter: NFBuildAdapter) =>
       bundleSharedCore(
         { io: mem, repo: emptyRepo, adapter },
-        sharedBundles,
+        fooBundle,
         makeConfig(),
         makeFedOptions({ cacheExternalArtifacts: true }),
         [],
         BUILD_OPTIONS
       );
+    const metadataFile = (mem: ReturnType<typeof createMemoryIo>) =>
+      mem.files().find(f => f.endsWith('.meta.json'))!;
 
-    const fresh = createFakeBuildAdapter({ io: mem });
-    // Read before dispose: an adapter may drop its per-bundle state there.
-    fresh.cacheData = name =>
-      fresh.calls.dispose.length === 0 ? { name, packages: ['foo'] } : null;
-    await run(fresh);
+    afterEach(() => vi.restoreAllMocks());
 
-    const cached = createFakeBuildAdapter({ io: mem });
-    const restored: Array<[string, unknown]> = [];
-    cached.restoreCacheData = (name, data) => restored.push([name, data]);
-    await run(cached);
+    it('returns what the adapter read before dispose, and the same data on a hit', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const fresh = createFakeBuildAdapter({ io: mem });
+      // Read before dispose: an adapter may drop its per-bundle state there.
+      fresh.cacheData = async name =>
+        fresh.calls.dispose.length === 0 ? { name, packages: ['foo'] } : null;
 
-    expect(cached.calls.setup).toHaveLength(0);
-    expect(restored).toEqual([['shared', { name: 'shared', packages: ['foo'] }]]);
+      const built = await run(mem, fresh);
+
+      const cached = createFakeBuildAdapter({ io: mem });
+      cached.cacheData = () => {
+        throw new Error('a hit runs no build');
+      };
+      const hit = await run(mem, cached);
+
+      expect(cached.calls.setup).toHaveLength(0);
+      expect(built.adapterData).toEqual({ name: 'shared', packages: ['foo'] });
+      expect(hit.adapterData).toEqual(built.adapterData);
+    });
+
+    // Otherwise a fresh build hands back a Set and the next hit an empty object.
+    it('hands back the JSON shape on a fresh build too', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const adapter = createFakeBuildAdapter({ io: mem });
+      adapter.cacheData = () => ({ packages: new Set(['foo']), path: undefined });
+
+      expect((await run(mem, adapter)).adapterData).toEqual({ packages: {} });
+    });
+
+    it('names the bundle when the data is not JSON-serializable', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const adapter = createFakeBuildAdapter({ io: mem });
+      adapter.cacheData = () => ({ size: 1n });
+
+      await expect(run(mem, adapter)).rejects.toThrow(
+        "The build adapter's cacheData for 'shared' is not JSON-serializable"
+      );
+      expect(adapter.calls.dispose).toHaveLength(1);
+    });
+
+    // An entry from before the adapter provided the data would otherwise serve none, silently.
+    it('misses an entry written without the data once the adapter provides it', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      await run(mem, createFakeBuildAdapter({ io: mem }));
+      expect(mem.readText(metadataFile(mem))).not.toContain('adapterData');
+
+      const adapter = createFakeBuildAdapter({ io: mem });
+      adapter.cacheData = () => ['foo'];
+      const result = await run(mem, adapter);
+
+      expect(adapter.calls.setup).toHaveLength(1);
+      expect(result.adapterData).toEqual(['foo']);
+    });
+
+    // null, not undefined, so the entry keeps the key and is not missed on every build.
+    it('stores data that is absent as null and hits on it', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const fresh = createFakeBuildAdapter({ io: mem });
+      fresh.cacheData = () => undefined;
+      await run(mem, fresh);
+
+      const cached = createFakeBuildAdapter({ io: mem });
+      cached.cacheData = () => undefined;
+      const hit = await run(mem, cached);
+
+      expect(cached.calls.setup).toHaveLength(0);
+      expect(hit.adapterData).toBeNull();
+    });
+
+    // The package bundled fine, so the "add it to 'skip'" hint would send the user the wrong way.
+    it('does not blame the package when cacheData fails', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const adapter = createFakeBuildAdapter({ io: mem });
+      adapter.cacheData = async () => {
+        throw new Error('cacheData failed');
+      };
+      const notice = vi.spyOn(logger, 'notice').mockImplementation(() => {});
+      const error = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+      await expect(run(mem, adapter)).rejects.toThrow('cacheData failed');
+
+      expect(adapter.calls.dispose).toHaveLength(1);
+      expect(notice).not.toHaveBeenCalled();
+      expect(error).not.toHaveBeenCalled();
+    });
   });
 
   // A cached bundle is built against one external list; serving it against another either leaves a

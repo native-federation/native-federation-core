@@ -43,11 +43,10 @@ export interface NFBuildAdapter {
 
   dispose(name?: string): Promise<void>;
 
-  // Optional, shared bundles only: JSON-serializable data about the last build of `name` (e.g. the
-  // packages it bundled), read before dispose and stored with the cache entry. A cache hit runs no
-  // build, so core hands the stored data back to restoreCacheData instead.
-  cacheData?(name: string): unknown;
-  restoreCacheData?(name: string, data: unknown): void;
+  // Shared bundles only: small JSON data about the build of `name` (package names, not paths: the
+  // cache may be restored elsewhere), read after build, before dispose. Core stores it with the
+  // cache entry and serves it, on a hit too, as `FederationCache.adapterData[name]`.
+  cacheData?(name: string): unknown | Promise<unknown>;
 }
 
 export interface EntryPoint {
