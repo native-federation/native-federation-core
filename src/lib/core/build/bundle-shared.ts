@@ -166,6 +166,7 @@ export async function bundleSharedCore(
     } else if (cacheMetadata) {
       logger.info(`Checksum of ${buildOptions.bundleName} matched, re-using cached externals.`);
       bundleCache.copyFiles(resolveOutputPath(fedOptions));
+      deps.adapter.restoreCacheData?.(buildOptions.bundleName, cacheMetadata.adapterData);
       let integrity = cacheMetadata.integrity;
       if (config.features.integrityHashes && !integrity) {
         integrity = computeIntegrityMapCore(deps.io, cacheMetadata.files, bundleCache.dir);
@@ -219,6 +220,7 @@ export async function bundleSharedCore(
   const fullOutputPath = resolveOutputPath(fedOptions);
 
   let bundleResult: NFBuildAdapterResult[];
+  let adapterData: unknown;
 
   try {
     await deps.adapter.setup(buildOptions.bundleName, {
@@ -239,6 +241,7 @@ export async function bundleSharedCore(
 
     try {
       bundleResult = await deps.adapter.build(buildOptions.bundleName);
+      adapterData = deps.adapter.cacheData?.(buildOptions.bundleName);
     } finally {
       await deps.adapter.dispose(buildOptions.bundleName);
     }
@@ -335,6 +338,7 @@ export async function bundleSharedCore(
     externalImports: fedOptions.cacheExternalArtifacts
       ? externalImportsCore(deps.io, bundleCache.dir, persistedFiles, external)
       : undefined,
+    adapterData,
   });
 
   bundleCache.copyFiles(resolveOutputPath(fedOptions));

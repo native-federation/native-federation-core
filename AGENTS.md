@@ -114,6 +114,12 @@ to follow a few rules that `build-adapter.contract.ts` states where they apply:
   { externals: adapter.externals })`. The cache moves into `NFAdapterInput` in v5. From there they
   are ordinary externals: every bundle's `external`, the bare import check, `matchesExternal`. Keep
   them exact or scoped: one that covers a shared package would hide its pruned entry points.
+- A shared bundle served from the externals cache runs no build. An adapter that needs something
+  from that build (the Angular adapter: the packages it inlined, for `3rdpartylicenses.txt`)
+  returns it from the optional `cacheData(name)`, which core reads right after `build` and stores
+  with the cache entry; on a hit core passes it to `restoreCacheData(name, data)`. It must be
+  JSON-serializable. Entries written without it hand back `undefined`; an adapter that relies on it
+  should change its `externalsCacheKey` when it starts providing it.
 - `setup` receives the bundle's `kind` (`'shared' | 'mapping' | 'exposed'`). It replaces
   `isMappingOrExposed`; that and `optimizedMappings`, which no published adapter acts on, are
   deprecated in 4.9 and removed in v5. `NFBuildAdapterContext.isMappingOrExposed` is deprecated

@@ -42,6 +42,12 @@ export interface NFBuildAdapter {
   ): Promise<NFBuildAdapterResult[]>;
 
   dispose(name?: string): Promise<void>;
+
+  // Optional, shared bundles only: JSON-serializable data about the last build of `name` (e.g. the
+  // packages it bundled), read before dispose and stored with the cache entry. A cache hit runs no
+  // build, so core hands the stored data back to restoreCacheData instead.
+  cacheData?(name: string): unknown;
+  restoreCacheData?(name: string, data: unknown): void;
 }
 
 export interface EntryPoint {

@@ -136,6 +136,7 @@ export type CacheMetadata = {
   // Checked on a hit against the current plan (cache-validity.ts).
   builtExternals?: string[];
   externalImports?: string[];
+  adapterData?: unknown;
 };
 
 type CachePort = FileReaderPort & FileWriterPort;
