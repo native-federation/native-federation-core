@@ -9,7 +9,7 @@
     "url": "git+https://github.com/native-federation/native-federation-core.git"
   },
   "bugs": "https://github.com/native-federation/native-federation-core/issues",
-  "packageManager": "pnpm@11.28.6",
+  "packageManager": "pnpm@11.28.8",
   "scripts": {
     "build": "node esbuild.config.mjs && tsc -p tsconfig.build.json",
     "lint": "eslint src",
