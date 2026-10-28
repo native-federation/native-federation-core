@@ -27,6 +27,7 @@ import {
   getChecksumCore,
   parseBuilderVersion,
   readBuilderPackageJson,
+  type CacheMetadata,
 } from '../cache/cache-persistence.js';
 import {
   dependencyClosureCore,
@@ -169,7 +170,7 @@ export async function bundleSharedCore(
       logger.info(`Cached ${buildOptions.bundleName} externals are stale (${stale}), rebuilding.`);
     } else if (cacheMetadata) {
       logger.info(`Checksum of ${buildOptions.bundleName} matched, re-using cached externals.`);
-      bundleCache.copyFiles(resolveOutputPath(fedOptions));
+      bundleCache.copyFiles(resolveOutputPath(fedOptions), cacheMetadata);
       let integrity = cacheMetadata.integrity;
       if (config.features.integrityHashes && !integrity) {
         integrity = computeIntegrityMapCore(deps.io, cacheMetadata.files, bundleCache.dir);
@@ -179,7 +180,7 @@ export async function bundleSharedCore(
         chunks: cacheMetadata.chunks,
         integrity,
         outputFiles: toOutputFiles(cacheMetadata.files, buildOptions.platform),
-        adapterData: deps.adapter.cacheData ? cacheMetadata.adapterData : undefined,
+        adapterData: deps.adapter.cacheData ? deepFreeze(cacheMetadata.adapterData) : undefined,
       };
     }
   }
@@ -223,16 +224,17 @@ export async function bundleSharedCore(
 
   const fullOutputPath = resolveOutputPath(fedOptions);
 
-  let bundleResult: NFBuildAdapterResult[];
-  let adapterData: unknown;
-
-  const blamePackage = (e: unknown) => {
-    reportSharedBundleFailure(e, sharedBundles, config.features.ignoreUnusedDeps);
-    return e;
+  const blamingPackage = async <T>(step: () => Promise<T>): Promise<T> => {
+    try {
+      return await step();
+    } catch (e) {
+      reportSharedBundleFailure(e, sharedBundles, config.features.ignoreUnusedDeps);
+      throw e;
+    }
   };
 
-  try {
-    await deps.adapter.setup(buildOptions.bundleName, {
+  await blamingPackage(() =>
+    deps.adapter.setup(buildOptions.bundleName, {
       entryPoints,
       tsConfigPath: fedOptions.tsConfig,
       external,
@@ -246,17 +248,13 @@ export async function bundleSharedCore(
       platform: buildOptions.platform,
       optimizedMappings: config.features.ignoreUnusedDeps,
       cache: fedOptions.federationCache,
-    });
-  } catch (e) {
-    throw blamePackage(e);
-  }
+    })
+  );
 
+  let bundleResult: NFBuildAdapterResult[];
+  let adapterData: unknown;
   try {
-    try {
-      bundleResult = await deps.adapter.build(buildOptions.bundleName);
-    } catch (e) {
-      throw blamePackage(e);
-    }
+    bundleResult = await blamingPackage(() => deps.adapter.build(buildOptions.bundleName));
     if (deps.adapter.cacheData) {
       adapterData = toCacheData(
         await deps.adapter.cacheData(buildOptions.bundleName),
@@ -323,7 +321,7 @@ export async function bundleSharedCore(
     ? computeIntegrityMapCore(deps.io, persistedFiles, bundleCache.dir)
     : undefined;
 
-  bundleCache.persist({
+  const metadata: CacheMetadata = {
     checksum,
     externals: result,
     files: persistedFiles,
@@ -334,9 +332,9 @@ export async function bundleSharedCore(
       ? externalImportsCore(deps.io, bundleCache.dir, persistedFiles, external)
       : undefined,
     adapterData,
-  });
-
-  bundleCache.copyFiles(resolveOutputPath(fedOptions));
+  };
+  bundleCache.persist(metadata);
+  bundleCache.copyFiles(resolveOutputPath(fedOptions), metadata);
 
   return {
     externals: result,
@@ -377,15 +375,29 @@ function reportSharedBundleFailure(
 // Round-tripped on a fresh build too, so the adapter reads the shape a cache hit hands back (a Set
 // becomes {}). null keeps the key, whose absence marks an entry written without the data.
 function toCacheData(data: unknown, bundleName: string): unknown {
-  try {
-    return JSON.parse(JSON.stringify(data ?? null));
-  } catch (e) {
-    throw new Error(
-      `The build adapter's cacheData for '${bundleName}' is not JSON-serializable: ` +
-        (e as Error).message,
-      { cause: e }
+  const notSerializable = (reason: string, cause?: unknown) =>
+    new Error(
+      `The build adapter's cacheData for '${bundleName}' is not JSON-serializable: ${reason}`,
+      { cause }
     );
+
+  let json: string | undefined;
+  try {
+    json = JSON.stringify(data ?? null);
+  } catch (e) {
+    throw notSerializable((e as Error).message, e);
   }
+  // A function or symbol stringifies to undefined instead of throwing.
+  if (json === undefined) throw notSerializable(`it returned a ${typeof data}`);
+  return deepFreeze(JSON.parse(json));
+}
+
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === 'object') {
+    Object.values(value).forEach(deepFreeze);
+    Object.freeze(value);
+  }
+  return value;
 }
 
 // Their secondaries are published whether or not anything imports them, so one that imports an

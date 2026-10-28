@@ -163,14 +163,10 @@ export const cacheEntryCore = (
     persist: (payload: CacheMetadata) => {
       io.writeText(metadataFile, JSON.stringify(payload));
     },
-    copyFiles: (fullOutputPath: string) => {
-      if (!io.exists(metadataFile))
-        throw new Error('Error copying artifacts to dist, metadata file could not be found.');
-
-      const cachedResult = readMetadata();
+    copyFiles: (fullOutputPath: string, { files }: CacheMetadata) => {
       io.mkdirp(fullOutputPath);
 
-      cachedResult.files.forEach(file => {
+      files.forEach(file => {
         const cachedFile = path.join(dir, file);
         if (!io.exists(cachedFile))
           throw new Error(

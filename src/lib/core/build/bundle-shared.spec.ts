@@ -280,6 +280,35 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       expect(adapter.calls.dispose).toHaveLength(1);
     });
 
+    // JSON.stringify returns undefined for a function rather than throwing, and JSON.parse(undefined)
+    // used to surface as '"undefined" is not valid JSON'.
+    it('says what was returned when the data stringifies to nothing', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const adapter = createFakeBuildAdapter({ io: mem });
+      adapter.cacheData = () => () => ['foo'];
+
+      await expect(run(mem, adapter)).rejects.toThrow(
+        "cacheData for 'shared' is not JSON-serializable: it returned a function"
+      );
+    });
+
+    // The cache hands the same object to every rebuild that skips the shared bundles, so an edit in
+    // place would be read back on the next one.
+    it('freezes the data on a fresh build and on a hit', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const adapter = createFakeBuildAdapter({ io: mem });
+      adapter.cacheData = () => ({ packages: ['foo'] });
+
+      const built = (await run(mem, adapter)).adapterData as { packages: string[] };
+      const hit = (await run(mem, adapter)).adapterData as { packages: string[] };
+
+      expect(adapter.calls.setup).toHaveLength(1);
+      for (const data of [built, hit]) {
+        expect(Object.isFrozen(data)).toBe(true);
+        expect(() => data.packages.push('bar')).toThrow(TypeError);
+      }
+    });
+
     // An entry from before the adapter provided the data would otherwise serve none, silently.
     it('misses an entry written without the data once the adapter provides it', async () => {
       const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
