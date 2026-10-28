@@ -2,11 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
 import { createPackageJsonRepository } from '../../utils/io/package-json-repository.js';
 import type { CacheMetadata } from './cache-persistence.js';
-import {
-  dependencyClosureCore,
-  externalImportsCore,
-  staleCacheReason,
-} from './cache-validity.js';
+import { dependencyClosureCore, externalImportsCore, staleCacheReason } from './cache-validity.js';
 
 describe('externalImportsCore', () => {
   const mem = createMemoryIo()
@@ -48,12 +44,20 @@ describe('dependencyClosureCore', () => {
         '/ws/node_modules/foo/package.json',
         '{"dependencies":{"bar":"1"},"peerDependencies":{"@scope/peer":"1"}}'
       )
-      .setFile('/ws/node_modules/foo/node_modules/bar/package.json', '{"dependencies":{"deep":"1"}}')
+      .setFile(
+        '/ws/node_modules/foo/node_modules/bar/package.json',
+        '{"dependencies":{"deep":"1"}}'
+      )
       .setFile('/ws/node_modules/bar/package.json', '{"dependencies":{"wrong":"1"}}')
       .setFile('/ws/node_modules/@scope/peer/package.json', '{"optionalDependencies":{"opt":"1"}}')
       .setFile('/ws/node_modules/deep/package.json', '{"dependencies":{"foo":"1"}}');
 
-    const closure = dependencyClosureCore(mem, ['foo/sub'], '/ws', createPackageJsonRepository(mem));
+    const closure = dependencyClosureCore(
+      mem,
+      ['foo/sub'],
+      '/ws',
+      createPackageJsonRepository(mem)
+    );
 
     // `opt` is not installed but is still a name the bundle may import; `wrong` is never reached.
     expect([...closure].sort()).toEqual(['@scope/peer', 'bar', 'deep', 'foo', 'opt']);
@@ -130,6 +134,14 @@ describe('staleCacheReason', () => {
     expect(staleCacheReason(meta({}), ['rxjs', '@angular/core', 'new'], broken)).toMatch(
       /could not be read/
     );
+  });
+
+  // An entry from before the adapter provided the data would otherwise serve none, silently.
+  it('rejects an entry without adapter data only when the adapter provides it', () => {
+    const current = ['rxjs', '@angular/core'];
+    expect(staleCacheReason(meta({}), current, none, true)).toMatch(/cacheData/);
+    expect(staleCacheReason(meta({}), current, none)).toBeUndefined();
+    expect(staleCacheReason(meta({ adapterData: null }), current, none, true)).toBeUndefined();
   });
 
   it('rejects metadata that predates the recorded list', () => {

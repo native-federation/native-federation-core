@@ -284,7 +284,7 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     it('misses an entry written without the data once the adapter provides it', async () => {
       const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
       await run(mem, createFakeBuildAdapter({ io: mem }));
-      expect(mem.readText(metadataFile(mem))).not.toContain('adapterData');
+      expect(JSON.parse(mem.readText(metadataFile(mem)))).not.toHaveProperty('adapterData');
 
       const adapter = createFakeBuildAdapter({ io: mem });
       adapter.cacheData = () => ['foo'];

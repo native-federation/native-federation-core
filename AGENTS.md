@@ -124,7 +124,8 @@ to follow a few rules that `build-adapter.contract.ts` states where they apply:
   bundles keeps it. The data goes through JSON on a fresh build too, so a `Set` reads as `{}`
   either way, and an absent value is stored as `null`. Once an adapter implements `cacheData`, an
   entry written without the field misses. Keep it small and free of absolute paths; change
-  `externalsCacheKey` when its shape changes.
+  `externalsCacheKey` when its shape changes. A hit serves what was stored, so collect it whatever
+  the adapter's options are, or put the option that decides it in the key.
 - `setup` receives the bundle's `kind` (`'shared' | 'mapping' | 'exposed'`). It replaces
   `isMappingOrExposed`; that and `optimizedMappings`, which no published adapter acts on, are
   deprecated in 4.9 and removed in v5. `NFBuildAdapterContext.isMappingOrExposed` is deprecated

@@ -45,7 +45,9 @@ export interface NFBuildAdapter {
 
   // Shared bundles only: small JSON data about the build of `name` (package names, not paths: the
   // cache may be restored elsewhere), read after build, before dispose. Core stores it with the
-  // cache entry and serves it, on a hit too, as `FederationCache.adapterData[name]`.
+  // cache entry and serves it, on a hit too, as `FederationCache.adapterData[name]` once the shared
+  // run completes; treat the names as opaque. A hit serves what was stored, so collect it whatever
+  // the options, or put the option that decides it in `externalsCacheKey`.
   cacheData?(name: string): unknown | Promise<unknown>;
 }
 

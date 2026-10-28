@@ -159,12 +159,12 @@ export async function bundleSharedCore(
     const cacheMetadata = bundleCache.getMetadata(checksum);
     const stale =
       cacheMetadata &&
-      (staleCacheReason(cacheMetadata, external, () =>
-        dependencyClosureCore(deps.io, Object.keys(sharedBundles), folder, deps.repo)
-      ) ??
-        (deps.adapter.cacheData && !('adapterData' in cacheMetadata)
-          ? "it holds no data from the adapter's cacheData"
-          : undefined));
+      staleCacheReason(
+        cacheMetadata,
+        external,
+        () => dependencyClosureCore(deps.io, Object.keys(sharedBundles), folder, deps.repo),
+        !!deps.adapter.cacheData
+      );
     if (stale) {
       logger.info(`Cached ${buildOptions.bundleName} externals are stale (${stale}), rebuilding.`);
     } else if (cacheMetadata) {
@@ -179,7 +179,7 @@ export async function bundleSharedCore(
         chunks: cacheMetadata.chunks,
         integrity,
         outputFiles: toOutputFiles(cacheMetadata.files, buildOptions.platform),
-        adapterData: cacheMetadata.adapterData,
+        adapterData: deps.adapter.cacheData ? cacheMetadata.adapterData : undefined,
       };
     }
   }
@@ -258,7 +258,7 @@ export async function bundleSharedCore(
       throw blamePackage(e);
     }
     if (deps.adapter.cacheData) {
-      adapterData = asCacheData(
+      adapterData = toCacheData(
         await deps.adapter.cacheData(buildOptions.bundleName),
         buildOptions.bundleName
       );
@@ -267,7 +267,7 @@ export async function bundleSharedCore(
     await deps.adapter.dispose(buildOptions.bundleName);
   }
 
-  // Past the catch: what the adapter wrote is not the package's fault, so no 'skip' hint.
+  // From here on, what the adapter wrote is not the package's fault, so no 'skip' hint.
   assertAbsoluteFileNames(bundleResult);
   assertWrittenToOutdir(
     deps.io,
@@ -376,7 +376,7 @@ function reportSharedBundleFailure(
 
 // Round-tripped on a fresh build too, so the adapter reads the shape a cache hit hands back (a Set
 // becomes {}). null keeps the key, whose absence marks an entry written without the data.
-function asCacheData(data: unknown, bundleName: string): unknown {
+function toCacheData(data: unknown, bundleName: string): unknown {
   try {
     return JSON.parse(JSON.stringify(data ?? null));
   } catch (e) {

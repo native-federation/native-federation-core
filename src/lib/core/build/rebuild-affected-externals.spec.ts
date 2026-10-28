@@ -82,6 +82,7 @@ describe('rebuildAffectedExternals — port-injected resolution + invalidation',
   it('reuses cached externals when the modified file is outside every shared dir', async () => {
     const cached: SharedInfo[] = [{ packageName: 'a', outFileName: 'a.cached.js' } as SharedInfo];
     const fed = fedOptions(cached);
+    fed.federationCache.adapterData = { 'browser-shared': ['a'] };
 
     await rebuildAffectedExternals(
       config(),
@@ -95,6 +96,8 @@ describe('rebuildAffectedExternals — port-injected resolution + invalidation',
 
     expect(executeSharedBundlePlans).not.toHaveBeenCalled();
     expect(fed.federationCache.externals).toEqual(cached);
+    // The adapter reads it after every rebuild, and nothing re-ran to provide it again.
+    expect(fed.federationCache.adapterData).toEqual({ 'browser-shared': ['a'] });
   });
 
   it('is a no-op when no files changed', async () => {

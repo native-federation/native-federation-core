@@ -147,6 +147,23 @@ describe('withStagedExternals', () => {
     expect(cache.sharedRunIncomplete).toBe(true);
   });
 
+  // The separate bundles finish in any order; each must add its own key, not replace the others.
+  it('keeps the adapter data of every bundle in a run', async () => {
+    const cache = createFederationCache('/cache');
+
+    await withStagedExternals(cache, async staged => {
+      addExternalsToCache(staged, 'browser-shared', {
+        externals: [],
+        outputFiles: [],
+        adapterData: ['a'],
+      });
+      addExternalsToCache(staged, 'lodash', { externals: [], outputFiles: [], adapterData: ['b'] });
+      addExternalsToCache(staged, 'no-data', { externals: [], outputFiles: [] });
+    });
+
+    expect(cache.adapterData).toEqual({ 'browser-shared': ['a'], lodash: ['b'] });
+  });
+
   // The adapter reads its data from the cache, so a failed run must not leave it describing
   // bundles that are not the ones being served.
   it('keeps the last complete adapter data when a run throws', async () => {
