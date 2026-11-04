@@ -4,7 +4,7 @@
 export * from './internal/browser.js';
 
 export {
-  /** @deprecated Unused by the adapters; removed in v5. */
+  /** @deprecated Might be removed in v5. */
   hashFile,
 } from './lib/utils/hash.js';
 export { toDiskCase } from './lib/utils/disk-case.js';
@@ -19,7 +19,7 @@ export {
 
 export {
   getDefaultCachePath,
-  /** @deprecated Unused by the adapters; removed in v5. */
+  /** @deprecated Might be removed in v5. */
   getChecksum,
 } from './lib/core/cache/cache-persistence.js';
 export { collectOutputFiles } from './lib/core/cache/federation-cache.js';
