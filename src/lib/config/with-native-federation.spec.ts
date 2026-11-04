@@ -19,6 +19,7 @@ vi.mock('./mapped-paths.js', () => ({
   getRawMappedPaths: (...args: unknown[]) => ({
     packages: {},
     keys: [],
+    patterns: [],
     ...getRawMappedPaths(...args),
   }),
 }));
@@ -390,6 +391,17 @@ describe('withNativeFederation', () => {
     withNativeFederation({});
 
     expect(warn).toHaveBeenCalledWith("Shared mapping package '@org/lbi' covers no tsconfig paths key.");
+  });
+
+  it('warns for a selected mapping the tsconfig it read has no key for', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    getRawMappedPaths.mockReturnValue({ paths: {}, configs: {}, keys: [], patterns: ['@org/ui'] });
+
+    withNativeFederation({ sharedMappings: ['@org/ui'] });
+
+    expect(warn).toHaveBeenCalledWith(
+      "Shared mapping '@org/ui' matches no paths key in /ws/tsconfig.json, which defines no paths, so it is not shared."
+    );
   });
 
   // An untyped config from 4.9.0-next.1 can still carry it.

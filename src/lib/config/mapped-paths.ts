@@ -19,6 +19,8 @@ export interface RawMappedPaths {
   configs: SharedMappingConfigs;
   // Every `paths` key, whether selected or not: declarations are checked against all of them.
   keys: string[];
+  // The declared selection, empty when everything is shared.
+  patterns: string[];
   // Declared package prefix -> its config.
   packages: SharedMappingConfigs;
 }
@@ -53,7 +55,7 @@ export function getRawMappedPathsCore(
   const { paths: mappings, basePath } = readCompilerPaths(io, rootTsConfigPath);
 
   if (!mappings) {
-    return { paths: mappedPaths, configs, keys: [], packages };
+    return { paths: mappedPaths, configs, keys: [], patterns, packages };
   }
 
   const base = rootPath ?? basePath;
@@ -69,7 +71,7 @@ export function getRawMappedPathsCore(
     }
   }
 
-  return { paths: mappedPaths, configs, keys: Object.keys(mappings), packages };
+  return { paths: mappedPaths, configs, keys: Object.keys(mappings), patterns, packages };
 }
 
 // Resolved like the compile resolves them: through `extends`, against `baseUrl` or else the

@@ -14,6 +14,7 @@ import {
   assertMappingPackagePrefixes,
   assertNoConfigUnderMappingPackage,
   warnUnmatchedMappingPackages,
+  warnUnmatchedMappingPatterns,
 } from './validate-mappings.js';
 import { type PreparedSkipList } from '../domain/config/skip-list.contract.js';
 import type { ConfigBuilder } from '../domain/config/config-builders.contract.js';
@@ -35,8 +36,9 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
   const chunks = config.chunks ?? true;
   const mappingVersion = config.features?.mappingVersion ?? true;
 
-  const { paths, configs, keys, packages } = getRawMappedPaths(
-    findMappingsTsConfig(),
+  const tsConfigPath = findMappingsTsConfig();
+  const { paths, configs, keys, patterns, packages } = getRawMappedPaths(
+    tsConfigPath,
     fromBuilder(config.sharedMappings)
   );
   const prefixes = Object.keys(packages);
@@ -46,6 +48,7 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
     prefixes
   );
   warnUnmatchedMappingPackages(prefixes, keys);
+  warnUnmatchedMappingPatterns(patterns, keys, tsConfigPath);
 
   const normalized: NormalizedFederationConfig = {
     $type: 'classic',

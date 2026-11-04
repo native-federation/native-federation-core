@@ -68,6 +68,19 @@ describe('getRawMappedPathsCore', () => {
     expect(getRawMappedPathsCore(io, TSCONFIG).keys).toEqual(['@a', '@b/*', '@c']);
   });
 
+  it('returns the declared selection, also when the tsconfig has no paths', () => {
+    const selection = ['@a', [['@b/*'], { singleton: false }]] as const;
+    const withPaths = writeTsConfig({ '@a': ['a/index.ts'] });
+    expect(getRawMappedPathsCore(withPaths, TSCONFIG, [...selection]).patterns).toEqual([
+      '@a',
+      '@b/*',
+    ]);
+    expect(getRawMappedPathsCore(writeTsConfig(undefined), TSCONFIG, ['@a']).patterns).toEqual([
+      '@a',
+    ]);
+    expect(getRawMappedPathsCore(withPaths, TSCONFIG).patterns).toEqual([]);
+  });
+
   // A declaration names a package; it selects nothing, so `@b` stays unshared.
   it('collects { package } entries with their config, without selecting them', () => {
     const io = writeTsConfig({ '@a/x': ['a/x.ts'], '@b': ['b/index.ts'] });

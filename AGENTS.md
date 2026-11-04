@@ -155,7 +155,9 @@ lands in one directory whatever `process.cwd()` is (core#156). Inputs follow the
   `paths` (TypeScript's internal `pathsBasePath`; its absence throws rather than guessing). A
   missing `extends` target throws, since it would otherwise drop the inherited `paths` silently;
   other tsconfig diagnostics are left to the compile. Only the first target of each key is used,
-  and a key with no targets is skipped.
+  and a key with no targets is skipped. A declared `sharedMappings` pattern that selects no key of
+  the tsconfig read warns once per config load and names that file (`warnUnmatchedMappingPatterns`):
+  reading a tsconfig without the expected `paths` used to drop every mapping silently (core#163).
 - Without a `tsConfig` (a config loaded outside a build), `findRootTsConfigJson` is the fallback.
   It still searches from cwd first, so a resolution that works today does not move, and falls back
   to the workspace root only when that search finds nothing. Searching from `workspaceRoot` first
