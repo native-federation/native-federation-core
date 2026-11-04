@@ -22,7 +22,9 @@
 - `typescript` is a runtime **dependency** (not a peer) ranged `>=5.0.0 <7`: a peer range would
   fail npm installs in workspaces on a different TypeScript. 5.0 is the floor because
   `mapping-imports.ts` uses `moduleResolution: Bundler`; TypeScript 7 ships without the JS API.
-  CI runs the suite a second time on the floor (`TS_FLOOR=1 pnpm test`).
+  CI runs the suite a second time on the floor, installing the latest patch of the range's lower
+  bound with `pnpm add` (last step of `verify.yml`); to repeat that locally, run the same commands
+  and `git checkout package.json pnpm-lock.yaml && pnpm install` afterwards.
 
 ## Repository Structure
 
