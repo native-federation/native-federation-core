@@ -45,6 +45,11 @@
       "automerge": true
     },
     {
+      "description": "typescript-floor is the floor of the typescript range (TS_FLOOR=1); move it with the range",
+      "matchDepNames": ["typescript-floor"],
+      "enabled": false
+    },
+    {
       "description": "Never automerge @softarc/sheriff-core — review compatibility by hand",
       "matchPackageNames": ["@softarc/sheriff-core"],
       "automerge": false
