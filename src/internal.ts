@@ -3,15 +3,25 @@
 
 export * from './internal/browser.js';
 
-export { hashFile } from './lib/utils/hash.js';
+export {
+  /** @deprecated Unused by the adapters; removed in v5. */
+  hashFile,
+} from './lib/utils/hash.js';
 export { toDiskCase } from './lib/utils/disk-case.js';
 export { logger, setLogLevel } from './lib/utils/logger.js';
 
 export { RebuildQueue, type TrackResult } from './lib/core/rebuild-queue.js';
 
-export { writeImportMap } from './lib/core/output/write-import-map.js';
+export {
+  /** @deprecated `buildForFederation` writes it, and nothing reads importmap.json; removed in v5. */
+  writeImportMap,
+} from './lib/core/output/write-import-map.js';
 
-export { getDefaultCachePath, getChecksum } from './lib/core/cache/cache-persistence.js';
+export {
+  getDefaultCachePath,
+  /** @deprecated Unused by the adapters; removed in v5. */
+  getChecksum,
+} from './lib/core/cache/cache-persistence.js';
 export { collectOutputFiles } from './lib/core/cache/federation-cache.js';
 
 export type {

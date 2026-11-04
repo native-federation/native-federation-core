@@ -53,6 +53,7 @@ export interface EntryPoint {
   // A flat file name, unique within the bundle: emit it as given, or as `<name>-<hash><ext>` when
   // hashed.
   outName: string;
+  /** @deprecated Core's label for its own messages; leaves the adapter's `EntryPoint` in v5. */
   key?: string;
 }
 

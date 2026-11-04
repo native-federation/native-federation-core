@@ -3,6 +3,7 @@ export type {
   DenseSharedInfo,
   FederationInfo,
   ExposesInfo,
+  /** @deprecated Only `writeFederationInfo` takes it; removed from the API in v5. */
   ArtifactInfo,
   ChunkInfo,
   IntegrityMap,
@@ -22,10 +23,14 @@ export type {
   NFBuildAdapterOptions,
   NFBuildAdapter,
   NFBuildAdapterResult,
+  /** @deprecated Core never reads it; it moves to the adapters in v5. */
   NFBuildAdapterContext,
   NFAdapterInput,
   NFBundleKind,
 } from './build-adapter.contract.js';
 export { CHUNK_PREFIX, toChunkImport } from './chunk.js';
 export type { FederationCache } from './federation-cache.contract.js';
-export type { FederationManifest } from './manifest.contract.js';
+export type {
+  /** @deprecated Core never reads a manifest; the orchestrator has its own type. Removed in v5. */
+  FederationManifest,
+} from './manifest.contract.js';
