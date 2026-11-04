@@ -637,13 +637,23 @@ describe('createMappingImportResolverCore — path spelling', () => {
     expect(resolve(f('libs/ui/src/badge.component'), APP)).toBe('@myorg/ui');
   });
 
-  // Normalizing is not `realpath`ing. A bundler that follows symlinks reports the real path
-  // already, so this stays the caller's to get right rather than a syscall on every lookup.
-  it('does not follow a symlink into a mapped lib', () => {
+  // A bundler with preserveSymlinks (or an npm-linked workspace package) reports the path
+  // through the link. The adapters used to realpath it themselves, one of them not at all, so a
+  // relative import through the link inlined a second copy of the mapped lib.
+  it('follows a symlink into a mapped lib', () => {
     const io = lib().setSymlink(f('node_modules/@myorg/ui'), f('libs/ui'));
     const resolve = createMappingImportResolverCore(MAPPINGS, io);
-    expect(resolve(f('node_modules/@myorg/ui/src/badge.component'), APP)).toBeNull();
+    expect(resolve(f('node_modules/@myorg/ui/src/badge.component'), APP)).toBe('@myorg/ui');
     expect(resolve(f('libs/ui/src/badge.component'), APP)).toBe('@myorg/ui');
+  });
+
+  // The importer's own location decides whether it is inside the lib (a self-import).
+  it('treats an importer reached through a symlink as inside the lib', () => {
+    const io = lib().setSymlink(f('node_modules/@myorg/ui'), f('libs/ui'));
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
+    expect(
+      resolve(f('libs/ui/src/badge.component'), f('node_modules/@myorg/ui/src/other.ts'))
+    ).toBeNull();
   });
 });
 
@@ -1048,9 +1058,8 @@ describe('createMappingImportResolverCore — a mis-cased mapping key', () => {
     expect(resolve(f('libs/ui/src/index.ts'), APP)).toBe('@myorg/ui');
   });
 
-  it('leaves a genuinely different directory alone', () => {
-    // toDiskCase only corrects a case-only difference, so a symlinked or otherwise relocated
-    // path is still handed back untouched — that stays the caller's to resolve.
+  // Keys are realpathed like imports, so both sides compare one spelling of the lib.
+  it('matches a mapping key spelled through a symlink', () => {
     const io = createMemoryIo()
       .setFile(f('libs/ui/src/index.ts'), `export * from './badge.component';`)
       .setFile(f('libs/ui/src/badge.component.ts'), `export class BadgeComponent {}`)
@@ -1059,6 +1068,7 @@ describe('createMappingImportResolverCore — a mis-cased mapping key', () => {
       { [f('links/ui/src/index.ts')]: '@myorg/ui' },
       io
     );
-    expect(resolve(f('libs/ui/src/badge.component'), APP)).toBeNull();
+    expect(resolve(f('libs/ui/src/badge.component'), APP)).toBe('@myorg/ui');
+    expect(resolve(f('links/ui/src/badge.component'), APP)).toBe('@myorg/ui');
   });
 });
