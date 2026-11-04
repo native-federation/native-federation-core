@@ -517,6 +517,9 @@ Native Federation uses an intelligent caching system to speed up builds:
   and deletes the whole project cache folder when the stamp is missing, unreadable, or differs in
   layout or `major.minor`. Patch releases already miss per bundle through the checksum. Two processes building one project
   on different minors (a `serve` and a `build` mid-upgrade) can purge each other's cache.
+  Because of that purge, `normalizeFederationOptions` refuses a cache folder that is the workspace root
+  or one of its parents (`assertCacheOutsideWorkspace`): `<cachePath>/<project>` could be the workspace
+  itself or a source folder named like the project.
 - For symlinked (npm-linked) deps, additionally on a content signal (max mtime of the package dir)
 - Can be cleared by deleting the cache folder
 

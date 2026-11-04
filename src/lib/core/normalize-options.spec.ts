@@ -117,6 +117,38 @@ describe('normalizeFederationOptionsCore', () => {
       expect(result.options.federationCache.cachePath).toBe(path.join('/cache', 'my_app'));
     });
 
+    // A new minor purges `<cachePath>/<project>`, so a cache folder at or above the workspace could
+    // delete the workspace itself ('/' + project 'ws') or a source folder named like the project.
+    it.each(['/ws', '/', '/ws/..', '/ws/./'])(
+      'refuses a cache folder that contains the workspace root (%s)',
+      async cachePath => {
+        const io = createMemoryIo().setFile(CONFIG_PATH, '');
+
+        await expect(
+          normalizeFederationOptionsCore({ io, loadConfig: loaderFor(makeConfig()) }, baseOptions, {
+            ...cache,
+            cachePath,
+          })
+        ).rejects.toThrow(/contains the workspace root/);
+      }
+    );
+
+    // '/ws-cache' shares the '/ws' prefix as a string but is a sibling, not a parent.
+    it.each(['/ws/node_modules/.cache/nf', '/ws/.angular/nf-cache', '/ws-cache'])(
+      'accepts a cache folder inside or beside the workspace (%s)',
+      async cachePath => {
+        const io = createMemoryIo().setFile(CONFIG_PATH, '');
+
+        const result = await normalizeFederationOptionsCore(
+          { io, loadConfig: loaderFor(makeConfig()) },
+          baseOptions,
+          { ...cache, cachePath }
+        );
+
+        expect(result.options.federationCache.cachePath).toBe(path.join(cachePath, 'my_app'));
+      }
+    );
+
     it('derives the scoped path from the workspace when no cache is supplied', async () => {
       const io = createMemoryIo().setFile(CONFIG_PATH, '');
 

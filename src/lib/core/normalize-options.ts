@@ -19,6 +19,7 @@ import { logger } from '../utils/logger.js';
 import { normalizePackageName } from '../utils/normalize.js';
 import { toDiskCase } from '../utils/disk-case.js';
 import { loadWithConfigContext } from '../config/configuration-context.js';
+import { isUnderDir } from '../utils/path-patterns.js';
 
 type ConfigLoader = (fullConfigPath: string) => Promise<NormalizedFederationConfig>;
 
@@ -91,6 +92,8 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
     cache ??
     (createFederationCache(getDefaultCachePath(workspaceRoot)) as FederationCache<TBundlerCache>);
 
+  assertCacheOutsideWorkspace(deps.io, suppliedCache.cachePath, workspaceRoot);
+
   const federationCache: FederationCache<TBundlerCache> = {
     ...suppliedCache,
     cachePath: path.join(suppliedCache.cachePath, projectName),
@@ -152,4 +155,16 @@ function resolveProjectName(name?: string): string {
   }
 
   return normalizePackageName(name);
+}
+
+// A new minor purges `<cachePath>/<project>` (prepareCache), so a cache folder at or above the
+// workspace root could delete the workspace or a source folder named like the project.
+function assertCacheOutsideWorkspace(io: FileReaderPort, cachePath: string, workspaceRoot: string) {
+  const resolved = toDiskCase(io, path.resolve(cachePath));
+  if (isUnderDir(path.resolve(workspaceRoot), resolved)) {
+    throw new Error(
+      `The federation cache folder '${resolved}' contains the workspace root '${workspaceRoot}'. ` +
+        `Point it at a dedicated folder, such as 'node_modules/.cache/native-federation'.`
+    );
+  }
 }
