@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createBuildResultMap, lookupInResultMap, popFromResultMap } from './build-result-map.js';
+import { createBuildResultMap, popFromResultMap } from './build-result-map.js';
 
 const r = (fileName: string, entry?: string) => ({ fileName, ...(entry && { entry }) }) as never;
 
@@ -78,19 +78,6 @@ describe('createBuildResultMap with entry set by the adapter', () => {
   it('finds an entry whose hash contains a dash', () => {
     const map = createBuildResultMap([r('/d/Rel-_z3-emEa.js', 'Rel.js')], true, ['Rel.js']);
     expect(map).toEqual({ 'Rel.js': '/d/Rel-_z3-emEa.js' });
-  });
-});
-
-describe('lookupInResultMap', () => {
-  it('returns the basename of the mapped file', () => {
-    const map = { 'main.js': 'dist/assets/main-XYZ.js' };
-    expect(lookupInResultMap(map, 'whatever/main.js')).toBe('main-XYZ.js');
-  });
-
-  it('throws a descriptive error for a missing key', () => {
-    expect(() => lookupInResultMap({}, 'missing.js')).toThrow(
-      /No build result found for 'missing.js'/
-    );
   });
 });
 

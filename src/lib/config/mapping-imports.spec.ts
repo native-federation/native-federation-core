@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
-import { createMappingImportResolver, mappingExportNames } from './mapping-imports.js';
+import { createMappingImportResolverCore, mappingExportNames } from './mapping-imports.js';
 import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
 import { logger } from '../utils/logger.js';
 
@@ -153,7 +153,7 @@ describe('mappingExportNames', () => {
   });
 });
 
-describe('createMappingImportResolver', () => {
+describe('createMappingImportResolverCore', () => {
   // The shape ngtsc produces: the app imports the barrel, the compiler synthesizes a deep
   // relative import to the file that defines a transitively referenced component.
   const lib = (barrel: string) =>
@@ -167,13 +167,13 @@ describe('createMappingImportResolver', () => {
 
   it('rewrites a deep import the barrel republishes', () => {
     const io = lib(`export * from './ui.module'; export * from './badge.component';`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/badge.component'), APP)).toBe('@myorg/ui');
   });
 
   it('declines a deep import the barrel keeps internal', () => {
     const io = lib(`export * from './ui.module';`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/badge.component'), APP)).toBeNull();
   });
 
@@ -182,7 +182,7 @@ describe('createMappingImportResolver', () => {
       `export * from './ui.module';
        export { BadgeComponent as Badge } from './badge.component';`
     );
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/badge.component'), APP)).toBeNull();
   });
 
@@ -194,7 +194,7 @@ describe('createMappingImportResolver', () => {
        import type { BadgeComponent } from './badge.component';
        export { BadgeComponent };`
     );
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/badge.component'), APP)).toBeNull();
   });
 
@@ -207,7 +207,7 @@ describe('createMappingImportResolver', () => {
          export { BadgeComponent };`
       )
       .setFile(f('libs/ui/src/badge.component.ts'), `export class BadgeComponent {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/badge.component'), APP)).toBeNull();
   });
 
@@ -219,7 +219,7 @@ describe('createMappingImportResolver', () => {
       .setFile(f('libs/ui/src/index.ts'), `export { Config } from './a';`)
       .setFile(f('libs/ui/src/a.ts'), `export class Config {}`)
       .setFile(f('libs/ui/src/b.ts'), `export class Config {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/b'), APP)).toBeNull();
   });
 
@@ -230,7 +230,7 @@ describe('createMappingImportResolver', () => {
       .setFile(f('libs/ui/src/index.ts'), `export * from './a'; export * from './b';`)
       .setFile(f('libs/ui/src/a.ts'), `export class Config {}`)
       .setFile(f('libs/ui/src/b.ts'), `export class Config {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/b'), APP)).toBeNull();
   });
 
@@ -247,7 +247,7 @@ describe('createMappingImportResolver', () => {
       .setFile(f('libs/ui/src/d.ts'), `export class Config {}`)
       .setFile(f('libs/ui/src/e.ts'), `export class Config {}`)
       .setFile(f('libs/ui/src/c.ts'), `export class Config {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/a'), APP)).toBeNull();
   });
 
@@ -258,7 +258,7 @@ describe('createMappingImportResolver', () => {
       .setFile(f('libs/ui/src/index.ts'), `export * from './re'; export * from './badge';`)
       .setFile(f('libs/ui/src/re.ts'), `export { Badge } from './badge';`)
       .setFile(f('libs/ui/src/badge.ts'), `export class Badge {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/badge'), APP)).toBe('@myorg/ui');
   });
 
@@ -268,7 +268,7 @@ describe('createMappingImportResolver', () => {
       .setFile(f('libs/ui/src/a.ts'), `export { Badge } from './badge';`)
       .setFile(f('libs/ui/src/b.ts'), `export { Badge } from './badge';`)
       .setFile(f('libs/ui/src/badge.ts'), `export class Badge {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/badge'), APP)).toBe('@myorg/ui');
   });
 
@@ -279,7 +279,7 @@ describe('createMappingImportResolver', () => {
       .setFile(f('libs/ui/src/index.ts'), `export * from './a'; export { Thing } from './b';`)
       .setFile(f('libs/ui/src/a.ts'), `export class Thing {}`)
       .setFile(f('libs/ui/src/b.ts'), `export class Thing {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/b'), APP)).toBe('@myorg/ui');
     expect(resolve(f('libs/ui/src/a'), APP)).toBeNull();
   });
@@ -291,7 +291,7 @@ describe('createMappingImportResolver', () => {
       .setFile(f('libs/ui/src/index.ts'), `export { Deep } from './mid';`)
       .setFile(f('libs/ui/src/mid.ts'), `export * from './deep';`)
       .setFile(f('libs/ui/src/deep.ts'), `export class Deep {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/deep'), APP)).toBe('@myorg/ui');
   });
 
@@ -299,7 +299,7 @@ describe('createMappingImportResolver', () => {
     const io = createMemoryIo()
       .setFile(f('libs/ui/src/index.ts'), `export * from './re';`)
       .setFile(f('libs/ui/src/re.ts'), `export { Gone } from './missing'; export class Own {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/re'), APP)).toBeNull();
   });
 
@@ -307,7 +307,7 @@ describe('createMappingImportResolver', () => {
     const io = createMemoryIo()
       .setFile(f('libs/ui/src/index.ts'), `export { A } from './pair';`)
       .setFile(f('libs/ui/src/pair.ts'), `export class A {} export class B {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/pair'), APP)).toBeNull();
   });
 
@@ -318,7 +318,7 @@ describe('createMappingImportResolver', () => {
     const io = createMemoryIo()
       .setFile(f('libs/ui/src/index.ts'), `export { Own } from './re';`)
       .setFile(f('libs/ui/src/re.ts'), `export * from '@angular/core'; export class Own {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/re'), APP)).toBeNull();
   });
 
@@ -326,7 +326,7 @@ describe('createMappingImportResolver', () => {
     const io = createMemoryIo()
       .setFile(f('libs/ui/src/index.ts'), `export { A } from './pair';`)
       .setFile(f('libs/ui/src/pair.ts'), `export const { a, b } = obj; export class A {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/pair'), APP)).toBeNull();
   });
 
@@ -335,7 +335,7 @@ describe('createMappingImportResolver', () => {
       f('libs/ui/src/legacy.ts'),
       `class Legacy {} export = Legacy;`
     );
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/legacy'), APP)).toBeNull();
   });
 
@@ -347,7 +347,7 @@ describe('createMappingImportResolver', () => {
       .setFile(f('libs/ui/src/index.ts'), `export * from './a'; export * from './b';`)
       .setFile(f('libs/ui/src/a.ts'), `export * from './b'; export class A {}`)
       .setFile(f('libs/ui/src/b.ts'), `export * from './a'; export class B {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/a'), APP)).toBe('@myorg/ui');
   });
 
@@ -355,13 +355,13 @@ describe('createMappingImportResolver', () => {
     const io = createMemoryIo()
       .setFile(f('libs/ui/src/index.ts'), `export * from './badge.component';`)
       .setFile(f('libs/ui/src/badge.component.ts'), `export default class Badge {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/badge.component'), APP)).toBeNull();
   });
 
   it('rewrites the barrel itself when reached by a relative path', () => {
     const io = lib(`export * from './ui.module';`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/index.ts'), APP)).toBe('@myorg/ui');
   });
 
@@ -380,13 +380,13 @@ describe('createMappingImportResolver', () => {
         `export * from '@angular/core';
          export * from './badge.component';`
       );
-      const resolve = createMappingImportResolver(MAPPINGS, io);
+      const resolve = createMappingImportResolverCore(MAPPINGS, io);
       expect(resolve(f('libs/ui/src/index.ts'), APP)).toBe('@myorg/ui');
     });
 
     it('rewrites a pure facade barrel, which publishes nothing of its own', () => {
       const io = facade(`export * from '@angular/core';`);
-      const resolve = createMappingImportResolver(MAPPINGS, io);
+      const resolve = createMappingImportResolverCore(MAPPINGS, io);
       expect(resolve(f('libs/ui/src/index.ts'), APP)).toBe('@myorg/ui');
     });
 
@@ -394,7 +394,7 @@ describe('createMappingImportResolver', () => {
     // relatively importing its own barrel must stay internal, or its bundle imports itself.
     it('still leaves the lib’s own file importing its barrel alone', () => {
       const io = facade(`export * from '@angular/core';`);
-      const resolve = createMappingImportResolver(MAPPINGS, io);
+      const resolve = createMappingImportResolverCore(MAPPINGS, io);
       const importer = f('libs/ui/src/badge.component.ts');
       expect(resolve(f('libs/ui/src/index.ts'), importer)).toBeNull();
     });
@@ -403,14 +403,14 @@ describe('createMappingImportResolver', () => {
     // surface is short, so a name it does not carry must not be rewritten onto the mapping.
     it('still declines a deep import the incomplete barrel does not republish', () => {
       const io = facade(`export * from '@angular/core';`);
-      const resolve = createMappingImportResolver(MAPPINGS, io);
+      const resolve = createMappingImportResolverCore(MAPPINGS, io);
       expect(resolve(f('libs/ui/src/badge.component'), APP)).toBeNull();
     });
   });
 
   it('leaves a mapped lib reaching into itself alone', () => {
     const io = lib(`export * from './ui.module'; export * from './badge.component';`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     const importer = f('libs/ui/src/ui.module.ts');
     expect(resolve(f('libs/ui/src/badge.component'), importer)).toBeNull();
   });
@@ -420,7 +420,7 @@ describe('createMappingImportResolver', () => {
       f('apps/host/src/local.ts'),
       `export class Local {}`
     );
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('apps/host/src/local'), APP)).toBeNull();
   });
 
@@ -428,7 +428,7 @@ describe('createMappingImportResolver', () => {
     const io = createMemoryIo()
       .setFile(f('libs/foo/src/index.ts'), `export class Foo {}`)
       .setFile(f('libs/foobar/src/thing.ts'), `export class Thing {}`);
-    const resolve = createMappingImportResolver({ [f('libs/foo/src/index.ts')]: '@x/foo' }, io);
+    const resolve = createMappingImportResolverCore({ [f('libs/foo/src/index.ts')]: '@x/foo' }, io);
     expect(resolve(f('libs/foobar/src/thing'), APP)).toBeNull();
   });
 
@@ -440,7 +440,7 @@ describe('createMappingImportResolver', () => {
         .setFile(f('libs/ui/src/index.ts'), `export * from './badge';`)
         .setFile(f('libs/ui/src/badge.ts'), `export class Badge {}`)
         .setFile(path.resolve('/other/pkg/src/index.ts'), `export class Other {}`);
-      const resolve = createMappingImportResolver(
+      const resolve = createMappingImportResolverCore(
         {
           [f('libs/ui/src/index.ts')]: '@myorg/ui',
           [path.resolve('/other/pkg/src/index.ts')]: '@myorg/other',
@@ -456,7 +456,7 @@ describe('createMappingImportResolver', () => {
         .setFile(f('libs/ui/src/index.ts'), `export * from './badge';`)
         .setFile(f('libs/ui/src/badge.ts'), `export class Badge {}`)
         .setFile(f('libs/other.ts'), `export class Other {}`);
-      const resolve = createMappingImportResolver(MAPPINGS, io);
+      const resolve = createMappingImportResolverCore(MAPPINGS, io);
       expect(resolve(f('libs/other'), APP)).toBeNull();
     });
   });
@@ -466,7 +466,7 @@ describe('createMappingImportResolver', () => {
       .setFile(f('libs/ui/src/index.ts'), `export * from './sub/deep';`)
       .setFile(f('libs/ui/src/sub/index.ts'), `export * from './deep';`)
       .setFile(f('libs/ui/src/sub/deep.ts'), `export class Deep {}`);
-    const resolve = createMappingImportResolver(
+    const resolve = createMappingImportResolverCore(
       {
         [f('libs/ui/src/index.ts')]: '@myorg/ui',
         [f('libs/ui/src/sub/index.ts')]: '@myorg/ui/sub',
@@ -481,13 +481,13 @@ describe('createMappingImportResolver', () => {
       .setFile(f('libs/ui/src/index.ts'), `export * from './ui.module';`)
       .setFile(f('libs/ui/src/ui.module.ts'), `export class UiModule {}`)
       .setFile(f('libs/ui/src/polyfill.ts'), `globalThis.x = 1;`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/polyfill'), APP)).toBeNull();
   });
 
   it('declines an import that resolves to no file', () => {
     const io = lib(`export * from './badge.component';`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/nope'), APP)).toBeNull();
   });
 
@@ -496,7 +496,7 @@ describe('createMappingImportResolver', () => {
       .setFile(f('libs/ui/src/index.ts'), `export { FromFile } from './thing.js';`)
       .setFile(f('libs/ui/src/thing.js'), `export class FromFile {}`)
       .setFile(f('libs/ui/src/thing/index.ts'), `export class FromDir {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/thing'), APP)).toBe('@myorg/ui');
   });
 
@@ -506,7 +506,7 @@ describe('createMappingImportResolver', () => {
 
     it('behaves like the equivalent file-form key', () => {
       const io = lib(`export * from './ui.module'; export * from './badge.component';`);
-      const resolve = createMappingImportResolver(DIR_MAPPINGS, io);
+      const resolve = createMappingImportResolverCore(DIR_MAPPINGS, io);
       expect(resolve(f('libs/ui/src/badge.component'), APP)).toBe('@myorg/ui');
     });
 
@@ -515,14 +515,17 @@ describe('createMappingImportResolver', () => {
         f('libs/ui/test-setup.ts'),
         `export class Setup {}`
       );
-      const resolve = createMappingImportResolver(DIR_MAPPINGS, io);
+      const resolve = createMappingImportResolverCore(DIR_MAPPINGS, io);
       expect(resolve(f('libs/ui/test-setup'), APP)).toBeNull();
     });
   });
 
   it('ignores a mapping whose entry point does not resolve', () => {
     const io = lib(`export * from './badge.component';`);
-    const resolve = createMappingImportResolver({ [f('libs/ui/src/missing.ts')]: '@myorg/ui' }, io);
+    const resolve = createMappingImportResolverCore(
+      { [f('libs/ui/src/missing.ts')]: '@myorg/ui' },
+      io
+    );
     expect(resolve(f('libs/ui/src/badge.component'), APP)).toBeNull();
   });
 
@@ -540,7 +543,7 @@ describe('createMappingImportResolver', () => {
 
     it('validates a deep import against the entry point that publishes it', () => {
       // Deep entry first, so declaration order alone would pick the one that declines.
-      const resolve = createMappingImportResolver(
+      const resolve = createMappingImportResolverCore(
         {
           [f('libs/ui/src/models.ts')]: '@myorg/ui/models',
           [f('libs/ui/src/index.ts')]: '@myorg/ui',
@@ -552,7 +555,7 @@ describe('createMappingImportResolver', () => {
 
     it('attributes an entry point to its own specifier, not the barrel republishing it', () => {
       // Barrel first, and it does republish `Model`, so only an exact hit gets this right.
-      const resolve = createMappingImportResolver(
+      const resolve = createMappingImportResolverCore(
         {
           [f('libs/ui/src/index.ts')]: '@myorg/ui',
           [f('libs/ui/src/models.ts')]: '@myorg/ui/models',
@@ -564,7 +567,7 @@ describe('createMappingImportResolver', () => {
   });
 });
 
-describe('createMappingImportResolver — misuse', () => {
+describe('createMappingImportResolverCore — misuse', () => {
   const APP = f('apps/host/src/app.component.ts');
 
   // Passing the config from `withNativeFederation` instead of the normalized one is silent
@@ -573,7 +576,7 @@ describe('createMappingImportResolver — misuse', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     const io = createMemoryIo().setFile(f('libs/ui/src/index.ts'), `export class Ui {}`);
 
-    createMappingImportResolver({ [f('libs/*/src/index.ts')]: '@myorg/*' }, io);
+    createMappingImportResolverCore({ [f('libs/*/src/index.ts')]: '@myorg/*' }, io);
 
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('unexpanded wildcard'));
     warn.mockRestore();
@@ -583,7 +586,10 @@ describe('createMappingImportResolver — misuse', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     const io = createMemoryIo().setFile(f('libs/ui/src/index.ts'), `export class Ui {}`);
 
-    const resolve = createMappingImportResolver({ [f('libs/ui/src/index.ts')]: '@myorg/ui' }, io);
+    const resolve = createMappingImportResolverCore(
+      { [f('libs/ui/src/index.ts')]: '@myorg/ui' },
+      io
+    );
     expect(resolve(f('libs/ui/src/index.ts'), APP)).toBe('@myorg/ui');
 
     expect(warn).not.toHaveBeenCalled();
@@ -591,7 +597,7 @@ describe('createMappingImportResolver — misuse', () => {
   });
 });
 
-describe('createMappingImportResolver — path spelling', () => {
+describe('createMappingImportResolverCore — path spelling', () => {
   const MAPPINGS = { [f('libs/ui/src/index.ts')]: '@myorg/ui' };
   const APP = f('apps/host/src/app.component.ts');
 
@@ -609,7 +615,7 @@ describe('createMappingImportResolver — path spelling', () => {
     ['a . segment', 'libs/ui/src/./badge.component'],
     ['a doubled separator', 'libs/ui/src//badge.component'],
   ])('rewrites an imported path carrying %s', (_label, spelling) => {
-    const resolve = createMappingImportResolver(MAPPINGS, lib());
+    const resolve = createMappingImportResolverCore(MAPPINGS, lib());
     expect(resolve(raw(spelling), APP)).toBe('@myorg/ui');
   });
 
@@ -617,14 +623,14 @@ describe('createMappingImportResolver — path spelling', () => {
   // importer inside the lib spelled with a detour would escape the check and the lib's own
   // bundle would import itself.
   it('still declines a self-import whose spelling hides the mapping directory', () => {
-    const resolve = createMappingImportResolver(MAPPINGS, lib());
+    const resolve = createMappingImportResolverCore(MAPPINGS, lib());
     const detour = raw('libs/other/../ui/src/ui.module.ts');
     expect(path.resolve(detour)).toBe(f('libs/ui/src/ui.module.ts'));
     expect(resolve(f('libs/ui/src/badge.component'), detour)).toBeNull();
   });
 
   it('resolves a mapping key that is not normalized', () => {
-    const resolve = createMappingImportResolver(
+    const resolve = createMappingImportResolverCore(
       { [raw('libs/ui/src/sub/../index.ts')]: '@myorg/ui' },
       lib()
     );
@@ -635,13 +641,13 @@ describe('createMappingImportResolver — path spelling', () => {
   // already, so this stays the caller's to get right rather than a syscall on every lookup.
   it('does not follow a symlink into a mapped lib', () => {
     const io = lib().setSymlink(f('node_modules/@myorg/ui'), f('libs/ui'));
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('node_modules/@myorg/ui/src/badge.component'), APP)).toBeNull();
     expect(resolve(f('libs/ui/src/badge.component'), APP)).toBe('@myorg/ui');
   });
 });
 
-describe('createMappingImportResolver — reset', () => {
+describe('createMappingImportResolverCore — reset', () => {
   const MAPPINGS = { [f('libs/ui/src/index.ts')]: '@myorg/ui' };
   const APP = f('apps/host/src/app.component.ts');
   const BARREL = f('libs/ui/src/index.ts');
@@ -673,7 +679,7 @@ describe('createMappingImportResolver — reset', () => {
 
   it('keeps serving a cached surface until a build boundary', () => {
     const io = published();
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(BADGE, APP)).toBe('@myorg/ui');
 
     // The barrel stops publishing the leaf, which would decline on a cold resolver.
@@ -692,7 +698,7 @@ describe('createMappingImportResolver — reset', () => {
       .setFile(BARREL, `export * from './reexporter';`)
       .setFile(MIDDLE, `export * from './badge';`)
       .setFile(BADGE, `export class BadgeComponent {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(BADGE, APP)).toBe('@myorg/ui');
 
     io.setFile(MIDDLE, `export class Other {}`);
@@ -704,7 +710,7 @@ describe('createMappingImportResolver — reset', () => {
   it('re-resolves entry points, so a barrel added mid-watch starts matching', () => {
     // The mapping names a directory; until an index exists there is nothing to resolve against.
     const io = createMemoryIo().setFile(BADGE, `export class BadgeComponent {}`);
-    const resolve = createMappingImportResolver({ [f('libs/ui/src')]: '@myorg/ui' }, io);
+    const resolve = createMappingImportResolverCore({ [f('libs/ui/src')]: '@myorg/ui' }, io);
     expect(resolve(BADGE, APP)).toBeNull();
 
     io.setFile(BARREL, `export * from './badge';`);
@@ -717,7 +723,7 @@ describe('createMappingImportResolver — reset', () => {
   // entry-point re-resolution has to wait for a lookup rather than run on the spot.
   it('does no I/O until the next lookup', () => {
     const { io, reads } = countingIo(published());
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(BADGE, APP)).toBe('@myorg/ui');
 
     const warm = reads();
@@ -730,12 +736,12 @@ describe('createMappingImportResolver — reset', () => {
 
   it('defers even the first entry-point resolution until asked', () => {
     const { io, reads } = countingIo(published());
-    createMappingImportResolver(MAPPINGS, io);
+    createMappingImportResolverCore(MAPPINGS, io);
     expect(reads()).toBe(0);
   });
 });
 
-describe('createMappingImportResolver — node16/nodenext specifiers', () => {
+describe('createMappingImportResolverCore — node16/nodenext specifiers', () => {
   const APP = f('apps/host/src/app.component.ts');
   const MAPPINGS = { [f('libs/ui/src/index.ts')]: '@myorg/ui' };
 
@@ -747,7 +753,7 @@ describe('createMappingImportResolver — node16/nodenext specifiers', () => {
   it('resolves a .js specifier onto its TypeScript source', () => {
     // Under `moduleResolution: node16`/`nodenext` a relative import must carry the emitted
     // extension, so this is the ordinary spelling there — not a mistake to be declined.
-    const resolve = createMappingImportResolver(MAPPINGS, lib());
+    const resolve = createMappingImportResolverCore(MAPPINGS, lib());
     expect(resolve(f('libs/ui/src/badge.component.js'), APP)).toBe('@myorg/ui');
   });
 
@@ -762,7 +768,7 @@ describe('createMappingImportResolver — node16/nodenext specifiers', () => {
     const io = createMemoryIo()
       .setFile(f('libs/ui/src/index.ts'), `export * from '${barrel}';`)
       .setFile(f('libs/ui/src/badge.component' + source), `export class BadgeComponent {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/badge.component' + emitted), APP)).toBe('@myorg/ui');
   });
 
@@ -770,7 +776,7 @@ describe('createMappingImportResolver — node16/nodenext specifiers', () => {
     // A stale `badge.component.js` next to its source is what tsc would skip, and reading the
     // artefact's surface could disagree with what the bundler actually compiles.
     const io = lib().setFile(f('libs/ui/src/badge.component.js'), `export class Stale {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/badge.component.js'), APP)).toBe('@myorg/ui');
   });
 
@@ -778,7 +784,7 @@ describe('createMappingImportResolver — node16/nodenext specifiers', () => {
     const io = createMemoryIo()
       .setFile(f('libs/ui/src/index.ts'), `export * from './helper.js';`)
       .setFile(f('libs/ui/src/helper.js'), `export class Helper {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/helper.js'), APP)).toBe('@myorg/ui');
   });
 });
@@ -786,7 +792,7 @@ describe('createMappingImportResolver — node16/nodenext specifiers', () => {
 // Regressions for the hole the hand-rolled walk had: it treated any readable file as an ES
 // module and never checked for parse errors, so a target whose exports it could not actually
 // read reported as complete -- the one direction that rewrites onto a name nobody publishes.
-describe('createMappingImportResolver — targets whose exports cannot be read', () => {
+describe('createMappingImportResolverCore — targets whose exports cannot be read', () => {
   const MAPPINGS = { [f('libs/ui/src/index.ts')]: '@myorg/ui' };
   const APP = f('apps/host/src/app.component.ts');
 
@@ -796,7 +802,7 @@ describe('createMappingImportResolver — targets whose exports cannot be read',
       .setFile(f('libs/ui/src/re.ts'), `export * from './legacy.js'; export class Own {}`)
       // Not an ES module, so its `helper` is invisible to the walk but live at runtime.
       .setFile(f('libs/ui/src/legacy.js'), `module.exports.helper = function () {};`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/re'), APP)).toBeNull();
   });
 
@@ -804,14 +810,14 @@ describe('createMappingImportResolver — targets whose exports cannot be read',
     const io = createMemoryIo()
       .setFile(f('libs/ui/src/index.ts'), `export { Own } from './broken';`)
       .setFile(f('libs/ui/src/broken.ts'), `export class Own {} @@@ !!! export class Hidden {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(resolve(f('libs/ui/src/broken'), APP)).toBeNull();
   });
 });
 
 // The decline that is worth telling the user about: the barrel was readable and simply does not
 // carry the file. Every other decline means "unknown", which says nothing about their library.
-describe('createMappingImportResolver — the unpublished-target warning', () => {
+describe('createMappingImportResolverCore — the unpublished-target warning', () => {
   const MAPPINGS = { [f('libs/ui/src/index.ts')]: '@myorg/ui' };
   const APP = f('apps/host/src/app.component.ts');
 
@@ -833,7 +839,7 @@ describe('createMappingImportResolver — the unpublished-target warning', () =>
       .setFile(f('libs/ui/src/badge.component.ts'), `export class BadgeComponent {}`);
 
   it('names the unpublished file, the barrel, and the specifier', () => {
-    const resolve = createMappingImportResolver(MAPPINGS, hidden());
+    const resolve = createMappingImportResolverCore(MAPPINGS, hidden());
 
     expect(resolve(f('libs/ui/src/badge.component'), APP)).toBeNull();
 
@@ -849,7 +855,7 @@ describe('createMappingImportResolver — the unpublished-target warning', () =>
     const io = createMemoryIo()
       .setFile(f('libs/ui/src/index.ts'), `export { A } from './pair';`)
       .setFile(f('libs/ui/src/pair.ts'), `export class A {} export class B {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
 
     expect(resolve(f('libs/ui/src/pair'), APP)).toBeNull();
 
@@ -861,7 +867,7 @@ describe('createMappingImportResolver — the unpublished-target warning', () =>
   });
 
   it('warns once per target across a rebuild\u2019s worth of lookups, and again after reset', () => {
-    const resolve = createMappingImportResolver(MAPPINGS, hidden());
+    const resolve = createMappingImportResolverCore(MAPPINGS, hidden());
 
     // Every importer of the target asks again within a build, so one deep import arrives many times.
     for (let i = 0; i < 10; i++) resolve(f('libs/ui/src/badge.component'), APP);
@@ -877,7 +883,7 @@ describe('createMappingImportResolver — the unpublished-target warning', () =>
     const io = createMemoryIo()
       .setFile(f('libs/ui/src/index.ts'), `export * from '@angular/core';`)
       .setFile(f('libs/ui/src/badge.component.ts'), `export class BadgeComponent {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
 
     expect(resolve(f('libs/ui/src/badge.component'), APP)).toBeNull();
     expect(warn).not.toHaveBeenCalled();
@@ -887,14 +893,14 @@ describe('createMappingImportResolver — the unpublished-target warning', () =>
     const io = createMemoryIo()
       .setFile(f('libs/ui/src/index.ts'), `export { Own } from './re';`)
       .setFile(f('libs/ui/src/re.ts'), `export * from '@angular/core'; export class Own {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
 
     expect(resolve(f('libs/ui/src/re'), APP)).toBeNull();
     expect(warn).not.toHaveBeenCalled();
   });
 
   it('stays silent on a self-import, which is not a decline about publication', () => {
-    const resolve = createMappingImportResolver(MAPPINGS, hidden());
+    const resolve = createMappingImportResolverCore(MAPPINGS, hidden());
 
     expect(resolve(f('libs/ui/src/badge.component'), f('libs/ui/src/other.ts'))).toBeNull();
     expect(warn).not.toHaveBeenCalled();
@@ -904,7 +910,7 @@ describe('createMappingImportResolver — the unpublished-target warning', () =>
     const io = createMemoryIo()
       .setFile(f('libs/ui/src/index.ts'), `export * from './badge.component';`)
       .setFile(f('libs/ui/src/badge.component.ts'), `export class BadgeComponent {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
 
     expect(resolve(f('libs/ui/src/badge.component'), APP)).toBe('@myorg/ui');
     expect(warn).not.toHaveBeenCalled();
@@ -922,14 +928,14 @@ describe('createMappingImportResolver — the unpublished-target warning', () =>
       .setFile(f('libs/ui/src/ui.module.ts'), `export class UiModule {}`)
       .setFile(f('libs/ui/src/re.ts'), `export { BadgeComponent } from './badge.component';`)
       .setFile(f('libs/ui/src/badge.component.ts'), `export class BadgeComponent {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
 
     expect(resolve(f('libs/ui/src/badge.component'), APP)).toBe('@myorg/ui');
     expect(warn).not.toHaveBeenCalled();
   });
 });
 
-describe('createMappingImportResolver — robustness of the module graph', () => {
+describe('createMappingImportResolverCore — robustness of the module graph', () => {
   const MAPPINGS = {
     [f('libs/ui/src/index.ts')]: '@myorg/ui',
     [f('libs/ui/testing/index.ts')]: '@myorg/ui/testing',
@@ -949,7 +955,7 @@ describe('createMappingImportResolver — robustness of the module graph', () =>
       return read(p);
     };
 
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     expect(() => resolve(f('libs/ui/src/badge.component'), APP)).not.toThrow();
     expect(resolve(f('libs/ui/src/badge.component'), APP)).toBeNull();
   });
@@ -964,7 +970,7 @@ describe('createMappingImportResolver — robustness of the module graph', () =>
       )
       .setFile(f('libs/ui/src/badge.component.ts'), `export class BadgeComponent {}`)
       .setFile(f('libs/ui/testing/index.ts'), `export class Harness {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
 
     expect(resolve(f('libs/ui/src/badge.component'), APP)).toBe('@myorg/ui');
   });
@@ -973,7 +979,7 @@ describe('createMappingImportResolver — robustness of the module graph', () =>
     const io = createMemoryIo()
       .setFile(f('libs/ui/src/index.ts'), `export { Own } from './re';`)
       .setFile(f('libs/ui/src/re.ts'), `export * from '@other/unknown'; export class Own {}`);
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
 
     expect(resolve(f('libs/ui/src/re'), APP)).toBeNull();
   });
@@ -991,7 +997,7 @@ describe('createMappingImportResolver — robustness of the module graph', () =>
       return read(p);
     };
 
-    const resolve = createMappingImportResolver(MAPPINGS, io);
+    const resolve = createMappingImportResolverCore(MAPPINGS, io);
     for (let i = 0; i < 25; i++) resolve(f('libs/ui/src/badge.component'), APP);
 
     // The program reads each file once; the memo is what stops the star walk repeating.
@@ -1004,7 +1010,7 @@ describe('createMappingImportResolver — robustness of the module graph', () =>
   });
 });
 
-describe('createMappingImportResolver — a mis-cased mapping key', () => {
+describe('createMappingImportResolverCore — a mis-cased mapping key', () => {
   const APP = f('apps/host/src/app.component.ts');
 
   // A case-insensitive filesystem resolves a mis-cased tsconfig `paths` value happily, so the
@@ -1021,7 +1027,7 @@ describe('createMappingImportResolver — a mis-cased mapping key', () => {
       .setDiskCase(f('libs/UI/src/index.ts'), f('libs/ui/src/index.ts'));
 
   it('still rewrites a path the bundler reports in the spelling on disk', () => {
-    const resolve = createMappingImportResolver(
+    const resolve = createMappingImportResolverCore(
       { [f('libs/UI/src/index.ts')]: '@myorg/ui' },
       miscased()
     );
@@ -1035,7 +1041,10 @@ describe('createMappingImportResolver — a mis-cased mapping key', () => {
       .setFile(f('libs/ui/src/index.ts'), `export * from '@angular/core';`)
       .setFile(f('libs/UI/src/index.ts'), `export * from '@angular/core';`)
       .setDiskCase(f('libs/UI/src/index.ts'), f('libs/ui/src/index.ts'));
-    const resolve = createMappingImportResolver({ [f('libs/UI/src/index.ts')]: '@myorg/ui' }, io);
+    const resolve = createMappingImportResolverCore(
+      { [f('libs/UI/src/index.ts')]: '@myorg/ui' },
+      io
+    );
     expect(resolve(f('libs/ui/src/index.ts'), APP)).toBe('@myorg/ui');
   });
 
@@ -1046,7 +1055,10 @@ describe('createMappingImportResolver — a mis-cased mapping key', () => {
       .setFile(f('libs/ui/src/index.ts'), `export * from './badge.component';`)
       .setFile(f('libs/ui/src/badge.component.ts'), `export class BadgeComponent {}`)
       .setSymlink(f('links/ui'), f('libs/ui'));
-    const resolve = createMappingImportResolver({ [f('links/ui/src/index.ts')]: '@myorg/ui' }, io);
+    const resolve = createMappingImportResolverCore(
+      { [f('links/ui/src/index.ts')]: '@myorg/ui' },
+      io
+    );
     expect(resolve(f('libs/ui/src/badge.component'), APP)).toBeNull();
   });
 });

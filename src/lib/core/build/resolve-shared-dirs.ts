@@ -59,9 +59,16 @@ export function resolveSharedPackageDirs(
  *  Deduped, since secondaries share a package dir. Empty unless `watchLinkedDeps` is on. */
 export function linkedSharedDirs(
   config: NormalizedFederationConfig,
+  fedOptions: NormalizedFederationOptions
+): string[] {
+  return linkedSharedDirsCore(config, fedOptions, nodeIo, sharedPackageJsonRepository);
+}
+
+export function linkedSharedDirsCore(
+  config: NormalizedFederationConfig,
   fedOptions: NormalizedFederationOptions,
-  io: FileReaderPort = nodeIo,
-  repo: PackageJsonRepository = sharedPackageJsonRepository
+  io: FileReaderPort,
+  repo: PackageJsonRepository
 ): string[] {
   if (!fedOptions.watchLinkedDeps) return [];
   const entries = resolveEntries(Object.keys(config.shared), folderOf(fedOptions), io, repo);

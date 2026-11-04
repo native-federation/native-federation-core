@@ -244,9 +244,13 @@ export interface MappingImportResolver {
  * App builds only: where the mappings are themselves the entry points every call is a
  * self-import, so nothing rewrites and the program is never built.
  */
-export function createMappingImportResolver(
+export function createMappingImportResolver(sharedMappings: PathToImport): MappingImportResolver {
+  return createMappingImportResolverCore(sharedMappings, nodeIo);
+}
+
+export function createMappingImportResolverCore(
   sharedMappings: PathToImport,
-  io: FileReaderPort = nodeIo
+  io: FileReaderPort
 ): MappingImportResolver {
   const aliases: ts.MapLike<string[]> = {};
   for (const [mappedPath, importName] of Object.entries(sharedMappings)) {

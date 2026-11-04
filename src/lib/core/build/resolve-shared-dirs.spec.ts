@@ -3,7 +3,7 @@ import {
   affectedSharedKeys,
   hintUnwatchedLinkedDeps,
   linkedContentSignals,
-  linkedSharedDirs,
+  linkedSharedDirsCore,
   resolveSharedPackageDirs,
   sharedMappingDirs,
 } from './resolve-shared-dirs.js';
@@ -76,7 +76,7 @@ describe('resolveSharedPackageDirs', () => {
   });
 });
 
-describe('linkedSharedDirs', () => {
+describe('linkedSharedDirsCore', () => {
   // The watch set is opt-in; these cases are about classification, so they enable it.
   const watching = (shared: Record<string, unknown>) =>
     ({ shared }) as unknown as NormalizedFederationConfig;
@@ -104,7 +104,7 @@ describe('linkedSharedDirs', () => {
       tslib: '/ws/node_modules/tslib/package.json',
     });
 
-    expect(linkedSharedDirs(cfg, opts, io, repo)).toEqual(['/dev/lib']);
+    expect(linkedSharedDirsCore(cfg, opts, io, repo)).toEqual(['/dev/lib']);
   });
 
   // A registry dep is bundled once and cached by checksum, so watching node_modules can
@@ -115,8 +115,8 @@ describe('linkedSharedDirs', () => {
     const repo = repoReturning({ '@scope/lib': '/ws/node_modules/@scope/lib/package.json' });
     const off = { workspaceRoot: '/ws' } as NormalizedFederationOptions;
 
-    expect(linkedSharedDirs(cfg, off, io, repo)).toEqual([]);
-    expect(linkedSharedDirs(cfg, opts, io, repo)).toEqual(['/dev/lib']);
+    expect(linkedSharedDirsCore(cfg, off, io, repo)).toEqual([]);
+    expect(linkedSharedDirsCore(cfg, opts, io, repo)).toEqual(['/dev/lib']);
   });
 
   // pnpm's default (isolated) nodeLinker symlinks *every* dependency into the virtual
@@ -132,7 +132,7 @@ describe('linkedSharedDirs', () => {
       '@scope/lib': '/ws/node_modules/@scope/lib/package.json',
     });
 
-    expect(linkedSharedDirs(cfg, opts, io, repo)).toEqual(['/dev/lib/dist']);
+    expect(linkedSharedDirsCore(cfg, opts, io, repo)).toEqual(['/dev/lib/dist']);
   });
 
   // The virtual store can sit above the Angular workspace root in a monorepo, so the
@@ -146,7 +146,7 @@ describe('linkedSharedDirs', () => {
     );
     const repo = repoReturning({ rxjs: '/repo/apps/host/node_modules/rxjs/package.json' });
 
-    expect(linkedSharedDirs(cfg, opts, io, repo)).toEqual([]);
+    expect(linkedSharedDirsCore(cfg, opts, io, repo)).toEqual([]);
   });
 
   // Substring matching would read this checkout as an installed package and silently
@@ -160,7 +160,9 @@ describe('linkedSharedDirs', () => {
     );
     const repo = repoReturning({ 'my-lib': '/ws/node_modules/my-lib/package.json' });
 
-    expect(linkedSharedDirs(cfg, opts, io, repo)).toEqual(['/dev/node_modules_backup/my-lib/dist']);
+    expect(linkedSharedDirsCore(cfg, opts, io, repo)).toEqual([
+      '/dev/node_modules_backup/my-lib/dist',
+    ]);
   });
 
   // `npm link` installs two hops; realpath collapses both to the checkout, which carries
@@ -173,7 +175,7 @@ describe('linkedSharedDirs', () => {
       .setSymlink('/usr/lib/node_modules/my-lib', '/dev/mylib-checkout/dist');
     const repo = repoReturning({ 'my-lib': '/ws/node_modules/my-lib/package.json' });
 
-    expect(linkedSharedDirs(cfg, opts, io, repo)).toEqual(['/dev/mylib-checkout/dist']);
+    expect(linkedSharedDirsCore(cfg, opts, io, repo)).toEqual(['/dev/mylib-checkout/dist']);
   });
 });
 
