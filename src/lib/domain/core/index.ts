@@ -3,7 +3,7 @@ export type {
   DenseSharedInfo,
   FederationInfo,
   ExposesInfo,
-  /** @deprecated Only `writeFederationInfo` takes it; removed from the API in v5. */
+  /** @deprecated Only `bundleExposedAndMappings` returns it; removed from the API in v5. */
   ArtifactInfo,
   ChunkInfo,
   IntegrityMap,

@@ -5,7 +5,7 @@ import ts from 'typescript';
 import { lexImports } from './lib/utils/lex-imports.js';
 
 // Every export of every package.json entry, so a change to the public surface shows up as a snapshot
-// diff in review. See issues/export-surface.md for what each entry is for.
+// diff in review. See core#157 for what each entry is for.
 
 const SRC = __dirname;
 
@@ -102,13 +102,17 @@ function nonRelativeImportsReachedFrom(file: string): string[] {
   return found;
 }
 
+// Both tests read it; each run builds a full program over every entry.
+let surfaceOnce: Promise<Record<string, string[]>> | undefined;
+const cachedSurface = () => (surfaceOnce ??= surface());
+
 describe('public API', () => {
   it('exports exactly the snapshotted names from each entry point', async () => {
-    expect(await surface()).toMatchSnapshot();
+    expect(await cachedSurface()).toMatchSnapshot();
   }, 60_000);
 
   it('keeps ./internal a superset of ./internal/browser', async () => {
-    const all = await surface();
+    const all = await cachedSurface();
     expect(all['./internal/browser']!.filter(e => !all['./internal']!.includes(e))).toEqual([]);
   }, 60_000);
 

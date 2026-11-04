@@ -2,7 +2,7 @@ export * from './lib/domain/config/index.js';
 
 export { withNativeFederation } from './lib/config/with-native-federation.js';
 export {
-  /** @deprecated Pass `tsConfig` to the build instead; removed from the API in v5. */
+  /** @deprecated Core resolves the tsconfig itself; removed from the API in v5. */
   findRootTsConfigJson,
 } from './lib/config/project-paths.js';
 export {

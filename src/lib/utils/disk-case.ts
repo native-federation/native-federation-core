@@ -14,6 +14,7 @@ export function toDiskCaseCore(io: FileReaderPort, p: string): string {
   return path.normalize(real);
 }
 
+// Corrects case only: keeps symlinked spellings, and returns a missing path unchanged.
 export function toDiskCase(p: string): string {
   return toDiskCaseCore(nodeIo, p);
 }
