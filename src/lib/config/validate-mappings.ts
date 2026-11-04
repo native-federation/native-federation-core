@@ -1,6 +1,6 @@
 import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { declaredPackageOf } from './mapping-utils.js';
-import { matchesExternal, parseWildcard } from '../utils/path-patterns.js';
+import { matchesExternal, matchesWildcard, parseWildcard } from '../utils/path-patterns.js';
 import { logger } from '../utils/logger.js';
 import { inferPackageFromSecondary } from '../utils/normalize.js';
 import { formatList } from '../utils/format-list.js';
@@ -134,6 +134,25 @@ export function warnUnmatchedMappingPackages(
       logger.warn(`Shared mapping package '${prefix}' covers no tsconfig paths key.`);
     }
   }
+}
+
+// A tsconfig without the declared keys (another project's, or one whose `paths` an `extends` left
+// out) would otherwise share nothing without a word (core#163).
+export function warnUnmatchedMappingPatterns(
+  patterns: readonly string[],
+  keys: readonly string[],
+  tsConfigPath: string
+): void {
+  const unmatched = patterns.filter(pattern => !keys.some(key => matchesWildcard(key, pattern)));
+  if (unmatched.length === 0) return;
+
+  const one = unmatched.length === 1;
+  logger.warn(
+    `Shared mapping${one ? '' : 's'} ${formatList(unmatched, MAX_LISTED)} ` +
+      `${one ? 'matches' : 'match'} no paths key in ${tsConfigPath}` +
+      `${keys.length === 0 ? ', which defines no paths' : ''}, so ${one ? 'it is' : 'they are'} ` +
+      `not shared.`
+  );
 }
 
 // A wildcard can produce the prefix when its literal start sits under the prefix or begins it; an

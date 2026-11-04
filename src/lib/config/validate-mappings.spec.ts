@@ -7,6 +7,7 @@ import {
   isNpmStylePackage,
   warnNonNpmMappingNames,
   warnUnmatchedMappingPackages,
+  warnUnmatchedMappingPatterns,
 } from './validate-mappings.js';
 import { logger } from '../utils/logger.js';
 
@@ -223,5 +224,54 @@ describe('warnUnmatchedMappingPackages', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     warnUnmatchedMappingPackages(['@typo/lib'], [key]);
     expect(warn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('warnUnmatchedMappingPatterns', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const TSCONFIG = '/ws/tsconfig.json';
+  const keys = ['@org/ui', '@org/utils/*', '@shared/*'];
+
+  // The same matching the selection uses, so a pattern that shares something never warns.
+  it.each([['@org/ui'], ['@org/utils/*'], ['@shared/*'], ['@org/*']])(
+    'stays quiet for %s, which selects a key',
+    pattern => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      warnUnmatchedMappingPatterns([pattern], keys, TSCONFIG);
+      expect(warn).not.toHaveBeenCalled();
+    }
+  );
+
+  // Selection matches keys against patterns, not the reverse: a concrete pattern never selects a
+  // wildcard key, so '@shared/table' shares nothing next to '@shared/*'.
+  it('warns for a concrete pattern under a wildcard key', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    warnUnmatchedMappingPatterns(['@shared/table'], keys, TSCONFIG);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays quiet when nothing is declared (share all)', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    warnUnmatchedMappingPatterns([], [], TSCONFIG);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('names the patterns that select nothing, once', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    warnUnmatchedMappingPatterns(['@org/ui', '@org/uii', '@other/*'], keys, TSCONFIG);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      "Shared mappings '@org/uii', '@other/*' match no paths key in /ws/tsconfig.json, so they are not shared."
+    );
+  });
+
+  // core#163: a build that read a tsconfig without `paths` dropped every mapping silently.
+  it('says when the tsconfig defines no paths at all', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    warnUnmatchedMappingPatterns(['@react-internal/ui'], [], TSCONFIG);
+    expect(warn).toHaveBeenCalledWith(
+      "Shared mapping '@react-internal/ui' matches no paths key in /ws/tsconfig.json, which defines no paths, so it is not shared."
+    );
   });
 });
