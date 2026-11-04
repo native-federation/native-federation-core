@@ -1,16 +1,21 @@
 import * as path from 'path';
 import { toPosix } from './path-patterns.js';
 import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
+import { nodeIo } from './io/node-io-adapter.js';
 
 /**
  * Every absolute path that gets string-compared later descends from a root supplied by the
  * invoking tool, and on Windows two tools can report one root with different drive-letter case.
  * Correcting it at the root keeps the comparison sites unchanged.
  */
-export function toDiskCase(io: FileReaderPort, p: string): string {
+export function toDiskCaseCore(io: FileReaderPort, p: string): string {
   const real = io.realpathNative(p);
   if (real === p || !differsOnlyByCase(real, p)) return p;
   return path.normalize(real);
+}
+
+export function toDiskCase(p: string): string {
+  return toDiskCaseCore(nodeIo, p);
 }
 
 // realpath also resolves symlinks, so anything broader than a case difference would move pnpm,

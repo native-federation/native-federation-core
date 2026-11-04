@@ -4,7 +4,7 @@ import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
 import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { nodeIo } from '../utils/io/node-io-adapter.js';
 import { isUnderDir, toPosix } from '../utils/path-patterns.js';
-import { toDiskCase } from '../utils/disk-case.js';
+import { toDiskCaseCore } from '../utils/disk-case.js';
 import { logger } from '../utils/logger.js';
 
 // The permissive superset of what a mapped lib can spell -- extensionless specifiers, directory
@@ -274,7 +274,7 @@ export function createMappingImportResolver(
         // test against the spelling the bundler reports.
         // `toDiskCase` ends in `path.normalize`, which is backslash-separated on Windows,
         // while the target compared against it below is always posix.
-        const entryPoint = toPosix(toDiskCase(io, resolvedKey));
+        const entryPoint = toPosix(toDiskCaseCore(io, resolvedKey));
         const dir = path.dirname(entryPoint);
         return [{ dir, dirPosix: toPosix(dir).replace(/\/+$/, ''), entryPoint, importName }];
       })
