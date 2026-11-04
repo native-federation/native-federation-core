@@ -17,7 +17,7 @@ import { getDefaultCachePath } from './cache/cache-persistence.js';
 import { getUsedDependenciesFactory } from '../config/get-used-dependencies.js';
 import { logger } from '../utils/logger.js';
 import { normalizePackageName } from '../utils/normalize.js';
-import { toDiskCase } from '../utils/disk-case.js';
+import { toDiskCaseCore } from '../utils/disk-case.js';
 import { loadWithConfigContext } from '../config/configuration-context.js';
 
 type ConfigLoader = (fullConfigPath: string) => Promise<NormalizedFederationConfig>;
@@ -70,8 +70,8 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
   config: NormalizedFederationConfig;
   options: NormalizedFederationOptions<TBundlerCache>;
 }> {
-  const workspaceRoot = toDiskCase(deps.io, options.workspaceRoot);
-  const packageJson = options.packageJson && toDiskCase(deps.io, options.packageJson);
+  const workspaceRoot = toDiskCaseCore(deps.io, options.workspaceRoot);
+  const packageJson = options.packageJson && toDiskCaseCore(deps.io, options.packageJson);
 
   const fullConfigPath = path.join(workspaceRoot, options.federationConfig);
 

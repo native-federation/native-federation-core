@@ -1,39 +1,28 @@
-/**
- * Internal API's of the native-federation builder.
- *
- * Might change between minors.
- */
+// Adapter toolkit. May change between minors, so pin core with `~`. Exported functions take no io
+// ports: a `*Core` variant keeps the port and stays unexported.
 
 export * from './internal/browser.js';
 
-export * from './lib/core/build/build-result-map.js';
-
-export { hashFile } from './lib/utils/hash.js';
+export {
+  /** @deprecated Might be removed in v5. */
+  hashFile,
+} from './lib/utils/hash.js';
+export { toDiskCase } from './lib/utils/disk-case.js';
 export { logger, setLogLevel } from './lib/utils/logger.js';
 
 export { RebuildQueue, type TrackResult } from './lib/core/rebuild-queue.js';
 
-export { writeImportMap } from './lib/core/output/write-import-map.js';
+export {
+  /** @deprecated `buildForFederation` writes it, and nothing reads importmap.json; removed in v5. */
+  writeImportMap,
+} from './lib/core/output/write-import-map.js';
 
-export { getDefaultCachePath, getChecksum } from './lib/core/cache/cache-persistence.js';
+export {
+  getDefaultCachePath,
+  /** @deprecated Might be removed in v5. */
+  getChecksum,
+} from './lib/core/cache/cache-persistence.js';
 export { collectOutputFiles } from './lib/core/cache/federation-cache.js';
-export {
-  isESMExport,
-  type ExportCondition,
-  type ExportEntry,
-} from './lib/utils/package/package-info.js';
-export {
-  isCjsCandidate,
-  classifyByExtension,
-  hasEsmSyntax,
-  type ModuleFormat,
-} from './lib/utils/package/esm-detection.js';
-export {
-  isIdentifierName,
-  planCjsWrap,
-  buildSyntheticCjsEntry,
-  isEsmInteropError,
-} from './lib/utils/package/cjs-named-exports.js';
 
 export type {
   NfFileWatcher,

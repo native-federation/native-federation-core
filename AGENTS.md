@@ -61,7 +61,9 @@ write into `dist/` with `rootDir: src`, so JS and types land side by side.
 - `./config` - Configuration utilities: `withNativeFederation`, `shareAll`, `share`
 - `./domain` - Type definitions and contracts
 - `./internal` - Internal utilities and adapter-facing helpers (`matchesExternal`, the file
-  watcher); not for app configs
+  watcher, `toDiskCase` for a root the adapter derives paths from before core runs); not for app
+  configs. An exported helper that touches the filesystem takes no io port: its `*Core` variant
+  keeps the port and stays unexported.
 
 ### Core responsibilities
 
@@ -529,6 +531,9 @@ Native Federation uses an intelligent caching system to speed up builds:
 
 - Unit tests use Vitest and live alongside source files (`.spec.ts`).
 - Run with `pnpm test` (`vitest`).
+- `src/public-api.spec.ts` snapshots every entry point's exports (name and value/type), and checks
+  that `./domain` and `./internal/browser` reach no Node built-in or package at runtime. A surface
+  change fails it until the snapshot is updated (`vitest -u`), so the change is reviewed as a diff.
 - CI runs the suite on pushes to `main` and on pull requests against `main` (a stacked PR is
   checked once it is retargeted), so a flaky spec blocks merges: fix it rather than retrying it.
 

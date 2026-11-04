@@ -4,7 +4,7 @@ import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
 import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { nodeIo } from '../utils/io/node-io-adapter.js';
 import { isUnderDir, toPosix } from '../utils/path-patterns.js';
-import { toDiskCase } from '../utils/disk-case.js';
+import { toDiskCaseCore } from '../utils/disk-case.js';
 import { logger } from '../utils/logger.js';
 
 // The permissive superset of what a mapped lib can spell -- extensionless specifiers, directory
@@ -238,15 +238,19 @@ export interface MappingImportResolver {
  * point? Adapters keep the bundler hook; see PR #133 for why this decides it rather than them.
  *
  * `sharedMappings` must be post-`normalizeOptions`, expanded *and* pruned: an unexpanded key
- * warns, an unpruned one cannot be detected and rewrites onto an unpublished specifier. Paths
- * are normalized but not `realpath`ed, so a caller behind a symlink must pass the real path.
+ * warns, an unpruned one cannot be detected and rewrites onto an unpublished specifier. Pass
+ * paths as the bundler reports them: the resolver realpaths their directories itself.
  *
  * App builds only: where the mappings are themselves the entry points every call is a
  * self-import, so nothing rewrites and the program is never built.
  */
-export function createMappingImportResolver(
+export function createMappingImportResolver(sharedMappings: PathToImport): MappingImportResolver {
+  return createMappingImportResolverCore(sharedMappings, nodeIo);
+}
+
+export function createMappingImportResolverCore(
   sharedMappings: PathToImport,
-  io: FileReaderPort = nodeIo
+  io: FileReaderPort
 ): MappingImportResolver {
   const aliases: ts.MapLike<string[]> = {};
   for (const [mappedPath, importName] of Object.entries(sharedMappings)) {
@@ -274,7 +278,7 @@ export function createMappingImportResolver(
         // test against the spelling the bundler reports.
         // `toDiskCase` ends in `path.normalize`, which is backslash-separated on Windows,
         // while the target compared against it below is always posix.
-        const entryPoint = toPosix(toDiskCase(io, resolvedKey));
+        const entryPoint = toPosix(toDiskCaseCore(io, io.realpath(resolvedKey)));
         const dir = path.dirname(entryPoint);
         return [{ dir, dirPosix: toPosix(dir).replace(/\/+$/, ''), entryPoint, importName }];
       })
@@ -299,6 +303,16 @@ export function createMappingImportResolver(
 
   let resolved: ReturnType<typeof resolveMappings> | null = null;
   const warned = new Set<string>();
+
+  // Mapping dirs are real paths, while a bundler may hand over a path through a symlinked dir
+  // (`preserveSymlinks`, an npm-linked workspace package). Only the dir: the target is unresolved.
+  const realDirs = new Map<string, string>();
+  const realDir = (file: string): string => {
+    const dir = path.dirname(file);
+    let real = realDirs.get(dir);
+    if (real === undefined) realDirs.set(dir, (real = io.realpath(dir)));
+    return path.join(real, path.basename(file));
+  };
 
   /**
    * The one decline a caller can act on: the entry point was readable and does not carry what the
@@ -341,7 +355,7 @@ export function createMappingImportResolver(
     const { root, mappings } = (resolved ??= resolveMappings());
 
     // Both checks below are prefix tests, which an unnormalized `..` into a mapped lib slips past.
-    const imported = path.resolve(importedFile);
+    const imported = realDir(path.resolve(importedFile));
 
     const importedPosix = toPosix(imported);
     if (!importedPosix.startsWith(root)) return null;
@@ -350,7 +364,7 @@ export function createMappingImportResolver(
     if (containing.length === 0) return null;
 
     // Excluded, or the mapped lib's own bundle would import itself.
-    const importer = path.resolve(importerFile);
+    const importer = realDir(path.resolve(importerFile));
     const reachableFrom = containing.filter(m => !isUnderDir(importer, m.dir));
     // Nothing below can rewrite or warn when empty, and the two calls it skips build the program.
     if (reachableFrom.length === 0) return null;
@@ -389,6 +403,7 @@ export function createMappingImportResolver(
     graph.reset();
     resolved = null;
     warned.clear();
+    realDirs.clear();
   };
 
   return resolve;

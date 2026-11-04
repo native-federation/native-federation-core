@@ -3,7 +3,7 @@ import { cwd } from 'process';
 import { getConfigContext } from './configuration-context.js';
 import { nodeIo } from '../utils/io/node-io-adapter.js';
 import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
-import { toDiskCase } from '../utils/disk-case.js';
+import { toDiskCaseCore } from '../utils/disk-case.js';
 import { logger } from '../utils/logger.js';
 
 export function findRootTsConfigJson(): string {
@@ -22,10 +22,10 @@ export function findMappingsTsConfigCore(io: FileReaderPort): string {
 
   // `tsConfigPath` is the adapter's to resolve, so cwd is tried too before giving up.
   const candidates = [
-    ...new Set([workspaceRoot, toDiskCase(io, cwd())].filter(Boolean) as string[]),
+    ...new Set([workspaceRoot, toDiskCaseCore(io, cwd())].filter(Boolean) as string[]),
   ].map(base => path.resolve(base, tsConfig));
   const found = candidates.find(file => io.isFile(file));
-  if (found) return toDiskCase(io, found);
+  if (found) return toDiskCaseCore(io, found);
 
   const fallback = findRootTsConfigJsonCore(io);
   logger.warn(
@@ -36,7 +36,7 @@ export function findMappingsTsConfigCore(io: FileReaderPort): string {
 }
 
 export function findRootTsConfigJsonCore(io: FileReaderPort): string {
-  const from = toDiskCase(io, cwd());
+  const from = toDiskCaseCore(io, cwd());
   try {
     return findTsConfigNextToPackageJson(io, from);
   } catch (err) {
@@ -90,7 +90,7 @@ export function inferProjectPath(
   }
 
   if (!projectPath) {
-    projectPath = toDiskCase(io, cwd());
+    projectPath = toDiskCaseCore(io, cwd());
   }
   return projectPath;
 }
