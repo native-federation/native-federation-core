@@ -41,6 +41,6 @@ jobs:
           TS_FLOOR: 1
 
       - name: Audit OK
-        run: pnpm audit --audit-level moderate
+        run: pnpm audit --audit-level high
         env:
           CI: true
