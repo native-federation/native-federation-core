@@ -21,7 +21,10 @@ export const getDefaultCachePath = (workspaceRoot: string) =>
 
 const getCacheKey = (title: string, dev?: boolean) => `${title}${dev ? '-dev' : ''}`;
 
-export const getFilename = (title: string, dev?: boolean) => `${getCacheKey(title, dev)}.meta.json`;
+const META_SUFFIX = '.meta.json';
+
+export const getFilename = (title: string, dev?: boolean) =>
+  `${getCacheKey(title, dev)}${META_SUFFIX}`;
 
 // Content-named chunks collide across bundles, so each bundle gets its own folder (core#154).
 const getBundleDir = (cachePath: string, title: string, dev?: boolean) =>
@@ -209,9 +212,16 @@ export const prepareCacheCore = (io: CachePort, cachePath: string, builderVersio
   const stamp = readStamp(io, stampFile);
   if (stamp?.layout === CACHE_LAYOUT && minorOf(stamp.version) === minorOf(builderVersion)) return;
 
-  if (io.exists(cachePath)) {
+  if (io.exists(stampFile)) {
     logger.debug(`Purging cache folder '${cachePath}' written by another builder version.`);
     io.removeDir(cachePath);
+  } else {
+    // Without a stamp the folder may not be ours (a misdirected cachePath), so only cache entries
+    // go; an entry without its metadata can never hit, and older layouts' loose files stay behind.
+    for (const name of io.readDir(cachePath).filter(n => n.endsWith(META_SUFFIX))) {
+      io.remove(path.join(cachePath, name));
+      io.removeDir(path.join(cachePath, name.slice(0, -META_SUFFIX.length)));
+    }
   }
   io.mkdirp(cachePath);
   io.writeText(stampFile, JSON.stringify({ layout: CACHE_LAYOUT, version: builderVersion }));

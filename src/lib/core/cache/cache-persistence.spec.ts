@@ -359,17 +359,32 @@ describe('prepareCacheCore', () => {
   const stamp = (io: ReturnType<typeof createMemoryIo>) =>
     JSON.parse(io.readText('/cache/.nf-cache.json'));
 
-  it('purges a cache without a stamp, which predates per-bundle folders', () => {
+  // A cache without a stamp predates per-bundle folders: the flat layout kept chunks loose in the
+  // root. Dropping the metadata is enough to make every entry miss; the loose files are orphans.
+  it('drops only the cache entries of a folder without a stamp', () => {
     const io = createMemoryIo()
       .setFile('/cache/shared.meta.json', '{}')
-      .setFile('/cache/foo.ABC.js', 'F')
-      .setFile('/cache/tsconfig.federation.json', '{}');
+      .setFile('/cache/shared-dev.meta.json', '{}')
+      .setFile('/cache/shared-dev/a.js', 'A')
+      .setFile('/cache/foo.ABC.js', 'F');
 
     prepareCacheCore(io, '/cache', '4.8.0');
 
-    expect(io.files().filter(f => f.startsWith(path.resolve('/cache')))).toEqual([
-      path.resolve('/cache/.nf-cache.json').replace(/\\/g, '/'),
-    ]);
+    const files = io.files().filter(f => f.startsWith(path.resolve('/cache')));
+    expect(files.sort()).toEqual(
+      ['/cache/.nf-cache.json', '/cache/foo.ABC.js'].map(f => path.resolve(f).replace(/\\/g, '/'))
+    );
+    expect(stamp(io)).toEqual({ layout: 2, version: '4.8.0' });
+  });
+
+  // A misdirected cachePath ('.' with project 'src') must not delete the folder it lands on.
+  it('leaves a folder without a stamp intact when it holds no cache entries', () => {
+    const io = createMemoryIo().setFile('/cache/main.ts', 'M').setFile('/cache/app/app.ts', 'A');
+
+    prepareCacheCore(io, '/cache', '4.8.0');
+
+    expect(io.isFile('/cache/main.ts')).toBe(true);
+    expect(io.isFile('/cache/app/app.ts')).toBe(true);
     expect(stamp(io)).toEqual({ layout: 2, version: '4.8.0' });
   });
 

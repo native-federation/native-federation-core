@@ -111,7 +111,7 @@ to follow a few rules that `build-adapter.contract.ts` states where they apply:
   only when they are passed in: the adapter registry is process-global, so core never reads them
   from it. `federationBuilder.init` passes them; an adapter that normalizes itself passes its own
   in the third argument, `NFAdapterInput`: `normalizeFederationOptions(options, cache,
-  { externals: adapter.externals })`. The cache moves into `NFAdapterInput` in v5. From there they
+{ externals: adapter.externals })`. The cache moves into `NFAdapterInput` in v5. From there they
   are ordinary externals: every bundle's `external`, the bare import check, `matchesExternal`. Keep
   them exact or scoped: one that covers a shared package would hide its pruned entry points.
 - A shared bundle served from the externals cache runs no build. An adapter that needs something
@@ -516,8 +516,9 @@ Native Federation uses an intelligent caching system to speed up builds:
 - `.nf-cache.json` in the project cache folder records the layout version and the builder version
   that created the folder; it is only written after a purge, so a patch upgrade leaves the older
   patch version in place. `buildForFederation` checks it before any bundle runs (`prepareCache`),
-  and deletes the whole project cache folder when the stamp is missing, unreadable, or differs in
-  layout or `major.minor`. Patch releases already miss per bundle through the checksum. Two processes building one project
+  and deletes the whole project cache folder when the stamp is unreadable or differs in layout or
+  `major.minor`. Without a stamp the folder may not be core's (a `cachePath` pointed at source), so
+  only `*.meta.json` files and their bundle folders go; loose files of older layouts stay behind. Patch releases already miss per bundle through the checksum. Two processes building one project
   on different minors (a `serve` and a `build` mid-upgrade) can purge each other's cache.
 - For symlinked (npm-linked) deps, additionally on a content signal (max mtime of the package dir)
 - Can be cleared by deleting the cache folder
