@@ -43,10 +43,10 @@ importers:
         specifier: ^0.28.0
         version: 0.28.2
       eslint:
-        specifier: ^10.10.0
+        specifier: ^10.13.0
         version: 10.13.0(jiti@2.7.0)(supports-color@7.2.0)
       globals:
-        specifier: ^17.11.0
+        specifier: ^17.13.0
         version: 17.13.0
       jiti:
         specifier: ^2.6.1
@@ -64,7 +64,7 @@ importers:
         specifier: ^2.3.0
         version: 2.8.1
       typescript-eslint:
-        specifier: ^8.68.0
+        specifier: ^8.72.0
         version: 8.72.0(eslint@10.13.0(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3)
       typescript-floor:
         specifier: npm:typescript@5.9.3
