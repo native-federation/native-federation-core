@@ -29,7 +29,7 @@ export interface PackageJsonRepository {
   exists(filePath: string): boolean;
 }
 
-export type ExportCondition =
+type ExportCondition =
   | 'import'
   | 'require'
   | 'node'

@@ -49,14 +49,6 @@ function requireEntry(map: Record<string, string>, key: string): string {
   return value;
 }
 
-/** @deprecated Unused by core; removed in v5. */
-export function lookupInResultMap(map: Record<string, string>, requestName: string): string {
-  const key = path.basename(requestName);
-
-  // path.basename is to maintain backwards compatible
-  return path.basename(requireEntry(map, key));
-}
-
 export function popFromResultMap(map: Record<string, string>, requestName: string): string {
   const key = path.basename(requestName);
   const out = requireEntry(map, key);

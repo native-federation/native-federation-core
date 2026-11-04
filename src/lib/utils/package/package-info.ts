@@ -10,13 +10,7 @@ import { resolvePackageInfo } from './entry-point-resolver.js';
 import { getVersionMaps as getVersionMapsFromRepo } from './version-maps.js';
 
 export { sharedPackageJsonRepository } from '../io/package-json-repository.js';
-export type {
-  PackageInfo,
-  VersionMap,
-  ExportCondition,
-  ExportEntry,
-} from '../../domain/utils/package-json.contract.js';
-export { isESMExport } from './esm-detection.js';
+export type { PackageInfo, VersionMap } from '../../domain/utils/package-json.contract.js';
 
 export function tryGetPackageInfo(
   packageName: string,
