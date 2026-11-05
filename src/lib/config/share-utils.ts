@@ -5,6 +5,7 @@ import {
   sharedPackageJsonRepository,
   findDepPackageJson,
   getVersionMaps,
+  installedVersions,
 } from '../utils/package/package-info.js';
 import type { PackageJsonRepository } from '../domain/utils/package-json.contract.js';
 import { logger } from '../utils/logger.js';
@@ -24,6 +25,7 @@ import { findPackageJson, inferProjectPath } from './project-paths.js';
 import { isInferVersion, lookupVersion, applyAutoRequiredOptions } from './version-lookup.js';
 import { addSecondaries, getSecondaries } from './secondaries.js';
 import { matchesWildcard } from '../utils/path-patterns.js';
+import { inferPackageFromSecondary } from '../utils/normalize.js';
 
 export const fromPackageJson = (
   baseCfg: ShareAllExternalsOptions,
@@ -247,6 +249,14 @@ export function shareCore(
       shareObject.version = raw.replace(/^\D*/, '');
     }
 
+    if (shareObject.packageInfo && !shareObject.packageInfo.version) {
+      const installed = installedVersions([key], path.dirname(packagePath), repo)[key];
+      shareObject.packageInfo = {
+        ...shareObject.packageInfo,
+        version: installed || shareObject.version,
+      };
+    }
+
     if (typeof shareObject.includeSecondaries === 'undefined') {
       shareObject.includeSecondaries = true;
     }
@@ -261,7 +271,8 @@ export function shareCore(
 
     result[key] = shareObject;
 
-    if (includeSecondaries) {
+    // Only a package root has exports of its own; a sub-path would get the root's appended to it.
+    if (includeSecondaries && key === inferPackageFromSecondary(key)) {
       const libPackageJson = findDepPackageJson(key, path.dirname(packagePath), repo);
 
       if (!libPackageJson) {

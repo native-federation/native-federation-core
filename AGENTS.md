@@ -216,7 +216,7 @@ export default withNativeFederation({
 ### Important Configuration Options
 
 - **`requiredVersion: 'auto'`**: Automatically reads version from nearest `package.json`
-- **`includeSecondaries`**: Can be `true`, `false`, or `{ skip: ['...'], resolveGlob: true, keepAll: true }`. `keepAll` exempts a shared package's _secondaries_ from `ignoreUnusedDeps` pruning, read per package family (`inferPackageFromSecondary`): every entry point survives while something still reaches the package, but a family nothing reaches is pruned regardless, and a package with no secondaries is its own family so the flag is a no-op for it. On a `sharedMappings` entry the same flag is stronger and opts out of reachability entirely.
+- **`includeSecondaries`**: Can be `true`, `false`, or `{ skip: ['...'], resolveGlob: true, keepAll: true }`. `keepAll` exempts a shared package's _secondaries_ from `ignoreUnusedDeps` pruning, read per package family (`inferPackageFromSecondary`): every entry point survives while something still reaches the package, but a family nothing reaches is pruned regardless, and a package with no secondaries is its own family so the flag is a no-op for it. Only a package root expands: a sub-path key (`@angular/common/locales/nl`) has no `exports` of its own, so `includeSecondaries` does nothing for it (core#233). On a `sharedMappings` entry the same flag is stronger and opts out of reachability entirely.
 - **`singleton`**: Ensures only one instance of a dependency is loaded
 - **`strictVersion`**: Throws error on version mismatch instead of loading multiple versions
 - **`chunks`**: Can be set globally or per-package to control code-splitting. On a shared external
