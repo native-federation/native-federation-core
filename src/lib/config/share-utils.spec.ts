@@ -128,68 +128,6 @@ describe('shareCore (end-to-end via injected repository)', () => {
 
       expect(Object.keys(twice)).toEqual(['mylib', 'mylib/sub']);
     });
-
-    it('takes the installed version of its package when packageInfo has none', () => {
-      const { io, repo } = withLib('@org/lib');
-
-      const result = shareCore(
-        io,
-        {
-          // The declared range's floor (1.0.0) is not what is installed.
-          '@org/lib/sub': {
-            requiredVersion: '~1.0.0',
-            version: '1.0.0',
-            packageInfo: { entryPoint: 'sub.js', esm: true },
-          },
-        },
-        PROJECT,
-        DEFAULT_SKIP_LIST,
-        repo
-      );
-
-      expect(result['@org/lib/sub']?.packageInfo).toEqual({
-        entryPoint: 'sub.js',
-        esm: true,
-        version: '1.2.3',
-      });
-    });
-
-    it('keeps an explicit packageInfo version over the installed one', () => {
-      const { io, repo } = withLib('@org/lib');
-
-      const result = shareCore(
-        io,
-        {
-          '@org/lib/sub': {
-            requiredVersion: '^1.0.0',
-            packageInfo: { entryPoint: 'sub.js', esm: true, version: '1.0.0' },
-          },
-        },
-        PROJECT,
-        DEFAULT_SKIP_LIST,
-        repo
-      );
-
-      expect(result['@org/lib/sub']?.packageInfo?.version).toBe('1.0.0');
-    });
-
-    it('falls back to the declared version when its package is not installed', () => {
-      const io = createMemoryIo().setFile(
-        path.join(PROJECT, 'package.json'),
-        JSON.stringify({ dependencies: { mylib: '~2.1.0' } })
-      );
-      const repo = createPackageJsonRepository(io);
-
-      const result = shareCore(
-        io,
-        { 'mylib/sub': { requiredVersion: 'auto', packageInfo: { entryPoint: 'sub.js' } } },
-        PROJECT,
-        DEFAULT_SKIP_LIST,
-        repo
-      );
-
-      expect(result['mylib/sub']?.packageInfo?.version).toBe('2.1.0');
-    });
   });
 
   it('applies caret range when requiredVersion is auto with range "^" and base is exact semver', () => {

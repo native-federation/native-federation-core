@@ -5,7 +5,6 @@ import {
   sharedPackageJsonRepository,
   findDepPackageJson,
   getVersionMaps,
-  installedVersions,
 } from '../utils/package/package-info.js';
 import type { PackageJsonRepository } from '../domain/utils/package-json.contract.js';
 import { logger } from '../utils/logger.js';
@@ -247,14 +246,6 @@ export function shareCore(
 
       // The declared range's floor, not the installed version: only a fallback where none is installed.
       shareObject.version = raw.replace(/^\D*/, '');
-    }
-
-    if (shareObject.packageInfo && !shareObject.packageInfo.version) {
-      const installed = installedVersions([key], path.dirname(packagePath), repo)[key];
-      shareObject.packageInfo = {
-        ...shareObject.packageInfo,
-        version: installed || shareObject.version,
-      };
     }
 
     if (typeof shareObject.includeSecondaries === 'undefined') {

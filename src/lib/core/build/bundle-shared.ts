@@ -518,7 +518,9 @@ function buildResult(
       requiredVersion: shared?.requiredVersion,
       singleton: shared?.singleton,
       strictVersion: shared?.strictVersion,
-      version: pi.version,
+      // A versionless packageInfo is vendored and stays out of the cache key (core#103), but the
+      // record still needs a version.
+      version: pi.version ?? shared?.version,
       ...(shared?.shareScope && { shareScope: shared.shareScope }),
       ...(shared?.pool && { pool: shared.pool }),
     } as SharedInfo;

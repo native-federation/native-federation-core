@@ -8,7 +8,8 @@ import {
   createFakeBuildAdapter,
   type FakeBuildAdapter,
 } from './__test-helpers__/fake-build-adapter.js';
-import { prepareSkipList } from '../../config/default-skip-list.js';
+import { DEFAULT_SKIP_LIST, prepareSkipList } from '../../config/default-skip-list.js';
+import { shareCore } from '../../config/share-utils.js';
 import { logger } from '../../utils/logger.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
 import { createPackageJsonRepository } from '../../utils/io/package-json-repository.js';
@@ -976,13 +977,43 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
   it('ignores the installed version when packageInfo is configured without a version', async () => {
     const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
     const configured = fooWith({
+      version: '2.0.0',
       packageInfo: { entryPoint: 'foo/vendored.js', esm: true } as NonNullable<
         NormalizedExternalConfig['packageInfo']
       >,
     });
 
     await cachedBuild(mem, '2.0.0', configured);
-    const { adapter } = await cachedBuild(mem, '2.0.1', configured);
+    const { adapter, result } = await cachedBuild(mem, '2.0.1', configured);
+
+    expect(adapter.calls.setup).toHaveLength(0);
+    // The record falls back to the declared version (core#233).
+    expect(result.externals[0]).toMatchObject({ packageName: 'foo', version: '2.0.0' });
+  });
+
+  // The same vendored entry point, but through share() as almost every config is: share() must
+  // not stamp the node_modules version onto it, or the key follows node_modules again (core#103).
+  it('ignores the installed version for a versionless packageInfo that went through share()', async () => {
+    const mem = createMemoryIo().setFile(ROOT_PKG, '{}').setFile('/ws/package.json', '{}');
+    const viaShare = (installed: string) =>
+      fooWith({
+        packageInfo: shareCore(
+          mem,
+          {
+            foo: {
+              requiredVersion: '^2.0.0',
+              includeSecondaries: false,
+              packageInfo: { entryPoint: 'foo/vendored.js', esm: true },
+            },
+          },
+          '/ws',
+          DEFAULT_SKIP_LIST,
+          repoAtVersion(installed)
+        )['foo']!.packageInfo as NonNullable<NormalizedExternalConfig['packageInfo']>,
+      });
+
+    await cachedBuild(mem, '2.0.0', viaShare('2.0.0'));
+    const { adapter } = await cachedBuild(mem, '2.0.1', viaShare('2.0.1'));
 
     expect(adapter.calls.setup).toHaveLength(0);
   });
