@@ -239,26 +239,14 @@ export default withNativeFederation({
 
 ### Shared versions
 
-A record's `version` names the bytes in its file, and the runtime elects and serves a singleton
-package as one unit at one version: a remote that publishes two versions of one package runs its own
-copy of the whole package (a second Angular, for instance). The version of a shared key is therefore
-resolved once, in `bundleSharedCore`, and the record, the dev output name and the cache key all read
-it (core#233):
-
-1. a configured `packageInfo.version`, a pin;
-2. else the installed version of the key's package root (`installedVersions`), also for a
-   `packageInfo` without a version: a sub-path such as `@angular/common/locales/nl` comes from the
-   installed package, so its bytes follow `node_modules`;
-3. else the declared version: the floor of `requiredVersion`, a literal range included (`rangeFloor`,
-   applied when the config is normalized), with a warning for a configured `packageInfo`;
-4. else none, which warns, and throws with `features.strictImports`.
-
-A vendored copy of an installed package (a patched file in the repo) must pin
-`packageInfo.version`, or it is published as the installed version. After `remoteEntry.json` is
-assembled, `validateSharedVersions` groups the singleton records by share scope and package (a
-declared mapping package, else `inferPackageFromSecondary`; a dense record by its `packageName`)
-and reports a package published at more than one version. It warns, repeats on a watch rebuild only
-when the conflicts change, and throws with `features.strictImports`.
+A record's `version` names the bytes in its file, and the runtime serves a singleton package as one
+unit at one version: a remote that publishes a sub-path at another version than its root runs its own
+copy of the whole package. A shared key's version is therefore resolved once in `bundleSharedCore`,
+and the record, the dev output name and the cache key read the same value (core#233): a configured
+`packageInfo.version` (a pin), else the installed version of the key's package root
+(`installedVersions`), also for a `packageInfo` without a version, else the declared `version`, with
+a warning. A vendored copy of an installed package must pin `packageInfo.version`, or it is published
+as the installed version.
 
 ### Unresolvable bare imports
 
@@ -498,8 +486,8 @@ Native Federation uses an intelligent caching system to speed up builds:
   artifacts in a folder of the same name, `<bundle>[-dev]/`. Content-named chunks collide across
   bundles, so a shared folder would let one bundle's chunk rename or `clear()` delete a file
   another bundle still lists (core#154). `clear()` therefore removes the whole bundle folder.
-- Keyed by a checksum over the external names, their resolved versions (see Shared versions), a
-  configured `packageInfo`'s entry point and `esm`, the builder version,
+- Keyed by a checksum over the external names, their versions (see Shared versions), a configured
+  `packageInfo`'s entry point and `esm`, the builder version,
   the relevant feature flags, the bundle's `chunks` and the adapter's `externalsCacheKey`
   (`getChecksum`)
 - Stored in `node_modules/.cache/native-federation` by default (`getDefaultCachePath`)

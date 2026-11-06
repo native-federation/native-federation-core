@@ -114,22 +114,7 @@ describe('shareCore (end-to-end via injected repository)', () => {
       }
     );
 
-    it('does not double through a second pass, as fromPackageJson().override(share(...)) runs', () => {
-      const { io, repo } = withLib('mylib');
-
-      const once = shareCore(
-        io,
-        { mylib: { requiredVersion: '^1.0.0' } },
-        PROJECT,
-        DEFAULT_SKIP_LIST,
-        repo
-      );
-      const twice = shareCore(io, once, PROJECT, DEFAULT_SKIP_LIST, repo);
-
-      expect(Object.keys(twice)).toEqual(['mylib', 'mylib/sub']);
-    });
-
-    // Keys alone hide a second pass that rewrites a version or packageInfo.
+    // As fromPackageJson().override(share(...)) runs it: no doubled keys, no rewritten values.
     it.each([
       ['literal range', { requiredVersion: '^1.0.0' }],
       ["'auto'", { requiredVersion: 'auto' }],
@@ -200,7 +185,9 @@ describe('shareCore (end-to-end via injected repository)', () => {
 
     const rMinor = shareCore(
       io,
-      { mylib: { singleton: true, requiredVersion: { range: 'minor' }, includeSecondaries: false } },
+      {
+        mylib: { singleton: true, requiredVersion: { range: 'minor' }, includeSecondaries: false },
+      },
       PROJECT,
       DEFAULT_SKIP_LIST,
       repo
@@ -208,7 +195,9 @@ describe('shareCore (end-to-end via injected repository)', () => {
 
     const rPatch = shareCore(
       io,
-      { mylib: { singleton: true, requiredVersion: { range: 'patch' }, includeSecondaries: false } },
+      {
+        mylib: { singleton: true, requiredVersion: { range: 'patch' }, includeSecondaries: false },
+      },
       PROJECT,
       DEFAULT_SKIP_LIST,
       repo

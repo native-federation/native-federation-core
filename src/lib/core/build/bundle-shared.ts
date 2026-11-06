@@ -55,7 +55,6 @@ import { getBuildAdapter } from './build-adapter.js';
 import { synthesizeCjsNamedExportsEntry, type ModuleEvaluator } from './synthesize-cjs-exports.js';
 import { createRequire } from 'module';
 import { inferPackageFromSecondary } from '../../utils/normalize.js';
-import { formatList } from '../../utils/format-list.js';
 
 export interface SharedBundleResult {
   externals: SharedInfo[];
@@ -126,11 +125,7 @@ export async function bundleSharedCore(
   for (const [key, cfg] of Object.entries(sharedBundles)) {
     if (cfg.packageInfo?.version) resolvedVersions[key] = cfg.packageInfo.version;
   }
-  // The same precedence getChecksumCore hashes, so a cache hit replays the record a build would write.
-  const publishedVersions = Object.fromEntries(
-    Object.entries(sharedBundles).map(([key, cfg]) => [key, resolvedVersions[key] || cfg.version])
-  );
-  warnUnversionedPackageInfos(sharedBundles, resolvedVersions, config.features.strictImports);
+  warnUnversionedPackageInfos(sharedBundles, resolvedVersions);
 
   const checksum = getChecksumCore(
     deps.io,
@@ -201,6 +196,8 @@ export async function bundleSharedCore(
     .map(packageName => ({
       packageName,
       ...sharedBundles[packageName]?.packageInfo,
+      // getChecksumCore falls back to the declared version the same way, so a hit replays this.
+      version: resolvedVersions[packageName] || sharedBundles[packageName]?.version,
     })) as PackageInfo[];
 
   const packageInfos = [...inferredPackageInfos, ...configuredPackageInfos];
@@ -212,7 +209,6 @@ export async function bundleSharedCore(
     const outName = createOutName(
       deps.io,
       pi,
-      publishedVersions[pi.packageName] ?? '',
       configState,
       fedOptions,
       encName,
@@ -302,7 +298,7 @@ export async function bundleSharedCore(
 
   const outFileNames = entryPoints.map(ep => path.join(fullOutputPath, ep.outName));
 
-  const result = buildResult(packageInfos, sharedBundles, publishedVersions, outFileNames);
+  const result = buildResult(packageInfos, sharedBundles, outFileNames);
 
   /**
    * Chunking
@@ -352,32 +348,13 @@ export async function bundleSharedCore(
 
 function warnUnversionedPackageInfos(
   sharedBundles: Record<string, NormalizedExternalConfig>,
-  resolvedVersions: Record<string, string>,
-  strict: boolean
+  resolvedVersions: Record<string, string>
 ): void {
-  const unversioned: string[] = [];
   for (const [key, cfg] of Object.entries(sharedBundles)) {
     if (!cfg.packageInfo || resolvedVersions[key]) continue;
-    const root = inferPackageFromSecondary(key);
-    if (cfg.version) {
-      logger.warn(
-        `Shared '${key}' has a packageInfo without a version and '${root}' is not installed: ` +
-          `remoteEntry.json records ${cfg.version}, the lowest version '${cfg.requiredVersion}' ` +
-          `allows. Set packageInfo.version to the version of '${cfg.packageInfo.entryPoint}'.`
-      );
-    } else {
-      unversioned.push(key);
-      (strict ? logger.error : logger.warn)(
-        `Shared '${key}' has a packageInfo without a version, '${root}' is not installed and ` +
-          `requiredVersion '${cfg.requiredVersion}' names none: its record in remoteEntry.json ` +
-          `has no version, which the runtime treats as invalid. Set packageInfo.version.`
-      );
-    }
-  }
-  if (strict && unversioned.length > 0) {
-    throw new Error(
-      `${unversioned.length} shared external(s) would be published without a version ` +
-        `(features.strictImports): ${formatList(unversioned, 3)}.`
+    logger.warn(
+      `Shared '${key}' has a packageInfo without a version and its package is not installed: ` +
+        `remoteEntry.json records ${cfg.version ?? 'no version'}. Set packageInfo.version.`
     );
   }
 }
@@ -524,14 +501,18 @@ function applyRenames(
 function createOutName(
   io: HashPort,
   pi: PackageInfo,
-  version: string,
   configState: string,
   fedOptions: NormalizedFederationOptions,
   encName: string,
   contentSignal = ''
 ) {
   const hashBase =
-    version + '_' + pi.entryPoint + '_' + configState + (contentSignal ? '_' + contentSignal : '');
+    pi.version +
+    '_' +
+    pi.entryPoint +
+    '_' +
+    configState +
+    (contentSignal ? '_' + contentSignal : '');
   const hash = hashBuildMetadata(io, hashBase);
 
   const outName = fedOptions.dev ? `${encName}.${hash}-dev.js` : `${encName}.${hash}.js`;
@@ -541,7 +522,6 @@ function createOutName(
 function buildResult(
   packageInfos: PackageInfo[],
   sharedBundles: Record<string, NormalizedExternalConfig>,
-  publishedVersions: Record<string, string | undefined>,
   outFileNames: string[]
 ) {
   return packageInfos.map(pi => {
@@ -552,7 +532,7 @@ function buildResult(
       requiredVersion: shared?.requiredVersion,
       singleton: shared?.singleton,
       strictVersion: shared?.strictVersion,
-      version: publishedVersions[pi.packageName],
+      version: pi.version,
       ...(shared?.shareScope && { shareScope: shared.shareScope }),
       ...(shared?.pool && { pool: shared.pool }),
     } as SharedInfo;

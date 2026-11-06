@@ -76,7 +76,7 @@ const SHARED_INFO_FIELDS = [
 
 // A configured packageInfo replaces resolution, so where it points decides the bytes.
 const packageInfoState = ({ packageInfo }: NormalizedExternalConfig): string =>
-  packageInfo ? `^${JSON.stringify([packageInfo.entryPoint, packageInfo.esm ?? null])}` : '';
+  packageInfo ? `^${JSON.stringify([packageInfo.entryPoint, packageInfo.esm])}` : '';
 
 // JSON-encoded so a value containing a delimiter cannot forge one; fixed field order, so no sort.
 const sharedInfoState = (config: NormalizedExternalConfig): string => {

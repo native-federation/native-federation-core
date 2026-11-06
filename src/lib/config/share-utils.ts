@@ -21,12 +21,7 @@ import type {
   ShareExternalsOptions,
 } from '../domain/config/external-config.contract.js';
 import { findPackageJson, inferProjectPath } from './project-paths.js';
-import {
-  isInferVersion,
-  lookupVersion,
-  applyAutoRequiredOptions,
-  rangeFloor,
-} from './version-lookup.js';
+import { isInferVersion, lookupVersion, applyAutoRequiredOptions } from './version-lookup.js';
 import { addSecondaries, getSecondaries } from './secondaries.js';
 import { matchesWildcard } from '../utils/path-patterns.js';
 import { inferPackageFromSecondary } from '../utils/normalize.js';
@@ -250,7 +245,7 @@ export function shareCore(
           : raw;
 
       // The declared range's floor, not the installed version: only a fallback where none is installed.
-      shareObject.version = rangeFloor(raw);
+      shareObject.version = raw.replace(/^\D*/, '');
     }
 
     if (typeof shareObject.includeSecondaries === 'undefined') {

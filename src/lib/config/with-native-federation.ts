@@ -10,7 +10,6 @@ import type {
 } from '../domain/config/federation-config.contract.js';
 import { isInSkipList, prepareSkipList } from './default-skip-list.js';
 import { normalizeMappingConfig, withoutSkippedMappings } from './mapping-utils.js';
-import { rangeFloor } from './version-lookup.js';
 import {
   assertMappingPackagePrefixes,
   assertNoConfigUnderMappingPackage,
@@ -133,7 +132,7 @@ function normalizeShared(
       requiredVersion: sharedConfig.requiredVersion ?? 'auto',
       singleton: sharedConfig.singleton ?? false,
       strictVersion: sharedConfig.strictVersion ?? false,
-      version: sharedConfig.version ?? rangeFloor(sharedConfig.requiredVersion),
+      version: sharedConfig.version,
       ...(ownChunks !== undefined && { chunks: ownChunks }),
       includeSecondaries:
         typeof sharedConfig.includeSecondaries === 'object'
