@@ -20,7 +20,7 @@ export interface NfFileWatcherOptions {
    *  mtime tick. The 2000 default is twice the coarsest mtime granularity in play
    *  (1s on gRPC-FUSE/NFS/WSL2 drvfs/HFS+); raise it for a filesystem coarser than
    *  that, or for a network mount whose server clock runs behind the client.
-   *  See AGENTS.md "Replay dedupe". Default: 2000. */
+   *  See docs/architecture/file-watcher.md. Default: 2000. */
   replayGraceMs?: number;
 }
 

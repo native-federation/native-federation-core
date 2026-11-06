@@ -19,12 +19,8 @@
 - **Built with raw esbuild** (`esbuild.config.mjs`) for JS, plus `tsc` for `.d.ts` declarations
 - Single package published from the repository root; managed with pnpm
 - Testing with Vitest, run in CI (`.github/workflows/verify.yml`)
-- `typescript` is a runtime **dependency** (not a peer) ranged `>=5.0.0 <7`: a peer range would
-  fail npm installs in workspaces on a different TypeScript. 5.0 is the floor because
-  `mapping-imports.ts` uses `moduleResolution: Bundler`; TypeScript 7 ships without the JS API.
-  CI runs the suite a second time on the floor, installing the latest patch of the range's lower
-  bound with `pnpm add` (last step of `verify.yml`); to repeat that locally, run the same commands
-  and `git checkout package.json pnpm-lock.yaml && pnpm install` afterwards.
+- `typescript` is a runtime dependency ranged `>=5.0.0 <7`
+  ([TypeScript dependency](docs/architecture/typescript-dependency.md))
 
 ## Repository Structure
 
@@ -39,6 +35,7 @@ This is a **single-package repository** published as `@softarc/native-federation
 ├── tsconfig.spec.json    → test typings
 ├── eslint.config.mts
 ├── vite.config.ts        → vitest config
+├── docs/                → architecture topics (map: docs/README.md)
 ├── src/                  → library source
 └── dist/                 → build output (gitignored)
 ```
@@ -59,15 +56,16 @@ write into `dist/` with `rootDir: src`, so JS and types land side by side.
 
 - `.` - Main build API: `federationBuilder`, `buildForFederation`, etc.
 - `./config` - Configuration utilities: `withNativeFederation`, `shareAll`, `share`
-- `./domain` - Type definitions and contracts
-- `./internal` - Internal utilities and adapter-facing helpers (`matchesExternal`, the file
-  watcher, `toDiskCase` for a root the adapter derives paths from before core runs); not for app
-  configs. An exported helper that touches the filesystem takes no io port: its `*Core` variant
-  keeps the port and stays unexported.
+- `./domain` - Type definitions and contracts (browser-safe)
+- `./internal` - Adapter-facing helpers (`matchesExternal`, the file watcher, `toDiskCase`); not
+  for app configs, may change between minors
+- `./internal/browser` - The browser-safe subset of `./internal`
+
+See [Public API](docs/architecture/public-api.md).
 
 ### Core responsibilities
 
-- Parse and normalize federation configuration from `federation.config.js`
+- Parse and normalize federation configuration from `federation.config.mjs`
 - Determine externals (dependencies that should not be bundled with main app)
 - Bundle shared dependencies separately for caching
 - Bundle exposed modules (remote entry points)
@@ -78,97 +76,45 @@ write into `dist/` with `rootDir: src`, so JS and types land side by side.
 **Important files**:
 
 - `src/lib/core/federation-builder.ts` - Main API: `init()`, `build()`, `close()`
-- `src/lib/core/build-for-federation.ts` - Initial build orchestration
-- `src/lib/core/rebuild-for-federation.ts` - Incremental rebuild logic (watch mode)
-- `src/lib/core/bundle-shared.ts` - Bundles shared dependencies
-- `src/lib/core/bundle-exposed-and-mappings.ts` - Bundles exposed modules
-- `src/lib/core/build-adapter.ts` - Adapter pattern for build tools (esbuild, rollup, etc.)
+- `src/lib/core/build/build-for-federation.ts` - Initial build orchestration
+- `src/lib/core/build/rebuild-for-federation.ts` - Incremental rebuild logic (watch mode)
+- `src/lib/core/build/bundle-shared.ts` - Bundles shared dependencies
+- `src/lib/core/build/bundle-exposed-and-mappings.ts` - Bundles shared mappings and exposed modules
+- `src/lib/domain/core/build-adapter.contract.ts` - The adapter contract
+- `src/lib/core/cache/` - Shared cache (on disk) and federation cache (in memory)
+- `src/lib/core/output/` - `remoteEntry.json` assembly, output checks
 - `src/lib/config/with-native-federation.ts` - Configuration normalization
 - `src/lib/config/share-utils.ts` - `shareAll()`, `share()` helpers
-- `src/lib/config/remove-unused-deps.ts` - Tree-shakes unused shared dependencies
+- `src/lib/config/remove-unused-deps.ts` - Prunes unused shared dependencies
 
-**Build Adapter Pattern**:
-The core library is build-tool agnostic. It expects a `NFBuildAdapter` that implements bundling logic. Reference implementations use esbuild (see `@softarc/native-federation-esbuild` package, separate repo).
+## Architecture
 
-**Writing an adapter**: core post-processes and scans what the adapter writes, so the output has
-to follow a few rules that `build-adapter.contract.ts` states where they apply:
+Each page in `docs/architecture/` describes how one part of core works today. A PR that changes a
+rule edits its page; a PR that replaces a design also appends to History and moves the old design
+to Rejected. Open the page before changing what it covers. This table mirrors
+[docs/README.md](docs/README.md).
 
-- ESM, written flat into `outdir`. `.js`/`.mjs`/`.cjs` are all treated as scripts (scanned, hashed,
-  chunk candidates), but only ESM syntax is read, so a CommonJS `.cjs` file's `require`s go
-  unchecked. Core rewrites a `./x` import to `@nf-internal/x` only when `x` is a non-entry script
-  the bundle's `build` returned; any other relative import stays as written. A dynamic import's
-  specifier may be quoted or a backtick literal without `${`.
-- `external` is read the way `matchesExternal` reads it: a name also covers its subpaths and `*` is
-  one wildcard, on the unresolved specifier. A bundler with exact-match externals has to widen
-  them, and every match stays the specifier as written, never a resolved path. A wildcard also
-  matches a relative import (`./a.css` under `*.css`).
-- `build` returns every file it wrote, chunks, source maps and assets included, on a rebuild too:
-  `outputFiles`, integrity and `validateBareImports` all read that list, and a file left out is
-  neither hashed nor scanned.
-- An entry is written as its `outName`, a flat file name core keeps unique (`./a/Cmp` and `./b/Cmp`
-  become `Cmp.js` and `Cmp_2.js`), or as `<name>-<hash><ext>` when hashed. Setting `entry` (the
-  `outName`, verbatim) on the entry's own result replaces core's name matching, which cuts the hash
-  at the last `-` and cannot tell an exposed `./chunk` from esbuild's `chunk-<hash>` chunks.
-- Imports the adapter adds itself (a dev client, a polyfill) go in `NFBuildAdapter.externals`, so
-  users do not have to list them in `externals`. `normalizeFederationOptions` merges them into the
-  normalized `config.externals` (a new, de-duplicated list; the user's array is never mutated), but
-  only when they are passed in: the adapter registry is process-global, so core never reads them
-  from it. `federationBuilder.init` passes them; an adapter that normalizes itself passes its own
-  in the third argument, `NFAdapterInput`: `normalizeFederationOptions(options, cache,
-{ externals: adapter.externals })`. The cache moves into `NFAdapterInput` in v5. From there they
-  are ordinary externals: every bundle's `external`, the bare import check, `matchesExternal`. Keep
-  them exact or scoped: one that covers a shared package would hide its pruned entry points.
-- A shared bundle served from the externals cache runs no build. An adapter that needs something
-  from that build (the Angular adapter: the packages it inlined, for `3rdpartylicenses.txt`)
-  returns it from the optional `cacheData(name)`, which core reads right after `build`, before
-  `dispose`, and stores with the cache entry. The adapter reads it back from
-  `FederationCache.adapterData[bundleName]` (`federationBuilder.adapterData`), on a hit too, rather
-  than holding it itself: the field is staged with `externalFiles`, so a failed run keeps the last
-  complete set, a bundle that leaves the plan drops out, and a rebuild that skips the shared
-  bundles keeps it. The data goes through JSON on a fresh build too, so a `Set` reads as `{}`
-  either way, and an absent value is stored as `null`. It is deep-frozen, hit or not: an adapter
-  that edited it in place would read its own edit back on every rebuild that skips the shared
-  bundles. Treat the bundle names as opaque. Once an adapter implements `cacheData`, an
-  entry written without the field misses. Keep it small and free of absolute paths; change
-  `externalsCacheKey` when its shape changes. A hit serves what was stored, so collect it whatever
-  the adapter's options are, or put the option that decides it in the key.
-- `setup` receives the bundle's `kind` (`'shared' | 'mapping' | 'exposed'`). It replaces
-  `isMappingOrExposed`; that and `optimizedMappings`, which no published adapter acts on, are
-  deprecated in 4.9 and removed in v5. `NFBuildAdapterContext.isMappingOrExposed` is deprecated
-  too: core never reads that context, and the type moves to the adapters in v5.
-
-`outputPath` is resolved against `workspaceRoot` (`resolveOutputPath`) and may be absolute. Every
-writer goes through that helper, and the adapter receives the resolved `outdir`, so all output
-lands in one directory whatever `process.cwd()` is (core#156). Inputs follow the same rule:
-
-- Exposed entry points reach the adapter resolved against `workspaceRoot`; `config.exposes` itself
-  keeps what the user wrote.
-- `normalizeFederationOptions` sets the config context (`useWorkspace`/`usePackageJson`) for the
-  config load, so `share()`/`shareAll()` find `package.json` from the workspace. Loads are queued
-  (`loadWithConfigContext`), because the context is global and a config only reads it once it
-  evaluates, after an await: two remotes normalized in parallel would otherwise both see the
-  second one's context. Each load restores the previous context once it settles, so a config
-  evaluated outside a build later in the process never reads the last build's `tsConfig`.
-- The `ignoreUnusedDeps` scan roots sheriff at `workspaceRoot`.
-- Shared mappings are read from the tsconfig the build compiles with (core#149):
-  `normalizeFederationOptions` puts `tsConfig` in the config context and `findMappingsTsConfig`
-  resolves it against `workspaceRoot`, the way the Angular adapter does, then against cwd, and
-  returns the on-disk spelling. If neither exists it warns and falls back to `findRootTsConfigJson`
-  rather than failing a build that worked before core#149. `paths` is parsed with TypeScript's own
-  API, so `extends` is followed and targets resolve against `baseUrl` or the file that defines
-  `paths` (TypeScript's internal `pathsBasePath`; its absence throws rather than guessing). A
-  missing `extends` target throws, since it would otherwise drop the inherited `paths` silently;
-  other tsconfig diagnostics are left to the compile. Only the first target of each key is used,
-  and a key with no targets is skipped. A declared `sharedMappings` pattern that selects no key of
-  the tsconfig read warns once per config load and names that file (`warnUnmatchedMappingPatterns`):
-  reading a tsconfig without the expected `paths` used to drop every mapping silently (core#163).
-- Without a `tsConfig` (a config loaded outside a build), `findRootTsConfigJson` is the fallback.
-  It still searches from cwd first, so a resolution that works today does not move, and falls back
-  to the workspace root only when that search finds nothing. Searching from `workspaceRoot` first
-  would pick a subproject's own `tsconfig.json` over the repo root's `tsconfig.base.json`, which
-  that subproject need not extend.
-- `tsConfigPath` is passed through as given and is the adapter's to resolve: the Angular adapter
-  joins it onto `workspaceRoot`, which an absolute path would break.
+| Page                                                                | Open when                                                                                |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| **1. Configuration**                                                |                                                                                          |
+| [Workspace root](docs/architecture/workspace-root.md)               | resolving any path or loading a config                                                   |
+| [Shared packages](docs/architecture/shared-packages.md)             | changing what is shared, at which version, or what is pruned                             |
+| [Shared mappings](docs/architecture/shared-mappings.md)             | changing how `sharedMappings` are read, selected or pruned                               |
+| [Mapping packages](docs/architecture/mapping-packages.md)           | changing how mappings group into packages, or `.package()`                               |
+| [Mapping imports](docs/architecture/mapping-imports.md)             | a mapped library is evaluated twice, or before proposing a fix for deep imports          |
+| **2. Bundling**                                                     |                                                                                          |
+| [Build adapter](docs/architecture/build-adapter.md)                 | writing or changing an adapter, or what core expects of its output                       |
+| [Externals](docs/architecture/externals.md)                         | touching `externals` or anything that asks "is this external?"                           |
+| [Chunks](docs/architecture/chunks.md)                               | changing which bundle code lands in, code splitting, or chunk names                      |
+| **3. Output**                                                       |                                                                                          |
+| [Output files](docs/architecture/output-files.md)                   | reading, hashing or post-processing built files, or listing what a build wrote           |
+| [Published imports](docs/architecture/published-imports.md)         | an unresolved-import message, `strictImports` or the barrel rule is involved             |
+| **4. Across builds**                                                |                                                                                          |
+| [Shared cache](docs/architecture/shared-cache.md)                   | changing the shared cache key, layout or invalidation, or what a failed shared run keeps |
+| [File watcher](docs/architecture/file-watcher.md)                   | watch mode misses saves or never settles, or touching the watcher                        |
+| **5. Packaging**                                                    |                                                                                          |
+| [Public API](docs/architecture/public-api.md)                       | adding, removing or renaming an export                                                   |
+| [TypeScript dependency](docs/architecture/typescript-dependency.md) | changing the `typescript` range or using a newer TypeScript API                          |
 
 ## Configuration
 
@@ -206,348 +152,69 @@ export default withNativeFederation({
 
   features: {
     denseChunking: true, // Optimize remoteEntry.json structure
-    denseExternals: true, // Group all entrypoints of a shared external under one object (opt-in); entries only merge when all metadata but file and dev hint match
+    denseExternals: true, // Group all entry points of a shared package under one object (opt-in)
     mappingVersion: true, // Use versions for shared mappings, is now opt-out
-    strictImports: false, // Fail the build, instead of warning, on a bare import remoteEntry.json does not declare or a non-npm-style sharedMappings name
+    strictImports: false, // Fail the build, instead of warning, on a bare import remoteEntry.json does not declare
   },
 });
 ```
 
-### Important Configuration Options
+### Option notes
 
-- **`requiredVersion: 'auto'`**: Automatically reads version from nearest `package.json`
-- **`includeSecondaries`**: Can be `true`, `false`, or `{ skip: ['...'], resolveGlob: true, keepAll: true }`. `keepAll` exempts a shared package's _secondaries_ from `ignoreUnusedDeps` pruning, read per package family (`inferPackageFromSecondary`): every entry point survives while something still reaches the package, but a family nothing reaches is pruned regardless, and a package with no secondaries is its own family so the flag is a no-op for it. Only a package root expands: a sub-path key (`@angular/common/locales/nl`) has no `exports` of its own, so `includeSecondaries` does nothing for it (core#233). On a `sharedMappings` entry the same flag is stronger and opts out of reachability entirely.
-- **`singleton`**: Ensures only one instance of a dependency is loaded
-- **`strictVersion`**: Throws error on version mismatch instead of loading multiple versions
-- **`chunks`**: Can be set globally or per-package to control code-splitting. On a shared external
-  it only applies with `build`: without one the external is built in `browser-shared`/`node-shared`,
-  which take the global value, so a differing `chunks` there warns once per package (5.0 makes it a
-  throw) and is dropped from the normalized config. With `build: 'package'` the entries of one
-  package vote like mappings do: unset is no vote, the global value applies when nobody votes, and a
-  disagreement warns and keeps the first value (core#216). Both warnings come from
-  `normalizeShared`, once per config load: the planner runs again on every watch rebuild.
-- **`sharedMappings`**: Entries are patterns, and may be paired with a `MappingConfigInput` as `[['@my-org/ui/*'], { singleton: false }]` (first matching entry wins, except under a declared package, see below). `mappingsFromWorkspace()` builds the same array. `includeSecondaries` exempts a mapping from `ignoreUnusedDeps` reachability entirely — either `true` or `{ keepAll: true }` does it here, unlike a shared package where `true` is the default and only `{ keepAll: true }` affects pruning; wildcards additionally need `{ resolveGlob: true }`. Without that exemption, reachability resolves wildcards itself — no `resolveGlob` needed — and also follows imports by specifier from one mapping into another, so an entry point only another mapping's barrel re-exports stays published (core#135); relative imports inside a mapping are its own code and are bundled. Only barrel imports can be shared as a mapped path: a specifier with a dot in its last segment cannot be resolved from an import map ([vite#21036](https://github.com/vitejs/vite/issues/21036)). `assertBarrelMappings` therefore throws on anything that would reach `remoteEntry.json`; paths that are pruned or dropped by wildcard expansion are never published, so they are filtered silently instead. A mapping entry point that imports a subpath of a mapping `remoteEntry.json` publishes (`@my-org/ui/button.js`, `@my-org/ui/index.js`) gets a warning: an external covers its subpaths (`matchesExternal`), so the import stays bare, and the import map has no key for it. Only files the mapping itself matches are scanned, which for a single-file mapping is just its barrel; a skipped mapping is bundled, so its subpaths never warn. `build` selects a bundle (see the Chunks section); `MappingConfigInput` leaves out `platform` and `packageInfo`, which a mapping cannot act on. `chunks` applies to the bundle the mapping is built in: the planner takes the value the bundle's mappings set (a mapping without one does not count), the global `chunks` when none does, and throws when two disagree; `build` gives a mapping a bundle, and so a `chunks`, of its own. A published mapping whose name is not npm-style (`package` or `@company/package`, lowercase) warns once per package, or throws with `features.strictImports` (`warnNonNpmMappingNames`). Subpaths and wildcards (`@company/package/*`) are allowed, but they belong to the package their name implies: `build: 'package'`, pruning and `denseExternals` group them under it, unless a declared package (below) names it.
-- **`mappingsFromWorkspace().package(prefix, cfg?)`** (core#198, #213) declares a package: every mapping that is the prefix or sits under it at a `/` belongs to it, finer or coarser than the name rule, and the longest declaration wins. A mapping under no declaration keeps the name rule; tsconfig `paths` keys are never read for identity (an exact key per entry point, as Nx and ng-packagr write them, would split one library into packages a runtime may serve from different remotes). The builder emits a `{ package, ...config }` entry with `baseCfg` and `cfg` merged and `build` left out; `getRawMappedPaths` splits declarations off before the selection is flattened, so a declaration selects nothing (only an absent `sharedMappings` shares all), and `withNativeFederation` normalizes them into `sharedMappingPackages` (prefix -> config). `resolveMappingConfig` gives an import its declared package's config ahead of every pattern (`declaredPackageOf`), so a package has one config by construction; a user config at or under a prefix could never apply and throws, which is why the builder emits a selected pattern under a package without one. A raw wildcard key outside the prefix (`@org/*`) resolves its own config for expansion and pruning; only the imports it expands to under the prefix get the package's. Checks: a prefix shallower than `@scope/name`, with a `*` or an empty segment throws; so do a malformed entry, `build` on a declaration, one prefix declared twice with different configs, and a mapping `build` other than `'separate'`/`'package'` (`'paths'` from 4.9.0-next.1 points at `.package()`). A prefix no tsconfig key can reach warns; it is checked against every key, not this remote's selection, because declarations are meant to live in one module every remote's config imports (remotes that declare, or merge `baseCfg`, differently publish the same library differently and nothing detects it). A declaration selects no bundle (see the Chunks section). `mappingPackageByImport` is the only source `densifyExternals` and the checks below read. The entry points of one package must agree on the version each reads from its `package.json`; that is checked before any mapping is bundled. Without `denseExternals` records stay flat per entry point, so a host can still load one package's entry points from different remotes, as for any library with several entry points; the declaration still gives the package one config, the version check and its pruning identity. Packages that depend on each other are coupled with a `pool`, never inferred: whether that is needed depends on whether they hold state, which core cannot judge.
-- **`fromPackageJson(...).patch(patterns, cfg)`**: Patterns take a `*` (`'@angular/*'`) and are matched against the `package.json` dependency names before secondaries are expanded, so a secondary inherits its package's patch and cannot be patched on its own. Patches merge field by field in call order; a pattern that matches nothing warns. This differs from `mappingsFromWorkspace().patch()`, which emits first-match-wins entries.
-- **`build: 'package'`**: Bundle a shared dependency in isolation (not in the shared bundle)
-- **`externals`**: Opt-out specifiers. They reach the bundler as external, so they stay bare imports,
-  but are never published in `remoteEntry.json`: the host page or another loader provides them.
-  The normalized list also holds the build adapter's own `externals`.
-  Adapters must read every `external` the way `matchesExternal` (exported from `./internal`) does
-  for the unresolved specifier. A wildcard also keeps a matching relative import, which stays
-  relative and has to be served next to its importer: no import map resolves it.
+- **`requiredVersion: 'auto'`**: reads the version from the nearest `package.json`.
+- **`singleton`** / **`strictVersion`**: one instance of a dependency / throw on a version mismatch.
+- **`includeSecondaries`**: `true`, `false` or `{ skip, resolveGlob, keepAll }`. On a shared package
+  `keepAll` keeps every secondary of a package something reaches; on a `sharedMappings` entry
+  `true` or `keepAll` exempts the mapping from pruning entirely.
+- **`chunks`** / **`build`**: code splitting is a property of a bundle. On a shared package
+  `chunks` only applies together with a `build`; a mapping gets its own bundle with
+  `build: 'separate'` or `'package'`.
+- **`fromPackageJson(...).patch()`** merges field by field in call order;
+  **`mappingsFromWorkspace().patch()`** emits first-match-wins entries.
+- **`externals`**: specifiers left bare and never published; something else provides them.
+- **`sharedMappings`**: patterns over the tsconfig `paths` the build compiles with; only barrel
+  specifiers can be published.
+- **`mappingsFromWorkspace().package(prefix, cfg?)`**: declares a mapping package (one config, one
+  version).
 
-### Shared versions
+## Writing an adapter
 
-A record's `version` names the bytes in its file, and the runtime serves a singleton package as one
-unit at one version: a remote that publishes a sub-path at another version than its root runs its own
-copy of the whole package. A shared key's version is therefore resolved once in `bundleSharedCore`,
-and the record, the dev output name and the cache key read the same value (core#233): a configured
-`packageInfo.version` (a pin), else the installed version of the key's package root
-(`installedVersions`), also for a `packageInfo` without a version, else the declared `version`, with
-a warning. A vendored copy of an installed package must pin `packageInfo.version`, or it is published
-as the installed version.
+Detail lives in `src/lib/domain/core/build-adapter.contract.ts`; the why in
+[Build adapter](docs/architecture/build-adapter.md) and [Externals](docs/architecture/externals.md).
 
-### Unresolvable bare imports
+- Write ESM, flat into `outdir`; core reads only ESM syntax.
+- `build` returns every file it wrote, chunks, source maps and assets included, on a rebuild too.
+- Read `external` the way `matchesExternal` does; widen bundler externals that match exactly.
+- Imports the adapter adds itself go in `NFBuildAdapter.externals`, passed via `NFAdapterInput`
+  when the adapter normalizes the config itself.
+- Write each entry as its `outName`, or set `entry` on its result.
+- `setup` receives the bundle's `kind`; `isMappingOrExposed` and `optimizedMappings` are deprecated.
+- Declare `externalsCacheKey`; implement `cacheData` only if you need data from a cached build.
+- Map relative imports into a shared mapping with `createMappingImportResolver`
+  ([Mapping imports](docs/architecture/mapping-imports.md)).
 
-The bundler keeps every subpath of an external as a bare import, but the import map only has the
-exact keys `remoteEntry.json` declares. A shared package's secondary that `ignoreUnusedDeps` pruned,
-or that is in `skip`, therefore stays an import nothing resolves (core#168). After assembling
-`remoteEntry.json`, `validateBareImports` reads every script in `outputFiles` (see below), so
-non-dense chunks that `remoteEntry.json` never names are covered too, and reports each bare
-specifier that is neither declared, a published chunk, nor matched by `externals`
-(`matchesExternal`, core's rule: a name covers its subpaths, one `*` is a wildcard; a bundler that
-matches `external` exactly needs it as a function that calls it). Node built-ins (exact names,
-`module.isBuiltin`) pass only in files whose own bundle is `platform: 'node'`; a file that a node
-and a browser bundle both wrote counts as browser. It warns by default and throws with
-`features.strictImports`. It reads the files from the output directory, so cached bundles are
-covered too. A watch rebuild repeats unresolved imports only when the set of specifiers changes
-(importers are left out: content-named chunks are renamed by any edit); otherwise it notes them in
-one line, and says when they are all resolved. A full build and every strict build report in full.
-The last set is kept per `FederationCache` in a module-private `WeakMap`.
+## Watch mode
 
-It never passes a file it did not read. A script the lexer cannot parse is reported (and fails a
-strict build); a reported file missing from the output folder is skipped, since
-`validateOutputFiles` has already reported it (see Output files). Only ESM
-`import`/`export`/`import()` with a literal specifier is checked: a CommonJS `require` of an
-external (a bundler's `require` shim, such as esbuild's `__require`), `import.meta.resolve` and
-`new URL()` are not.
-
-### Output files
-
-Every file a build writes — entries, chunks, source maps and assets such as an extracted `.css` —
-is reported as an `OutputFile` (`{ fileName, platform }`, `fileName` its base name, since adapters
-write flat into the output folder) and listed by `collectOutputFiles(federationCache)`, also exposed as `federationBuilder.outputFiles`
-(core#177).
-An adapter that post-processes federation files (such as the Angular adapter's i18n step) should
-copy from it rather than glob the output folder, which also holds the app's own output, or derive
-the list from `remoteEntry.json`, which misses non-dense chunks. It is never published; filter on
-the extension for scripts.
-
-- Each bundle reports what its adapter returned, so `NFBuildAdapter.build` must return every file
-  it wrote for the bundle, on a rebuild too. A relative `fileName` fails the build
-  (`assertAbsoluteFileNames`): it would be read against cwd, not `outdir`, and integrity would
-  skip the file without a word.
-- Shared bundles keep theirs per bundle in `federationCache.externalFiles`, which survives a
-  rebuild that touches no linked package. The mapping and exposed part (`artifactFiles`) comes
-  fresh from every build, so it is replaced, never merged: stale non-dense chunks stay on disk but
-  drop out. The full list is derived from the two on every read and never stored. After a failed
-  build it mixes the newest complete shared set with the last complete mapping/exposed set, both
-  of which are on disk.
-- The shared bundles write into a staged copy of `externals`, `chunks`, `integrity` and
-  `externalFiles`, which replaces the cached fields only once every plan ran
-  (`withStagedExternals`). A failed or aborted run keeps the last complete set and leaves
-  the run marked incomplete (`sharedRunIncomplete`), so the next rebuild re-runs every plan even
-  when nothing shared changed: the run that failed may already have cleared a bundle's disk
-  cache. In a dev build with `integrityHashes`, the bundles that finished before the failure have
-  already overwritten their files in the output folder, so the served bytes may not match the kept
-  integrity until that re-run.
-- Core knows every file by its base name in the output folder, so one written into a subfolder
-  counts as missing. Where core reads a bundle's files it throws (`assertWrittenToOutdir`): every
-  file of a shared bundle, the scripts of a dense exposed or mapping build. A shared entry not
-  written as its `outName` throws too (`createBuildResultMap` with the expected names).
-- Before `remoteEntry.json` is written, `validateOutputFiles` checks every `outputFiles` entry is
-  still there, which also catches a later bundle deleting an earlier one's files (one that
-  empties the output folder). It throws for a file `remoteEntry.json` names and warns once for the
-  rest (a source map, a stylesheet), which were never fatal.
-- Exposed and mapping output is always listed as `browser`: built-ins are allowed only in shared
-  bundles built with `platform: 'node'`.
-- Integrity is computed over the same files, so the two cannot drift.
-- `remoteEntry.json` only names what an ESM import can load. A non-script output is never a chunk
-  and gets no integrity hash; it is copied and listed in `outputFiles` only.
-
-## File Watching & Development
-
-The library supports **watch mode** for development:
-
-1. **Build notifications**: During development builds, the build process can optionally emit notifications
-2. **Incremental rebuilds**: `rebuildForFederation()` re-bundles only what changed
+During development builds core can emit build notifications, and `rebuildForFederation()`
+re-bundles only what changed. Adapters can drive their rebuild loop with core's watcher
+([File watcher](docs/architecture/file-watcher.md)). A consumer that only
+uses the `onChange` listener must still call `clear()`, or the dirty set grows for the process
+lifetime.
 
 **Key files**:
 
 - `src/lib/domain/core/build-notification-options.contract.ts` - Contract for notifications
-- `src/lib/core/rebuild-for-federation.ts` - Incremental rebuild logic
+- `src/lib/core/build/rebuild-for-federation.ts` - Incremental rebuild logic
 - `src/lib/utils/file-watcher.ts` - `createNfWatcher` / `syncNfFileWatcher`
-
-### The watcher (`createNfWatcher`)
-
-An `fs.watch`-based watcher adapters can use to drive their rebuild loop. A host that
-already owns a watcher can inject it via the `watch` option instead; an injected
-implementation is expected to survive inode replacement itself, since `opts.poll` is only a
-hint (see `file-watcher.contract.ts`). It has **two channels, both always live**:
-
-- **push** — the `onChange` callback, for waking a rebuild loop
-- **pull** — `get()` / `clear()` / `mutate()`, for reading _which_ files changed
-
-A listener-only consumer must still call `clear()`, or the dirty set grows for the process
-lifetime.
-
-### What to watch
-
-`syncNfFileWatcher(watcher, sources, linkedDirs)` subscribes to the inputs of the last build.
-`sources` is either the input paths themselves or a bundler cache **keyed by input path**;
-a cache that records its inputs elsewhere yields an empty watch set and, silently, a dev
-server serving stale bundles until restart (angular-adapter#94). `linkedDirs` (from
-`linkedSharedDirs`) are polled rather than natively watched, because ng-packagr's atomic
-dist rewrites change the inode and defeat `fs.watch`. `linkedSharedDirs` returns `[]`
-unless the `watchLinkedDeps` option is on, so npm-linked shared deps are **not** watched by
-default. Because a linked lib that never reloads is indistinguishable from a broken one,
-`buildForFederation` names what the default is skipping (`hintUnwatchedLinkedDeps`, gated on
-`watch` and `watchLinkedDeps`). That lives in core rather than in each adapter so the message
-arrives without an adapter change; `rebuildForFederation` does not repeat it.
-
-The content signal is a separate mechanism and is **not** gated: `linkedContentSignals`
-walks a linked checkout on every build so an edit under a fixed version still invalidates
-the cached external, whether or not anything is watching. That walk costs ~250 ms on a
-checkout with ~17k vendored files; a pure source checkout is free.
-
-`sharedMappingDirs(config)` is the config-only alternative: the source dir of every
-`sharedMappings` entry point. It is coarser than a build's compiled inputs and covers what
-they cannot — files added to a lib since the last build — but it does not follow imports out
-of the lib. An adapter that can enumerate its build inputs should watch both.
-
-### File watches go through the directory
-
-`addPaths` never opens a handle on a file. A per-file `fs.watch` holds an inode, and an editor
-that saves by rename-replace (JetBrains "safe write", vim `backupcopy=no`) replaces it — the
-handle then reports nothing, so the second save onward is silently lost. Each tracked file is
-covered by a non-recursive watch on its containing directory instead, filtered back down to the
-tracked set so the event surface is unchanged. This also collapses thousands of sources onto a
-few hundred handles, and reports files created after they were added. Directories passed
-explicitly keep their recursive watch and deliver every entry.
-
-One directory is one handle regardless of how many tracked files live in it or how the path is
-spelled, and a recursive watch supersedes the narrower watches it covers — so adding a file and
-later the directory containing it (the order `syncNfFileWatcher` itself uses, and the order an
-adapter watching both a mapping dir and its compiled inputs hits) delivers each save once, not
-twice. The one asymmetry is polling: a polled watch survives the inode replacement a native one
-misses, so it can stand in for a native watch over the same tree but never the reverse. A polled
-`linkedDirs` entry is therefore never superseded by a native parent.
-
-### Replay dedupe
-
-Events whose recorded identity — mtime, ctime **and** byte length — is unchanged since the last
-one seen for that path are dropped before they reach either channel (`dedupeReplays`, default
-**on**). macOS FSEvents re-delivers 'changed' for recently edited files roughly every 30s;
-with a watch list of a few thousand sources that replay alone keeps a rebuild loop awake
-forever.
-
-Length is paired with mtime so that the common ambiguous case — a second save landing inside
-one mtime tick, on a filesystem with coarse mtime granularity — is settled on data rather
-than on a clock. Only a save that also left byte length untouched reaches the time check.
-ctime covers a replace that keeps size and restores an old mtime (`cp -p`, `rsync -a`, tar), which
-the poll catches by inode. The inode itself is left out of the dedupe: on a mount whose inode
-numbers are not stable (CIFS `noserverino` may hand out new ones) the poll reports unchanged files,
-and the dedupe, seeing the same mtime, ctime and length, is what drops them. ctime cannot replace the
-inode in the poll, since it comes from the same coarse clock as mtime.
-
-That check is `replayGraceMs` (default 2000): an event whose identity matches still passes
-while the mtime is recent. The default is a derived bound, not a tuned constant. A filesystem
-truncating mtime to granularity `g` records a value up to `g` before the write, so two writes
-can only collide in mtime within `2g` — and `g` is 1s on the coarsest filesystems in play
-(gRPC-FUSE, NFS, WSL2 drvfs, HFS+). On ext4 and APFS `g` is nanoseconds, so a real save always
-advances mtime and the window is never reached.
-
-Age is measured from when the event _arrived_, not from when a debounced flush got round to
-it, so `debounceMs` is not silently subtracted from the window. Two limits are worth knowing:
-a stall inside the event loop delays the `fs.watch` callback itself, which no local bookkeeping
-can correct; and on a network mount the age is a cross-clock subtraction, since mtime carries
-the server's clock. A server clock running ahead yields a negative age, which reads as recent
-and delivers — the safe direction. Running behind shortens the window, and there the only
-remedy is a larger `replayGraceMs` or `dedupeReplays: false`.
-
-Dropping a real edit is the bug the dedupe exists to prevent, so every ambiguous case errs
-toward delivering; a spurious rebuild is the cheaper mistake.
-
-### Watch failures are visible
-
-A watch that fails to open is silent staleness — the paths it covered never report a change
-and the dev server serves the last bundle until restart. Because watches are per directory,
-one failure can take a whole directory of sources down, so the first is a `logger.warn`.
-Later ones drop to debug: descriptor exhaustion fails every subsequent directory too, and a
-line per path would flood.
-
-Not covered by any of this: events the platform itself drops (inotify `IN_Q_OVERFLOW` under
-`git checkout` or `npm install` churn). Recovering those needs a reconciliation sweep that
-re-stats the tracked set — deliberately out of scope here, own issue.
-
-## Chunks
-
-A chunk is code the bundler split out of one or more entry points. It has no version and no
-package name of its own, and it belongs to a _build_, not to a dependency — so nothing
-downstream can tell whether the external it was split out of asked for `singleton: false` or a
-share scope. Chunks are therefore never shared between applications: `addChunksToResult`
-publishes them with `singleton: false`, and with `denseChunking` the orchestrator maps them into
-the emitting remote's own scope. A chunk name is a build-local identifier, not a share key.
-
-`rename-chunks-by-content.ts` still names every chunk after a hash of the bytes it will serve,
-so identical bytes keep one name across rebuilds and a changed chunk always gets a new one. The
-hash fills the slot the bundler sized — its length, so every reference keeps its byte length and
-the emitted source maps stay valid — and is always written in base32, because a mixed-case name
-would collapse to one file on a case-insensitive filesystem.
-
-Shared mappings and exposed modules are built separately, because a chunk factored out of both
-would split one remote against itself: the exposed module, never served by another remote, keeps
-this build's copy, while the import map may serve the mapping from another remote with a copy of its
-own, even at the same version. `pool` cannot couple them, since a chunk is not a package. Mappings default to one `mapping-bundle`;
-`build: 'separate'` gives a mapping its own bundle and `build: 'package'` one per mapped package,
-the same way a shared external is planned (`planMappingBundles`). `mapping-or-exposed` is a fixed
-name: the orchestrator registers it for every remote it knows. A mapping's output name keeps only
-`[A-Za-z0-9_]` of its import, so two mappings, or a mapping and an exposed module, can share a file
-(also by case alone on macOS and Windows); a full build warns about it before bundling (core#196),
-since a dev build writes one over the other.
-
-Core keeps these guarantees for mappings, and no more:
-
-1. Every import of a shared mapping or external is a bare specifier the import map resolves. Every
-   mapping is external to every bundle, so no bundle holds or relatively imports another mapping's
-   code, and within one remote a mapping is evaluated once.
-2. A package (declared, else inferred from its name) publishes one record: one config, one
-   version. With `denseExternals` its entry points resolve from one remote together; without it
-   they are published, and may be taken, one by one.
-3. Chunks are build-local and never shared between remotes. Which packages share a chunk is not
-   promised: a shared chunk never creates more instances than inlining the same code into each
-   package would, and every remote may serve a different version anyway. Coupling packages is the
-   user's job, through `pool`.
-
-A declaration therefore selects no bundle: declared mappings are bundled like any other mapping
-without `build`, in `mapping-bundle`. Each plan carries the `chunks` it is set up with (see `sharedMappings` above), and dense chunking follows it per bundle. Bundling without splitting
-copies shared helpers into each package and inlines a library's relative `import()`: the lazy
-module still runs only when called, but downloads with the library's entry.
-
-## Caching System
-
-Native Federation uses an intelligent caching system to speed up builds:
-
-**Externals cache** (`src/lib/core/cache/cache-persistence.ts`) — on disk, across builds:
-
-- Caches the bundled shared dependencies of each bundle. Per project
-  (`<cachePath>/<project>/`), each bundle's `<bundle>[-dev].meta.json` sits in the root and its
-  artifacts in a folder of the same name, `<bundle>[-dev]/`. Content-named chunks collide across
-  bundles, so a shared folder would let one bundle's chunk rename or `clear()` delete a file
-  another bundle still lists (core#154). `clear()` therefore removes the whole bundle folder.
-- Keyed by a checksum over the external names, their versions (see Shared versions), a configured
-  `packageInfo`'s entry point and `esm`, the builder version,
-  the relevant feature flags, the bundle's `chunks` and the adapter's `externalsCacheKey`
-  (`getChecksum`)
-- Stored in `node_modules/.cache/native-federation` by default (`getDefaultCachePath`)
-- On a checksum match the cached artifacts are copied straight into the output path
-
-**Federation cache** (`src/lib/core/cache/federation-cache.ts`) — in memory, one build:
-
-- Accumulates the externals, chunks and integrity hashes that go into `remoteEntry.json`, and the
-  files each shared bundle wrote (`externalFiles`)
-- Holds `artifactFiles`, what the last mapping and exposed bundle wrote
-- State a build's correctness depends on lives on `FederationCache` itself, such as
-  `sharedRunIncomplete`, never in a module-private side table keyed by the cache object: a copy
-  of the cache (`{ ...cache }`) would silently lose it. Only state that controls how often a
-  warning repeats may sit in such a side table
-
-**Cache invalidation**:
-
-- Based on the installed versions of shared packages, not their declared ranges
-  (`installedVersions`), unless `packageInfo.version` pins one
-- Based on where a configured `packageInfo` points: it replaces resolution, so a pinned version
-  alone cannot tell two entry points apart
-- Based on configuration changes and on the builder version
-- Based on the `config.externals` entries this bundle's adapter receives: a package that became
-  external must not stay inlined in a cached bundle. Shared keys and mappings are not hashed, since
-  every pruned import would change them
-- On a checksum match, against the external list of the current plan (`staleCacheReason`). The
-  metadata records the list the bundle was built with and the bare imports it left external. The
-  entry misses when one of those imports is no longer external (it would resolve through no
-  import-map entry), or when a newly external name belongs to a package the entries reach through
-  `dependencies`, `peerDependencies` or `optionalDependencies` (`dependencyClosureCore`, which
-  resolves from each package's real path so pnpm's store layout is followed). The bundler does not
-  report what it inlined, so a package declared anywhere in that tree counts as inlined, and a
-  `package.json` the walk cannot read is a miss. A package the bundle imports without declaring it
-  (reachable only through hoisting) is not seen; that case still needs something else to
-  invalidate the entry. The walk only runs when something was added. Metadata without these fields
-  misses once
-- Never on a file the lexer cannot parse: a shared bundle with one fails in
-  `finalizeSharedOutputs` before it is persisted, so the cache never holds one
-- Based on the adapter's `externalsCacheKey` (core#152): `builderVersion` is core's own version,
-  but the adapter produces the bytes, so it declares its identity and every option that changes
-  shared externals. Core reads it before `setup()`, sorts the option keys and JSON-encodes each
-  value; lists are joined by the adapter, which alone knows whether order matters. Optional for
-  now, so an adapter without one keeps the old checksum; it becomes required in the next major.
-- `.nf-cache.json` in the project cache folder records the layout version and the builder version
-  that created the folder; it is only written after a purge, so a patch upgrade leaves the older
-  patch version in place. `buildForFederation` checks it before any bundle runs (`prepareCache`),
-  and deletes the whole project cache folder when the stamp is unreadable or differs in layout or
-  `major.minor`. Without a stamp the folder may not be core's (a `cachePath` pointed at source), so
-  only `*.meta.json` files and their bundle folders go; loose files of older layouts stay behind. Patch releases already miss per bundle through the checksum. Two processes building one project
-  on different minors (a `serve` and a `build` mid-upgrade) can purge each other's cache.
-- For symlinked (npm-linked) deps, additionally on a content signal (max mtime of the package dir)
-- Can be cleared by deleting the cache folder
 
 ## Testing
 
 - Unit tests use Vitest and live alongside source files (`.spec.ts`).
 - Run with `pnpm test` (`vitest`).
-- `src/public-api.spec.ts` snapshots every entry point's exports (name and value/type), and checks
-  that `./domain` and `./internal/browser` reach no Node built-in or package at runtime. A surface
-  change fails it until the snapshot is updated (`vitest -u`), so the change is reviewed as a diff.
+- `src/public-api.spec.ts` snapshots every entry point's exports. A surface change fails it until
+  the snapshot is updated (`vitest -u`), so the change is reviewed as a diff.
+- CI runs the suite a second time on the TypeScript floor (last step of `verify.yml`). To repeat it
+  locally, run the same commands, then `git checkout package.json pnpm-lock.yaml && pnpm install`.
 - CI runs the suite on pushes to `main` and on pull requests against `main` (a stacked PR is
   checked once it is retargeted), so a flaky spec blocks merges: fix it rather than retrying it.
 
@@ -566,6 +233,20 @@ Native Federation uses an intelligent caching system to speed up builds:
 - Files named `*.contract.ts` contain interfaces and types
 - Exported via `src/domain.ts`
 
+### Filesystem access
+
+- Code in `src/lib/core` and `src/lib/config` never imports `fs`, `crypto` or the glob library: it
+  receives an `IoPort` (`nodeIo` in production, an in-memory port in specs). That keeps the build
+  logic testable without a real disk, failure cases included. Enforced by `eslint.config.mts`.
+- An exported helper that touches the filesystem takes no port, so adapters never build one; its
+  `*Core` variant keeps the port and stays out of the public entry points.
+
+### Build state
+
+- State a build's correctness depends on lives on `FederationCache` itself, never in a
+  module-private table keyed by the cache object: a copy (`{ ...cache }`) would silently lose it.
+  Only state that controls how often a warning repeats may sit in such a table.
+
 ### Error Handling
 
 - Custom errors in `src/lib/utils/errors.ts`
@@ -575,7 +256,7 @@ Native Federation uses an intelligent caching system to speed up builds:
 ### Logging
 
 - Centralized logger in `src/lib/utils/logger.ts`
-- Levels: `info`, `notice`, `warning`, `error`, `debug`
+- Levels: `info`, `notice`, `warn`, `error`, `verbose` (shown only in verbose mode)
 - Performance measurements with `logger.measure(start, message)`
 
 ### File Naming
@@ -596,12 +277,14 @@ Native Federation uses an intelligent caching system to speed up builds:
 5. Run `pnpm lint` and fix issues
 6. Run `pnpm build` to verify it compiles and emits declarations
 7. Comments are fine but be very conservative. Only comment what's really important (the why).
+8. If the change alters a rule, edit its page in `docs/architecture/`; if it replaces a design,
+   also append to History and move the old design to Rejected ([docs/README.md](docs/README.md)).
 
 ### Debugging Build Issues
 
-1. Check `federation.config.js` configuration
+1. Check `federation.config.mjs` configuration
 2. Verify externals are properly excluded
-3. Check the externals cache in `node_modules/.cache/native-federation`
+3. Check the shared cache in `node_modules/.cache/native-federation`
 4. Enable verbose logging in `federationBuilder.init({ options: { verbose: true } })`
 5. Look at generated `remoteEntry.json` files
 6. Check the import map in browser DevTools
@@ -613,7 +296,7 @@ Native Federation uses an intelligent caching system to speed up builds:
 3. Follow `rebuildForFederation()` for incremental builds
 4. Check `bundleShared()` for shared dependency bundling
 5. Check `bundleExposedAndMappings()` for exposed module bundling
-6. See `writeFederationInfo()` for remoteEntry.json generation
+6. See `writeFederationInfo()` (`src/lib/core/output/`) for remoteEntry.json generation
 
 ## Version Management
 
@@ -631,25 +314,18 @@ This core library is designed to work with:
 
 This package covers the **build side** only; runtime loading of remotes is handled by the orchestrator. The core library is intentionally low-level and agnostic; higher-level integrations provide framework-specific conveniences.
 
-## Key Architectural Decisions
-
-1. **Build-tool agnostic**: Uses adapter pattern to support any bundler
-2. **Framework agnostic**: No framework-specific code; works with vanilla JS, React, Angular, etc.
-3. **Browser standards**: Leverages Import Maps and ES Modules instead of custom loaders
-4. **Caching**: Aggressive caching of shared dependencies for performance
-5. **Type safety**: Full TypeScript support with proper contract definitions
-
 ## Code Quality & Best Practices
 
 - **Lint code**: `pnpm lint` (uses ESLint with TypeScript rules)
 - **Type check**: `pnpm typecheck`
 - **Conventional commits**: Use `feat:`, `fix:`, `docs:`, etc.
 - **Keep PRs focused**: One feature or fix per PR
-- **Update docs**: Keep README.md and AGENTS.md in sync with code changes
+- **Update docs**: Keep README.md, AGENTS.md and `docs/` in sync with code changes
 
 ## Resources
 
 - Main README: `/README.md` - User-facing documentation or the documentation website: https://native-federation.com/llms.txt
+- Architecture topics: `/docs/README.md`
 - Contributing guide: `/CONTRIBUTING.md` - Contribution guidelines
 - Examples: See README for links to example repositories
 - Angular blog: https://www.angulararchitects.io (articles on Module Federation)
