@@ -76,7 +76,8 @@ export function linkedSharedDirsCore(
 }
 
 /** Names the npm-linked shared packages a watching build leaves unwatched -- see
- *  AGENTS.md "What to watch". Advisory only, so a resolution failure must not fail the build. */
+ *  docs/architecture/file-watcher.md. Advisory only, so a resolution failure must not fail the
+ *  build. */
 export function hintUnwatchedLinkedDeps(
   config: NormalizedFederationConfig,
   fedOptions: NormalizedFederationOptions,

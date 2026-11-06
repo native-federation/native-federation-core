@@ -24,8 +24,8 @@ export function createNfWatcherCore(
   const dirtyPaths = new Set<string>();
   const lastSeen = new Map<string, FileIdentity>();
   // Files are watched through their containing directory, never individually;
-  // trackedFiles narrows the directory's events back down to them. See AGENTS.md
-  // "File watches go through the directory".
+  // trackedFiles narrows the directory's events back down to them. See
+  // docs/architecture/file-watcher.md.
   const trackedFiles = new Set<string>();
   const fileDirWatchers = new Map<string, DirWatch>();
 
@@ -70,7 +70,7 @@ export function createNfWatcherCore(
   };
 
   // Identity first, clock only for what identity cannot settle; a negative age
-  // delivers. See AGENTS.md "Replay dedupe" for why 2000 is the default.
+  // delivers. Why 2000 is the default: replayGraceMs in file-watcher.contract.ts.
   const isReplay = (path: string, at: number): boolean => {
     const current = identityOf(path);
     if (!current) {
@@ -91,7 +91,7 @@ export function createNfWatcherCore(
   };
 
   // Warn once, then fall back to debug: descriptor exhaustion fails every
-  // subsequent directory too. See AGENTS.md "Watch failures are visible".
+  // subsequent directory too.
   let watchFailures = 0;
   const watchFailed = (path: string) => {
     if (++watchFailures > 1) return logger.debug(`Could not watch path '${path}'.`);

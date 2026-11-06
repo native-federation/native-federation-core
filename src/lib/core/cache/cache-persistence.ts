@@ -84,7 +84,7 @@ const sharedInfoState = (config: NormalizedExternalConfig): string => {
   return values.every(value => value === null) ? '' : `!${JSON.stringify(values)}`;
 };
 
-// see AGENTS.md, Caching System
+// see docs/architecture/shared-cache.md
 const externalsState = (externals: readonly string[]): string =>
   externals.length === 0 ? '' : `:externals=${JSON.stringify([...new Set(externals)].sort())}`;
 
@@ -219,7 +219,8 @@ const readStamp = (io: CachePort, file: string): CacheStamp | undefined => {
   }
 };
 
-// Patch releases already miss per bundle through the checksum; see AGENTS.md "Caching System".
+// Patch releases already miss per bundle through the checksum;
+// see docs/architecture/shared-cache.md
 export const prepareCacheCore = (io: CachePort, cachePath: string, builderVersion: string) => {
   const stampFile = path.join(cachePath, STAMP_FILE);
   const stamp = readStamp(io, stampFile);
