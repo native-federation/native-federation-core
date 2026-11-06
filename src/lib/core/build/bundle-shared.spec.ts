@@ -970,52 +970,201 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     });
   });
 
-  // A configured packageInfo makes the build skip node_modules entirely, so the key must not
-  // track it either — even when that packageInfo carries no version of its own. The missing
-  // `version` is reachable in practice: ExternalConfig declares it optional and
-  // with-native-federation.ts:99 casts rather than defaulting it.
-  it('ignores the installed version when packageInfo is configured without a version', async () => {
-    const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
-    const configured = fooWith({
-      version: '2.0.0',
-      packageInfo: { entryPoint: 'foo/vendored.js', esm: true } as NonNullable<
-        NormalizedExternalConfig['packageInfo']
-      >,
-    });
+  // core#233: a configured packageInfo used to count as vendored when it had no version, which kept
+  // the installed version out of the key and the record. For a sub-path of an installed package
+  // (Angular's locales) that served a stale bundle after an upgrade, and the record carried the
+  // range's floor next to its root's installed version: two versions of one package in one remote,
+  // which the orchestrator answers by loading that remote's own copy of the whole package.
+  describe('record version of a configured packageInfo (core#233)', () => {
+    afterEach(() => vi.restoreAllMocks());
 
-    await cachedBuild(mem, '2.0.0', configured);
-    const { adapter, result } = await cachedBuild(mem, '2.0.1', configured);
-
-    expect(adapter.calls.setup).toHaveLength(0);
-    // The record falls back to the declared version (core#233).
-    expect(result.externals[0]).toMatchObject({ packageName: 'foo', version: '2.0.0' });
-  });
-
-  // The same vendored entry point, but through share() as almost every config is: share() must
-  // not stamp the node_modules version onto it, or the key follows node_modules again (core#103).
-  it('ignores the installed version for a versionless packageInfo that went through share()', async () => {
-    const mem = createMemoryIo().setFile(ROOT_PKG, '{}').setFile('/ws/package.json', '{}');
-    const viaShare = (installed: string) =>
+    const configured = (packageInfo: { version?: string }, extra = {}) =>
       fooWith({
-        packageInfo: shareCore(
-          mem,
-          {
-            foo: {
-              requiredVersion: '^2.0.0',
-              includeSecondaries: false,
-              packageInfo: { entryPoint: 'foo/vendored.js', esm: true },
-            },
-          },
-          '/ws',
-          DEFAULT_SKIP_LIST,
-          repoAtVersion(installed)
-        )['foo']!.packageInfo as NonNullable<NormalizedExternalConfig['packageInfo']>,
+        version: '2.0.0',
+        packageInfo: { entryPoint: 'foo/locale.js', esm: true, ...packageInfo } as NonNullable<
+          NormalizedExternalConfig['packageInfo']
+        >,
+        ...extra,
       });
 
-    await cachedBuild(mem, '2.0.0', viaShare('2.0.0'));
-    const { adapter } = await cachedBuild(mem, '2.0.1', viaShare('2.0.1'));
+    const notInstalled: PackageJsonRepository = {
+      ...repoAtVersion(''),
+      findDepPackageJson: () => null,
+    };
 
-    expect(adapter.calls.setup).toHaveLength(0);
+    const buildWith = (
+      mem: ReturnType<typeof createMemoryIo>,
+      repo: PackageJsonRepository,
+      sharedBundles: Record<string, NormalizedExternalConfig>,
+      strictImports = false
+    ) => {
+      const config = makeConfig();
+      config.features.strictImports = strictImports;
+      return bundleSharedCore(
+        { io: mem, repo, adapter: createFakeBuildAdapter({ io: mem }) },
+        sharedBundles,
+        config,
+        makeFedOptions({ cacheExternalArtifacts: true }),
+        [],
+        BUILD_OPTIONS
+      );
+    };
+
+    it('records the installed version when packageInfo has none, on a build and on a hit', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+
+      const fresh = await cachedBuild(mem, '2.3.4', configured({}));
+      const hit = await cachedBuild(mem, '2.3.4', configured({}));
+
+      expect(fresh.result.externals[0]).toMatchObject({ packageName: 'foo', version: '2.3.4' });
+      expect(hit.adapter.calls.setup).toHaveLength(0);
+      expect(hit.result.externals).toEqual(fresh.result.externals);
+    });
+
+    it('rebuilds when the installed version moves', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+
+      await cachedBuild(mem, '2.3.4', configured({}));
+      const { adapter, result } = await cachedBuild(mem, '2.3.5', configured({}));
+
+      expect(adapter.calls.setup).toHaveLength(1);
+      expect(result.externals[0]).toMatchObject({ version: '2.3.5' });
+    });
+
+    // A production build renames entries after their content; a dev build keeps the version-based
+    // name, which used to hash the literal 'undefined' and so never moved with the installed bytes.
+    it('gives a dev entry a new file name when the installed version moves', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const devBuild = (version: string) =>
+        bundleSharedCore(
+          { io: mem, repo: repoAtVersion(version), adapter: createFakeBuildAdapter({ io: mem }) },
+          configured({}),
+          makeConfig(),
+          makeFedOptions({ dev: true }),
+          [],
+          BUILD_OPTIONS
+        );
+
+      const before = await devBuild('2.3.4');
+      const after = await devBuild('2.3.5');
+
+      expect(after.externals[0]!.outFileName).not.toBe(before.externals[0]!.outFileName);
+    });
+
+    it('keeps a pinned packageInfo.version and ignores the installed one', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+
+      await cachedBuild(mem, '2.3.4', configured({ version: '1.9.0' }));
+      const { adapter, result } = await cachedBuild(mem, '2.3.5', configured({ version: '1.9.0' }));
+
+      expect(adapter.calls.setup).toHaveLength(0);
+      expect(result.externals[0]).toMatchObject({ version: '1.9.0' });
+    });
+
+    it('falls back to the declared floor and warns when the package is not installed', async () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+
+      const result = await buildWith(mem, notInstalled, configured({}));
+
+      expect(result.externals[0]).toMatchObject({ version: '2.0.0' });
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("'foo' is not installed"));
+    });
+
+    it('warns about a record without any version, and throws under strictImports', async () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const versionless = configured({}, { version: undefined, requiredVersion: 'auto' });
+
+      const result = await buildWith(mem, notInstalled, versionless);
+
+      expect(result.externals[0]!.version).toBeUndefined();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('has no version'));
+      await expect(buildWith(mem, notInstalled, versionless, true)).rejects.toThrow(
+        /without a version \(features.strictImports\): 'foo'/
+      );
+    });
+
+    // The shape the Angular adapter produces: share() with a literal range, so share() sets no
+    // version of its own. The record must still carry the installed version.
+    it('records the installed version for a literal-range packageInfo that went through share()', async () => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}').setFile('/ws/package.json', '{}');
+      const shared = shareCore(
+        mem,
+        {
+          foo: {
+            requiredVersion: '^2.0.0',
+            includeSecondaries: false,
+            packageInfo: { entryPoint: 'foo/locale.js', esm: true },
+          },
+        },
+        '/ws',
+        DEFAULT_SKIP_LIST,
+        repoAtVersion('2.3.4')
+      )['foo']!;
+
+      const { result } = await cachedBuild(
+        mem,
+        '2.3.4',
+        fooWith({
+          packageInfo: shared.packageInfo as NonNullable<NormalizedExternalConfig['packageInfo']>,
+        })
+      );
+
+      expect(result.externals[0]).toMatchObject({ version: '2.3.4' });
+    });
+  });
+
+  // Every pair of configs: when B hits the cache A left, it must replay exactly the records a fresh
+  // build of B writes. That is what makes the version precedence safe to compute in two places.
+  describe('a cache hit replays the record a build would write', () => {
+    const installedOptions = ['', '2.3.4', '2.3.5'];
+    const cases = installedOptions.flatMap(installed =>
+      [undefined, { version: undefined }, { version: '1.9.0' }].flatMap(packageInfo =>
+        [undefined, '2.0.0'].map(version => ({ installed, packageInfo, version }))
+      )
+    );
+    type Case = (typeof cases)[number];
+
+    const repoFor = (installed: string): PackageJsonRepository =>
+      installed
+        ? repoAtVersion(installed)
+        : { ...repoAtVersion(''), findDepPackageJson: () => null };
+
+    const build = (mem: ReturnType<typeof createMemoryIo>, c: Case) => {
+      const adapter = createFakeBuildAdapter({ io: mem });
+      const sharedBundles = fooWith({
+        version: c.version,
+        ...(c.packageInfo && {
+          packageInfo: { entryPoint: 'foo/entry.js', esm: true, ...c.packageInfo } as NonNullable<
+            NormalizedExternalConfig['packageInfo']
+          >,
+        }),
+      });
+      return bundleSharedCore(
+        { io: mem, repo: repoFor(c.installed), adapter },
+        sharedBundles,
+        makeConfig(),
+        makeFedOptions({ cacheExternalArtifacts: true }),
+        [],
+        BUILD_OPTIONS
+      ).then(result => ({ result, hit: adapter.calls.setup.length === 0 }));
+    };
+
+    it.each(cases.map(c => [JSON.stringify(c), c] as const))('after %s', async (_label, a) => {
+      vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      for (const b of cases) {
+        const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+        await build(mem, a);
+        const second = await build(mem, b);
+        if (!second.hit) continue;
+
+        const fresh = await build(createMemoryIo().setFile(ROOT_PKG, '{}'), b);
+        expect(second.result.externals, JSON.stringify(b)).toEqual(fresh.result.externals);
+      }
+      vi.restoreAllMocks();
+    });
   });
 
   describe('bundler chunks', () => {

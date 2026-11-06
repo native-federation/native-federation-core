@@ -11,6 +11,11 @@ export function isInferVersion(): boolean {
   return inferVersion;
 }
 
+// The lowest version a range allows, as the runtime reads a record that has none.
+export function rangeFloor(range: string | undefined): string | undefined {
+  return range?.replace(/^\D*/, '') || undefined;
+}
+
 export function lookupVersion(
   key: string,
   workspaceRoot: string,

@@ -128,6 +128,23 @@ describe('shareCore (end-to-end via injected repository)', () => {
 
       expect(Object.keys(twice)).toEqual(['mylib', 'mylib/sub']);
     });
+
+    // Keys alone hide a second pass that rewrites a version or packageInfo.
+    it.each([
+      ['literal range', { requiredVersion: '^1.0.0' }],
+      ["'auto'", { requiredVersion: 'auto' }],
+    ])('keeps every value through a second pass, with a %s', (_label, cfg) => {
+      const { io, repo } = withLib('mylib');
+      io.setFile(
+        path.join(PROJECT, 'package.json'),
+        JSON.stringify({ dependencies: { mylib: '^1.0.0' } })
+      );
+
+      const once = shareCore(io, { mylib: cfg }, PROJECT, DEFAULT_SKIP_LIST, repo);
+      const twice = shareCore(io, once, PROJECT, DEFAULT_SKIP_LIST, repo);
+
+      expect(twice).toEqual(once);
+    });
   });
 
   it('applies caret range when requiredVersion is auto with range "^" and base is exact semver', () => {
