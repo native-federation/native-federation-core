@@ -216,7 +216,7 @@ export default withNativeFederation({
 ### Important Configuration Options
 
 - **`requiredVersion: 'auto'`**: Automatically reads version from nearest `package.json`
-- **`includeSecondaries`**: Can be `true`, `false`, or `{ skip: ['...'], resolveGlob: true, keepAll: true }`. `keepAll` exempts a shared package's _secondaries_ from `ignoreUnusedDeps` pruning, read per package family (`inferPackageFromSecondary`): every entry point survives while something still reaches the package, but a family nothing reaches is pruned regardless, and a package with no secondaries is its own family so the flag is a no-op for it. On a `sharedMappings` entry the same flag is stronger and opts out of reachability entirely.
+- **`includeSecondaries`**: Can be `true`, `false`, or `{ skip: ['...'], resolveGlob: true, keepAll: true }`. `keepAll` exempts a shared package's _secondaries_ from `ignoreUnusedDeps` pruning, read per package family (`inferPackageFromSecondary`): every entry point survives while something still reaches the package, but a family nothing reaches is pruned regardless, and a package with no secondaries is its own family so the flag is a no-op for it. Only a package root expands: a sub-path key (`@angular/common/locales/nl`) has no `exports` of its own, so `includeSecondaries` does nothing for it (core#233). On a `sharedMappings` entry the same flag is stronger and opts out of reachability entirely.
 - **`singleton`**: Ensures only one instance of a dependency is loaded
 - **`strictVersion`**: Throws error on version mismatch instead of loading multiple versions
 - **`chunks`**: Can be set globally or per-package to control code-splitting. On a shared external
@@ -236,6 +236,17 @@ export default withNativeFederation({
   Adapters must read every `external` the way `matchesExternal` (exported from `./internal`) does
   for the unresolved specifier. A wildcard also keeps a matching relative import, which stays
   relative and has to be served next to its importer: no import map resolves it.
+
+### Shared versions
+
+A record's `version` names the bytes in its file, and the runtime serves a singleton package as one
+unit at one version: a remote that publishes a sub-path at another version than its root runs its own
+copy of the whole package. A shared key's version is therefore resolved once in `bundleSharedCore`,
+and the record, the dev output name and the cache key read the same value (core#233): a configured
+`packageInfo.version` (a pin), else the installed version of the key's package root
+(`installedVersions`), also for a `packageInfo` without a version, else the declared `version`, with
+a warning. A vendored copy of an installed package must pin `packageInfo.version`, or it is published
+as the installed version.
 
 ### Unresolvable bare imports
 
@@ -475,7 +486,8 @@ Native Federation uses an intelligent caching system to speed up builds:
   artifacts in a folder of the same name, `<bundle>[-dev]/`. Content-named chunks collide across
   bundles, so a shared folder would let one bundle's chunk rename or `clear()` delete a file
   another bundle still lists (core#154). `clear()` therefore removes the whole bundle folder.
-- Keyed by a checksum over the external names, their installed versions, the builder version,
+- Keyed by a checksum over the external names, their versions (see Shared versions), a configured
+  `packageInfo`'s entry point and `esm`, the builder version,
   the relevant feature flags, the bundle's `chunks` and the adapter's `externalsCacheKey`
   (`getChecksum`)
 - Stored in `node_modules/.cache/native-federation` by default (`getDefaultCachePath`)
@@ -494,7 +506,9 @@ Native Federation uses an intelligent caching system to speed up builds:
 **Cache invalidation**:
 
 - Based on the installed versions of shared packages, not their declared ranges
-  (`installedVersions`)
+  (`installedVersions`), unless `packageInfo.version` pins one
+- Based on where a configured `packageInfo` points: it replaces resolution, so a pinned version
+  alone cannot tell two entry points apart
 - Based on configuration changes and on the builder version
 - Based on the `config.externals` entries this bundle's adapter receives: a package that became
   external must not stay inlined in a cached bundle. Shared keys and mappings are not hashed, since

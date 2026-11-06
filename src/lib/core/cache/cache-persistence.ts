@@ -64,7 +64,8 @@ const featureState = (features: FeatureFlags): string =>
 
 // Fields `buildResult` copies from the config straight into SharedInfo, so they ship in
 // remoteEntry.json. A cache hit replays the recorded externals verbatim, so a change to any of
-// them must miss — otherwise the runtime negotiates versions against stale metadata.
+// them must miss — otherwise the runtime negotiates versions against stale metadata. `version` is
+// covered by the version segment of the key.
 const SHARED_INFO_FIELDS = [
   'requiredVersion',
   'singleton',
@@ -72,6 +73,10 @@ const SHARED_INFO_FIELDS = [
   'shareScope',
   'pool',
 ] as const;
+
+// A configured packageInfo replaces resolution, so where it points decides the bytes.
+const packageInfoState = ({ packageInfo }: NormalizedExternalConfig): string =>
+  packageInfo ? `^${JSON.stringify([packageInfo.entryPoint, packageInfo.esm])}` : '';
 
 // JSON-encoded so a value containing a delimiter cannot forge one; fixed field order, so no sort.
 const sharedInfoState = (config: NormalizedExternalConfig): string => {
@@ -115,7 +120,15 @@ export const getChecksumCore = (
 
       const version = installed ? `~${installed}` : declared ? `@${declared}` : '';
       const signal = contentSignals[external] ? `#${contentSignals[external]}` : '';
-      return clean + ':' + external + version + sharedInfoState(shared[external]!) + signal;
+      return (
+        clean +
+        ':' +
+        external +
+        version +
+        sharedInfoState(shared[external]!) +
+        packageInfoState(shared[external]!) +
+        signal
+      );
     }, 'deps');
 
   return hash

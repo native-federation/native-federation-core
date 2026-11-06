@@ -175,6 +175,20 @@ describe('getChecksumCore', () => {
     );
   });
 
+  // A configured packageInfo replaces resolution, so a pinned version cannot tell two entry points
+  // apart: switching a locale from .js to .mjs at the same version used to replay the old bundle.
+  it('changes with a configured packageInfo entry point at an unchanged version', () => {
+    const withEntry = (entryPoint: string) => ({
+      react: { ...ext('18'), packageInfo: { entryPoint, version: '18.0.0', esm: true } },
+    });
+    expect(getChecksumCore(io, withEntry('locales/nl.js'), '0')).not.toBe(
+      getChecksumCore(io, withEntry('locales/nl.mjs'), '0')
+    );
+    expect(getChecksumCore(io, withEntry('locales/nl.js'), '0')).not.toBe(
+      getChecksumCore(io, { react: ext('18') }, '0')
+    );
+  });
+
   describe('adapter key', () => {
     const base = { react: ext('18') };
     const withKey = (key?: Parameters<typeof getChecksumCore>[7]) =>

@@ -122,11 +122,10 @@ export async function bundleSharedCore(
   );
 
   const resolvedVersions = installedVersions(Object.keys(sharedBundles), folder, deps.repo);
-  // A configured packageInfo short-circuits resolution below, so the key must follow that source —
-  // including when it carries no version, where node_modules cannot affect the bundled bytes.
   for (const [key, cfg] of Object.entries(sharedBundles)) {
-    if (cfg.packageInfo) resolvedVersions[key] = cfg.packageInfo.version ?? '';
+    if (cfg.packageInfo?.version) resolvedVersions[key] = cfg.packageInfo.version;
   }
+  warnUnversionedPackageInfos(sharedBundles, resolvedVersions);
 
   const checksum = getChecksumCore(
     deps.io,
@@ -197,6 +196,8 @@ export async function bundleSharedCore(
     .map(packageName => ({
       packageName,
       ...sharedBundles[packageName]?.packageInfo,
+      // getChecksumCore falls back to the declared version the same way, so a hit replays this.
+      version: resolvedVersions[packageName] || sharedBundles[packageName]?.version,
     })) as PackageInfo[];
 
   const packageInfos = [...inferredPackageInfos, ...configuredPackageInfos];
@@ -343,6 +344,19 @@ export async function bundleSharedCore(
     outputFiles: toOutputFiles(persistedFiles, buildOptions.platform),
     adapterData,
   };
+}
+
+function warnUnversionedPackageInfos(
+  sharedBundles: Record<string, NormalizedExternalConfig>,
+  resolvedVersions: Record<string, string>
+): void {
+  for (const [key, cfg] of Object.entries(sharedBundles)) {
+    if (!cfg.packageInfo || resolvedVersions[key]) continue;
+    logger.warn(
+      `Shared '${key}' has a packageInfo without a version and its package is not installed: ` +
+        `remoteEntry.json records ${cfg.version ?? 'no version'}. Set packageInfo.version.`
+    );
+  }
 }
 
 function reportSharedBundleFailure(

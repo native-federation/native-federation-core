@@ -74,6 +74,64 @@ describe('shareCore (end-to-end via injected repository)', () => {
     expect(Object.keys(result)).toEqual(['mylib']);
   });
 
+  // core#233: shareAngularLocales shares '@angular/common/locales/nl' with a hand-written packageInfo.
+  describe('a sub-path key', () => {
+    const withLib = (name: string) => {
+      const io = createMemoryIo()
+        .setFile(path.join(PROJECT, 'package.json'), '{}')
+        .setFile(
+          path.join(PROJECT, 'node_modules', name, 'package.json'),
+          JSON.stringify({
+            version: '1.2.3',
+            type: 'module',
+            exports: { '.': './index.js', './sub': { default: './sub/index.js' } },
+          })
+        );
+      return { io, repo: createPackageJsonRepository(io) };
+    };
+
+    it.each(['mylib', '@org/lib'])(
+      'does not expand the package root secondaries under %s/sub',
+      name => {
+        const { io, repo } = withLib(name);
+        const key = `${name}/sub`;
+
+        const result = shareCore(
+          io,
+          {
+            [key]: {
+              requiredVersion: '^1.0.0',
+              includeSecondaries: true,
+              packageInfo: { entryPoint: 'sub.js', esm: true },
+            },
+          },
+          PROJECT,
+          DEFAULT_SKIP_LIST,
+          repo
+        );
+
+        expect(Object.keys(result)).toEqual([key]);
+      }
+    );
+
+    // As fromPackageJson().override(share(...)) runs it: no doubled keys, no rewritten values.
+    it.each([
+      ['literal range', { requiredVersion: '^1.0.0' }],
+      ["'auto'", { requiredVersion: 'auto' }],
+    ])('keeps every value through a second pass, with a %s', (_label, cfg) => {
+      const { io, repo } = withLib('mylib');
+      io.setFile(
+        path.join(PROJECT, 'package.json'),
+        JSON.stringify({ dependencies: { mylib: '^1.0.0' } })
+      );
+
+      const once = shareCore(io, { mylib: cfg }, PROJECT, DEFAULT_SKIP_LIST, repo);
+      const twice = shareCore(io, once, PROJECT, DEFAULT_SKIP_LIST, repo);
+
+      expect(twice).toEqual(once);
+    });
+  });
+
   it('applies caret range when requiredVersion is auto with range "^" and base is exact semver', () => {
     const io = createMemoryIo().setFile(
       path.join(PROJECT, 'package.json'),
@@ -127,7 +185,9 @@ describe('shareCore (end-to-end via injected repository)', () => {
 
     const rMinor = shareCore(
       io,
-      { mylib: { singleton: true, requiredVersion: { range: 'minor' }, includeSecondaries: false } },
+      {
+        mylib: { singleton: true, requiredVersion: { range: 'minor' }, includeSecondaries: false },
+      },
       PROJECT,
       DEFAULT_SKIP_LIST,
       repo
@@ -135,7 +195,9 @@ describe('shareCore (end-to-end via injected repository)', () => {
 
     const rPatch = shareCore(
       io,
-      { mylib: { singleton: true, requiredVersion: { range: 'patch' }, includeSecondaries: false } },
+      {
+        mylib: { singleton: true, requiredVersion: { range: 'patch' }, includeSecondaries: false },
+      },
       PROJECT,
       DEFAULT_SKIP_LIST,
       repo
