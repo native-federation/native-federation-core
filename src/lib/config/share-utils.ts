@@ -35,11 +35,14 @@ export const fromPackageJson = (
   let overrides: ShareExternalsOptions = {};
   const patches: SharedPatch[] = [];
 
+  const select = (patterns: string[]) => {
+    selection.push(...patterns);
+    return builder;
+  };
+
   const builder: PackageJsonExternalsBuilder = {
-    filter(patterns: string[]) {
-      selection.push(...patterns);
-      return builder;
-    },
+    only: select,
+    filter: select,
     skip(externals: SkipList) {
       skipList.push(...externals);
       return builder;
@@ -174,7 +177,7 @@ function applyPatches(
         logger.warn(
           shadowedByOverride
             ? `Ignoring patch for '${pattern}': it is already configured via 'overrides' ('patch' and 'overrides' are mutually exclusive per external).`
-            : `Ignoring patch for '${pattern}': it matches no shared package (unknown dependency, skipped, not selected by filter(), or a secondary entry point).`
+            : `Ignoring patch for '${pattern}': it matches no shared package (unknown dependency, skipped, not selected by only(), or a secondary entry point).`
         );
         continue;
       }
