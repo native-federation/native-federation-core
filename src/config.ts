@@ -9,6 +9,11 @@ export {
   /** @deprecated Set `requiredVersion: 'auto'` on the shared entry; removed in v5. */
   setInferVersion,
 } from './lib/config/version-lookup.js';
-export { share, shareAll, fromPackageJson } from './lib/config/share-utils.js';
+export {
+  /** @deprecated Use `fromPackageJson().only([...]).override({...})` instead, each override a complete config. */
+  share,
+  shareAll,
+  fromPackageJson,
+} from './lib/config/share-utils.js';
 export { mappingsFromWorkspace } from './lib/config/mapping-utils.js';
 export { DEFAULT_SKIP_LIST } from './lib/config/default-skip-list.js';

@@ -104,12 +104,14 @@ function normalizeShared(
 
   const shared =
     fromBuilder<SharedExternalsConfig>(config.shared) ??
-    (fromPackageJson({
-      singleton: true,
-      strictVersion: true,
-      requiredVersion: 'auto',
-      platform: 'browser',
-    }).get() as NormalizedSharedExternalsConfig);
+    fromBuilder<NormalizedSharedExternalsConfig>(
+      fromPackageJson({
+        singleton: true,
+        strictVersion: true,
+        requiredVersion: 'auto',
+        platform: 'browser',
+      }) as ConfigBuilder<NormalizedSharedExternalsConfig>
+    )!;
 
   const ignoredChunks: string[] = [];
 
