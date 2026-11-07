@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
-import { shareAllCore, shareCore } from './share-utils.js';
+import { fromPackageJson, shareAllCore, shareCore } from './share-utils.js';
 import { DEFAULT_SKIP_LIST } from './default-skip-list.js';
 import { logger } from '../utils/logger.js';
 import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
@@ -497,5 +497,28 @@ describe('shareAllCore (end-to-end via injected repository)', () => {
     expect(result!['overridden']).toMatchObject({ singleton: false, requiredVersion: '~3.1.0' });
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('mutually exclusive'));
     warn.mockRestore();
+  });
+});
+
+// fromPackageJson reads through nodeIo, so these run against this repo's own package.json; they
+// compare selections with each other, not with fixed keys.
+describe('fromPackageJson().only()', () => {
+  const ROOT = process.cwd();
+  const keys = (shared: object) => Object.keys(shared).sort();
+
+  it('selects as filter() does', () => {
+    const only = fromPackageJson({ singleton: true }, ROOT).only(['chalk']).get();
+    const filter = fromPackageJson({ singleton: true }, ROOT).filter(['chalk']).get();
+
+    expect(only).toEqual(filter);
+    expect(keys(only)).toContain('chalk');
+    expect(keys(only)).not.toContain('tinyglobby');
+  });
+
+  it('unions with filter()', () => {
+    const mixed = fromPackageJson({ singleton: true }, ROOT).only(['chalk']).filter(['tinyglobby']);
+    const both = fromPackageJson({ singleton: true }, ROOT).filter(['chalk', 'tinyglobby']);
+
+    expect(keys(mixed.get())).toEqual(keys(both.get()));
   });
 });

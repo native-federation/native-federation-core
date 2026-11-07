@@ -14,7 +14,8 @@ export type MappingConfigInput = Omit<
   ExternalConfigInput,
   'build' | 'platform' | 'packageInfo'
 > & {
-  build?: 'separate' | 'package';
+  // 'combined' is what no `build` means: the one mapping bundle.
+  build?: 'combined' | 'separate' | 'package';
 };
 
 // Declares a package by prefix, see `mappingsFromWorkspace().package()`. It selects nothing.

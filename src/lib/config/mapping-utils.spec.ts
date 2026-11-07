@@ -38,6 +38,18 @@ describe('mappingsFromWorkspace', () => {
     expect(mappingsFromWorkspace().get()).toEqual([[['*'], {}]]);
   });
 
+  it('selects with only() as with filter()', () => {
+    expect(mappingsFromWorkspace(BASE).only(['@org/ui/*']).get()).toEqual(
+      mappingsFromWorkspace(BASE).filter(['@org/ui/*']).get()
+    );
+  });
+
+  it('unions only() and filter() calls', () => {
+    expect(mappingsFromWorkspace(BASE).only(['@org/a']).filter(['@org/b']).get()).toEqual([
+      [['@org/a', '@org/b'], BASE],
+    ]);
+  });
+
   it('unions repeated filter calls', () => {
     expect(mappingsFromWorkspace(BASE).filter(['@org/a']).filter(['@org/b']).get()).toEqual([
       [['@org/a', '@org/b'], BASE],
