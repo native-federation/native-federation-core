@@ -7,6 +7,7 @@
 - What a build writes and reads is resolved against `workspaceRoot`: the output path (which may
   also be absolute), exposed entry points, the `package.json` a config's `share()` calls read, the
   tsconfig used for shared mappings, and the scan for unused dependencies.
+- A relative `workspaceRoot` is resolved against the working directory once, during normalization.
 - The output does not depend on the directory the build starts in: all of it lands in one
   directory, so `remoteEntry.json` always sits next to the files it names.
 - Paths an adapter owns, such as the tsconfig it compiles with, are passed through as given and

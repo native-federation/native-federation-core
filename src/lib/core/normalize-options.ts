@@ -70,7 +70,7 @@ export async function normalizeFederationOptionsCore<TBundlerCache = undefined>(
   config: NormalizedFederationConfig;
   options: NormalizedFederationOptions<TBundlerCache>;
 }> {
-  const workspaceRoot = toDiskCaseCore(deps.io, options.workspaceRoot);
+  const workspaceRoot = toDiskCaseCore(deps.io, path.resolve(options.workspaceRoot));
   const packageJson = options.packageJson && toDiskCaseCore(deps.io, options.packageJson);
 
   const fullConfigPath = path.join(workspaceRoot, options.federationConfig);

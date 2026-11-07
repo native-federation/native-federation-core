@@ -29,7 +29,7 @@ export interface RawMappedPaths {
  * Will return user defined and tsconfig defined paths including their imports, might contain wildcards
  */
 export function getRawMappedPaths(
-  rootTsConfigPath: string,
+  rootTsConfigPath: string | undefined,
   configuredSharedMappings?: SharedMappingEntry[],
   rootPath?: string
 ): RawMappedPaths {
@@ -38,19 +38,23 @@ export function getRawMappedPaths(
 
 export function getRawMappedPathsCore(
   io: FileReaderPort,
-  rootTsConfigPath: string,
+  rootTsConfigPath: string | undefined,
   configuredSharedMappings?: SharedMappingEntry[],
   rootPath?: string
 ): RawMappedPaths {
   const mappedPaths: PathToImport = {};
 
-  if (!path.isAbsolute(rootTsConfigPath)) {
+  if (rootTsConfigPath !== undefined && !path.isAbsolute(rootTsConfigPath)) {
     throw new Error('SharedMappings.register: tsConfigPath needs to be an absolute path!');
   }
 
   const shareAll = !configuredSharedMappings;
   const { selection, packages } = partitionEntries(configuredSharedMappings ?? []);
   const { patterns, configs } = flattenEntries(selection);
+
+  if (rootTsConfigPath === undefined) {
+    return { paths: mappedPaths, configs, keys: [], patterns, packages };
+  }
 
   const { paths: mappings, basePath } = readCompilerPaths(io, rootTsConfigPath);
 

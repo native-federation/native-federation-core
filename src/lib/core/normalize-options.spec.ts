@@ -224,6 +224,27 @@ describe('normalizeFederationOptionsCore', () => {
     expect(seen).toEqual({ workspaceRoot: '/ws', packageJson: '/ws/package.json' });
   });
 
+  // A relative root would otherwise travel on until sheriff throws "FsPath: … is not absolute".
+  it('resolves a relative workspace root against cwd once', async () => {
+    const root = path.resolve('ws');
+    const io = createMemoryIo().setFile(path.join(root, 'federation.config.js'), '');
+    let seen: ConfigurationContext | undefined;
+    const loadConfig = vi.fn(async () => {
+      seen = { ...getConfigContext() };
+      return makeConfig();
+    });
+
+    const result = await normalizeFederationOptionsCore(
+      { io, loadConfig },
+      { ...baseOptions, workspaceRoot: 'ws' },
+      cache
+    );
+
+    expect(loadConfig).toHaveBeenCalledWith(path.join(root, 'federation.config.js'));
+    expect(seen?.workspaceRoot).toBe(root);
+    expect(result.options.workspaceRoot).toBe(root);
+  });
+
   // Several remotes built in one process: each config must see its own workspace root.
   it('gives concurrent calls their own workspace context', async () => {
     const configA = path.join('/a', 'federation.config.js');
@@ -438,14 +459,18 @@ describe('normalizeFederationOptionsCore', () => {
   // unequal, gets classified unused, and the build silently ships without its workspace
   // libraries. This is the funnel the Angular adapter goes through -- it never calls
   // federationBuilder.init, so useWorkspace alone would not cover it.
+  // Absolute on every platform: a relative workspaceRoot is resolved against cwd first.
+  const MIS_CASED = path.resolve('/drive/ws');
+  const ON_DISK = path.resolve('/DRIVE/ws');
+
   it('resolves mappings when the supplied workspace root is mis-cased', async () => {
     const io = createMemoryIo()
-      .setDiskCase('c:/ws', 'C:/ws')
-      .setFile(path.join('C:/ws', 'federation.config.js'), '')
-      .setFile(path.join('C:/ws', 'libs/ui/button/index.ts'), '');
+      .setDiskCase(MIS_CASED, ON_DISK)
+      .setFile(path.join(ON_DISK, 'federation.config.js'), '')
+      .setFile(path.join(ON_DISK, 'libs/ui/button/index.ts'), '');
 
     const config = makeConfig({
-      sharedMappings: { [path.join('C:/ws', 'libs/ui/*/index.ts')]: '@org/ui/*' },
+      sharedMappings: { [path.join(ON_DISK, 'libs/ui/*/index.ts')]: '@org/ui/*' },
       sharedMappingsConfig: {
         '@org/ui/*': { singleton: true, strictVersion: true, resolveGlob: true },
       },
@@ -453,14 +478,14 @@ describe('normalizeFederationOptionsCore', () => {
 
     const result = await normalizeFederationOptionsCore(
       { io, loadConfig: loaderFor(config) },
-      { ...baseOptions, workspaceRoot: 'c:/ws' },
+      { ...baseOptions, workspaceRoot: MIS_CASED },
       cache
     );
 
     expect(result.config.sharedMappings).toEqual({
-      [path.join('C:/ws', 'libs/ui/button/index.ts')]: '@org/ui/button',
+      [path.join(ON_DISK, 'libs/ui/button/index.ts')]: '@org/ui/button',
     });
-    expect(result.options.workspaceRoot).toBe(path.normalize('C:/ws'));
+    expect(result.options.workspaceRoot).toBe(ON_DISK);
   });
 
   // packageJson seeds folderOf() in resolve-shared-dirs and bundle-shared, so leaving it
@@ -468,17 +493,21 @@ describe('normalizeFederationOptionsCore', () => {
   // the spelling the corrected workspaceRoot just moved away from.
   it('resolves the supplied packageJson to its on-disk spelling', async () => {
     const io = createMemoryIo()
-      .setDiskCase('c:/ws', 'C:/ws')
-      .setDiskCase('c:/ws/package.json', 'C:/ws/package.json')
-      .setFile(path.join('C:/ws', 'federation.config.js'), '');
+      .setDiskCase(MIS_CASED, ON_DISK)
+      .setDiskCase(path.join(MIS_CASED, 'package.json'), path.join(ON_DISK, 'package.json'))
+      .setFile(path.join(ON_DISK, 'federation.config.js'), '');
 
     const result = await normalizeFederationOptionsCore(
       { io, loadConfig: loaderFor(makeConfig()) },
-      { ...baseOptions, workspaceRoot: 'c:/ws', packageJson: 'c:/ws/package.json' },
+      {
+        ...baseOptions,
+        workspaceRoot: MIS_CASED,
+        packageJson: path.join(MIS_CASED, 'package.json'),
+      },
       cache
     );
 
-    expect(result.options.packageJson).toBe(path.normalize('C:/ws/package.json'));
+    expect(result.options.packageJson).toBe(path.join(ON_DISK, 'package.json'));
   });
 
   // resolveGlob is a guess, so it drops non-barrel matches before they can be published.

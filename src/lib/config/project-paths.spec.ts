@@ -145,6 +145,19 @@ describe('findMappingsTsConfigCore', () => {
     warn.mockRestore();
   });
 
+  // A remote without TypeScript has no aliases to share, and must still build.
+  it('warns once and answers none when neither the build nor a root tsconfig exists', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const io = createMemoryIo().setFile(path.join(ROOT, 'package.json'), '{}');
+    useWorkspace(WS, io);
+    useTsConfig('apps/shell/tsconfig.federation.json');
+
+    expect(findMappingsTsConfigCore(io)).toBeUndefined();
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn.mock.calls[0]![0]).toMatch(/; no shared mappings\.$/);
+    warn.mockRestore();
+  });
+
   // pathsBasePath, and with it every mapping path, descends from this path, so it has to carry
   // the disk spelling the reachability scan compares against.
   it('returns the on-disk spelling of the build tsconfig', () => {
@@ -155,6 +168,12 @@ describe('findMappingsTsConfigCore', () => {
     useTsConfig('Apps/Shell/tsconfig.app.json');
 
     expect(findMappingsTsConfigCore(io)).toBe(disk);
+  });
+
+  it('answers none without any tsconfig', () => {
+    const io = createMemoryIo().setFile(path.join(ROOT, 'package.json'), '{}');
+
+    expect(findMappingsTsConfigCore(io)).toBeUndefined();
   });
 
   it('falls back to the root tsconfig without a build tsconfig', () => {

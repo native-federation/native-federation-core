@@ -141,7 +141,7 @@ export function warnUnmatchedMappingPackages(
 export function warnUnmatchedMappingPatterns(
   patterns: readonly string[],
   keys: readonly string[],
-  tsConfigPath: string
+  tsConfigPath: string | undefined
 ): void {
   const unmatched = patterns.filter(pattern => !keys.some(key => matchesWildcard(key, pattern)));
   if (unmatched.length === 0) return;
@@ -149,9 +149,11 @@ export function warnUnmatchedMappingPatterns(
   const one = unmatched.length === 1;
   logger.warn(
     `Shared mapping${one ? '' : 's'} ${formatList(unmatched, MAX_LISTED)} ` +
-      `${one ? 'matches' : 'match'} no paths key in ${tsConfigPath}` +
-      `${keys.length === 0 ? ', which defines no paths' : ''}, so ${one ? 'it is' : 'they are'} ` +
-      `not shared.`
+      `${one ? 'matches' : 'match'} no paths key ` +
+      (tsConfigPath
+        ? `in ${tsConfigPath}${keys.length === 0 ? ', which defines no paths' : ''}`
+        : 'as no tsconfig was found') +
+      `, so ${one ? 'it is' : 'they are'} not shared.`
   );
 }
 
