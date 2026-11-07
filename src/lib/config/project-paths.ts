@@ -37,13 +37,14 @@ export function findMappingsTsConfigCore(io: FileReaderPort): string | undefined
 }
 
 export function findRootTsConfigJsonCore(io: FileReaderPort): string {
-  const found = findRootTsConfigCore(io);
+  const found = findRootTsConfigCore(io, true);
   if (!found) throw new Error('Neither a tsconfig.json nor a tsconfig.base.json was found');
   return found;
 }
 
-// Throws only when neither folder has a package.json; a missing tsconfig answers none.
-function findRootTsConfigCore(io: FileReaderPort): string | undefined {
+// Lenient: throws only when neither folder has a package.json. Strict keeps the deprecated
+// export's errors as they were.
+function findRootTsConfigCore(io: FileReaderPort, strict = false): string | undefined {
   const from = toDiskCaseCore(io, cwd());
   const { workspaceRoot } = getConfigContext();
   const second =
@@ -63,7 +64,7 @@ function findRootTsConfigCore(io: FileReaderPort): string | undefined {
   try {
     return findTsConfigNextToPackageJson(io, second);
   } catch (err) {
-    if (cwdError) throw err;
+    if (cwdError || strict) throw err;
     return undefined;
   }
 }

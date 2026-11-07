@@ -80,6 +80,14 @@ describe('findRootTsConfigJsonCore', () => {
       expect(findRootTsConfigJsonCore(io)).toBe(path.join(ROOT, 'tsconfig.base.json'));
     });
 
+    // The deprecated export keeps its v4 errors, while the mappings lookup answers none here.
+    it('names the missing package.json when cwd has no tsconfig and workspaceRoot no package.json', () => {
+      const io = withPackageJson();
+      useWorkspace(WS, io);
+
+      expect(() => findRootTsConfigJsonCore(io)).toThrow(/no package.json found/);
+    });
+
     it('throws when workspaceRoot has no tsconfig either', () => {
       const io = createMemoryIo().setFile(path.join(WS, 'package.json'), '{}');
       useWorkspace(WS, io);

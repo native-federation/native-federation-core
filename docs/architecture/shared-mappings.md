@@ -15,7 +15,8 @@
 - A pattern that selects nothing, or a tsconfig without the expected `paths`, is reported rather
   than publishing no mappings silently.
 - Without a tsconfig there are no mappings; a `sharedMappings` pattern is then reported as
-  selecting nothing.
+  selecting nothing. The unused-dependency scan still needs a tsconfig, so such a build sets
+  `ignoreUnusedDeps: false` or shares nothing.
 
 ## Why
 
