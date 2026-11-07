@@ -16,18 +16,21 @@ const ALL = '*';
 
 /**
  * Sugar over the `sharedMappings` array form: `get()` returns entries that could equally
- * be written by hand. Without `filter()` the selection is every tsconfig path mapping.
+ * be written by hand. Without `only()` the selection is every tsconfig path mapping.
  */
 export function mappingsFromWorkspace(baseCfg: MappingConfigInput = {}): WorkspaceMappingsBuilder {
   const selection: string[] = [];
   const patches: Array<{ patterns: string[]; cfg: Partial<MappingConfigInput> }> = [];
   const packages: SharedMappingPackageEntry[] = [];
 
+  const select = (patterns: string[]) => {
+    selection.push(...patterns);
+    return builder;
+  };
+
   const builder: WorkspaceMappingsBuilder = {
-    filter(patterns: string[]) {
-      selection.push(...patterns);
-      return builder;
-    },
+    only: select,
+    filter: select,
     patch(patterns: string[], cfg: Partial<MappingConfigInput>) {
       patches.push({ patterns, cfg });
       return builder;
@@ -46,7 +49,7 @@ export function mappingsFromWorkspace(baseCfg: MappingConfigInput = {}): Workspa
 
         for (const dropped of patterns.filter(p => !isSelected(p, selected))) {
           logger.warn(
-            `[mappingsFromWorkspace] patch('${dropped}') is not covered by filter() and was ignored.`
+            `[mappingsFromWorkspace] patch('${dropped}') is not covered by only() and was ignored.`
           );
         }
 
@@ -105,7 +108,7 @@ export function normalizeMappingConfig(
   return {
     singleton: cfg.singleton ?? true,
     strictVersion: cfg.strictVersion ?? mappingVersion,
-    ...(cfg.build && { build: cfg.build }),
+    ...(cfg.build && cfg.build !== 'combined' && { build: cfg.build }),
     ...(cfg.chunks !== undefined && { chunks: cfg.chunks }),
     ...(cfg.requiredVersion !== undefined && { requiredVersion: cfg.requiredVersion }),
     ...(cfg.version !== undefined && { version: cfg.version }),

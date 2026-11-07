@@ -14,6 +14,7 @@ export interface ConfigBuilder<T> {
 export interface PackageJsonExternalsBuilder extends ConfigBuilder<ResolvedSharedExternalsConfig> {
   /** @deprecated Not needed: pass the builder itself; extra keys go in `.override()`. */
   get(): ResolvedSharedExternalsConfig;
+  only(patterns: string[]): PackageJsonExternalsBuilder;
   filter(patterns: string[]): PackageJsonExternalsBuilder;
   skip(externals: SkipList): PackageJsonExternalsBuilder;
   override(externals: ShareExternalsOptions): PackageJsonExternalsBuilder;
@@ -21,6 +22,7 @@ export interface PackageJsonExternalsBuilder extends ConfigBuilder<ResolvedShare
 }
 
 export interface WorkspaceMappingsBuilder extends ConfigBuilder<SharedMappingEntry[]> {
+  only(patterns: string[]): WorkspaceMappingsBuilder;
   filter(patterns: string[]): WorkspaceMappingsBuilder;
   patch(patterns: string[], cfg: Partial<MappingConfigInput>): WorkspaceMappingsBuilder;
   package(prefix: string, cfg?: Omit<MappingConfigInput, 'build'>): WorkspaceMappingsBuilder;
