@@ -782,34 +782,36 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
   };
 
   // v5 requires `externalsCacheKey` (contract/02); one adapter object hears about it once.
-  it('warns once per adapter without externalsCacheKey, across two shared bundles', async () => {
-    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-    const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
-    const adapter = createFakeBuildAdapter({ io: mem });
-    const deps = { io: mem, repo: repoAtVersion('2.0.0'), adapter };
-    const fedOptions = makeFedOptions({ cacheExternalArtifacts: true });
+  describe('without externalsCacheKey', () => {
+    afterEach(() => vi.restoreAllMocks());
 
-    await bundleSharedCore(deps, fooWith(), makeConfig(), fedOptions, [], BUILD_OPTIONS);
-    await bundleSharedCore(deps, fooWith(), makeConfig(), fedOptions, [], {
-      ...BUILD_OPTIONS,
-      bundleName: 'browser-other',
+    it('warns once per adapter without externalsCacheKey, across two shared bundles', async () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const adapter = createFakeBuildAdapter({ io: mem });
+      const deps = { io: mem, repo: repoAtVersion('2.0.0'), adapter };
+      const fedOptions = makeFedOptions({ cacheExternalArtifacts: true });
+
+      await bundleSharedCore(deps, fooWith(), makeConfig(), fedOptions, [], BUILD_OPTIONS);
+      await bundleSharedCore(deps, fooWith(), makeConfig(), fedOptions, [], {
+        ...BUILD_OPTIONS,
+        bundleName: 'browser-other',
+      });
+
+      const noKey = warn.mock.calls.filter(([m]) => /declares no `externalsCacheKey`/.test(m));
+      expect(noKey).toHaveLength(1);
     });
 
-    const noKey = warn.mock.calls.filter(([m]) => /declares no `externalsCacheKey`/.test(m));
-    expect(noKey).toHaveLength(1);
-    warn.mockRestore();
-  });
+    it('does not warn about externalsCacheKey when the adapter declares one', async () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
 
-  it('does not warn about externalsCacheKey when the adapter declares one', async () => {
-    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-    const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      await cachedBuild(mem, '2.0.0', fooWith(), { adapter: 'fake@1.0.0' });
 
-    await cachedBuild(mem, '2.0.0', fooWith(), { adapter: 'fake@1.0.0' });
-
-    expect(warn).not.toHaveBeenCalledWith(
-      expect.stringContaining('declares no `externalsCacheKey`')
-    );
-    warn.mockRestore();
+      expect(warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('declares no `externalsCacheKey`')
+      );
+    });
   });
 
   // All three config styles must invalidate on an installed-version bump. `shareAll` and

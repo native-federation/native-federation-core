@@ -223,8 +223,9 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         []
       );
 
-      // The fake sets no `entry`, so only the shared-file warning is ruled out.
-      expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('are written as'));
+      // The fake sets no `entry`; that v5 warning is the only one allowed.
+      const others = warn.mock.calls.filter(([m]) => !/set no `entry`/.test(m));
+      expect(others).toEqual([]);
     });
 
     // The names come from the config, which a rebuild reuses: once per full build is enough.

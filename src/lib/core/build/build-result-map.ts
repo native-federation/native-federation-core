@@ -20,14 +20,6 @@ export function createBuildResultMap(
 ): Record<string, string> {
   const expected = new Set(expectedNames.map(n => path.basename(n)));
   const byEntry = buildResult.some(item => item.entry !== undefined);
-  if (!byEntry && expected.size > 0) {
-    warnOncePerAdapter(
-      warnedNoEntry,
-      adapter,
-      'The build adapter set no `entry` on its results; core matched entries by file name. ' +
-        'v5 requires `entry` on every entry output.'
-    );
-  }
   const map: Record<string, string> = {};
 
   for (const item of buildResult) {
@@ -48,6 +40,15 @@ export function createBuildResultMap(
     throw new Error(
       `No build result found for ${formatList(missing, 3)}; NFBuildAdapter.build returned ` +
         `${returned.length > 0 ? formatList(returned, 3) : 'nothing'}.`
+    );
+  }
+  // After the check above, so a failed build does not spend the adapter's one warning.
+  if (!byEntry && expected.size > 0) {
+    warnOncePerAdapter(
+      warnedNoEntry,
+      adapter,
+      'The build adapter set no `entry` on its results; core matched entries by file name. ' +
+        'v5 requires `entry` on every entry output.'
     );
   }
   return map;

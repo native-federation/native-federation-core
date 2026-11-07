@@ -10,8 +10,8 @@ export {
   setInferVersion,
 } from './lib/config/version-lookup.js';
 export {
+  /** @deprecated Throws in v5. Use `fromPackageJson().filter([...]).override({...})`, each override a complete config. */
   share,
-  /** @deprecated Pass `fromPackageJson(cfg)` as `shared` (`skipList` → `.skip()`, `overrides` → `.override()`); works in 4.x and v5. */
   shareAll,
   fromPackageJson,
 } from './lib/config/share-utils.js';

@@ -98,6 +98,13 @@ describe('createBuildResultMap warns about a missing entry', () => {
     expect(warn.mock.calls.filter(([m]) => NO_ENTRY.test(m))).toHaveLength(2);
   });
 
+  it('does not warn when the build returned nothing, only throws', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+    expect(() => createBuildResultMap([], false, ['a.js'], {})).toThrow(/returned nothing/);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it('stays quiet when one result sets entry', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
 
