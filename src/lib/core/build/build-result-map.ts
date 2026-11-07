@@ -1,9 +1,6 @@
 import path from 'path';
 import type { NFBuildAdapterResult } from '../../domain/core/build-adapter.contract.js';
 import { formatList } from '../../utils/format-list.js';
-import { warnOncePerAdapter } from './build-adapter.js';
-
-const warnedNoEntry = new WeakSet<object>();
 
 function stripHash(fileName: string): string {
   const start = fileName.lastIndexOf('-');
@@ -15,8 +12,7 @@ function stripHash(fileName: string): string {
 export function createBuildResultMap(
   buildResult: NFBuildAdapterResult[],
   isHashed: boolean,
-  expectedNames: string[] = [],
-  adapter?: object
+  expectedNames: string[] = []
 ): Record<string, string> {
   const expected = new Set(expectedNames.map(n => path.basename(n)));
   const byEntry = buildResult.some(item => item.entry !== undefined);
@@ -40,15 +36,6 @@ export function createBuildResultMap(
     throw new Error(
       `No build result found for ${formatList(missing, 3)}; NFBuildAdapter.build returned ` +
         `${returned.length > 0 ? formatList(returned, 3) : 'nothing'}.`
-    );
-  }
-  // After the check above, so a failed build does not spend the adapter's one warning.
-  if (!byEntry && expected.size > 0) {
-    warnOncePerAdapter(
-      warnedNoEntry,
-      adapter,
-      'The build adapter set no `entry` on its results, so core matched entries by file name. ' +
-        'Set `entry` on every entry output.'
     );
   }
   return map;

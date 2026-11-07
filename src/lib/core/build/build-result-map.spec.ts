@@ -1,5 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { logger } from '../../utils/logger.js';
+import { describe, expect, it } from 'vitest';
 import { createBuildResultMap, popFromResultMap } from './build-result-map.js';
 
 const r = (fileName: string, entry?: string) => ({ fileName, ...(entry && { entry }) }) as never;
@@ -79,38 +78,6 @@ describe('createBuildResultMap with entry set by the adapter', () => {
   it('finds an entry whose hash contains a dash', () => {
     const map = createBuildResultMap([r('/d/Rel-_z3-emEa.js', 'Rel.js')], true, ['Rel.js']);
     expect(map).toEqual({ 'Rel.js': '/d/Rel-_z3-emEa.js' });
-  });
-});
-
-// v5 requires `entry` (contract/01); 4.10 announces it to adapters that still match by name.
-describe('createBuildResultMap warns about a missing entry', () => {
-  afterEach(() => vi.restoreAllMocks());
-  const NO_ENTRY = /set no `entry` on its results/;
-
-  it('warns once per adapter when no result sets entry', () => {
-    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-    const adapter = {};
-
-    createBuildResultMap([r('/d/a.js')], false, ['a.js'], adapter);
-    createBuildResultMap([r('/d/b.js')], false, ['b.js'], adapter);
-    createBuildResultMap([r('/d/c.js')], false, ['c.js'], {});
-
-    expect(warn.mock.calls.filter(([m]) => NO_ENTRY.test(m))).toHaveLength(2);
-  });
-
-  it('does not warn when the build returned nothing, only throws', () => {
-    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-
-    expect(() => createBuildResultMap([], false, ['a.js'], {})).toThrow(/returned nothing/);
-    expect(warn).not.toHaveBeenCalled();
-  });
-
-  it('stays quiet when one result sets entry', () => {
-    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-
-    createBuildResultMap([r('/d/a-AAAA.js', 'a.js'), r('/d/chunk.js')], true, ['a.js'], {});
-
-    expect(warn).not.toHaveBeenCalled();
   });
 });
 

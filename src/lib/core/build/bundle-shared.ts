@@ -51,7 +51,7 @@ import type {
   NFBuildAdapter,
   NFBuildAdapterResult,
 } from '../../domain/core/build-adapter.contract.js';
-import { getBuildAdapter, warnOncePerAdapter } from './build-adapter.js';
+import { getBuildAdapter } from './build-adapter.js';
 import { synthesizeCjsNamedExportsEntry, type ModuleEvaluator } from './synthesize-cjs-exports.js';
 import { createRequire } from 'module';
 import { inferPackageFromSecondary } from '../../utils/normalize.js';
@@ -99,8 +99,6 @@ interface BundleSharedDeps {
   evaluateModule?: ModuleEvaluator;
 }
 
-const warnedNoCacheKey = new WeakSet<object>();
-
 export async function bundleSharedCore(
   deps: BundleSharedDeps,
   sharedBundles: Record<string, NormalizedExternalConfig>,
@@ -128,15 +126,6 @@ export async function bundleSharedCore(
     if (cfg.packageInfo?.version) resolvedVersions[key] = cfg.packageInfo.version;
   }
   warnUnversionedPackageInfos(sharedBundles, resolvedVersions);
-
-  if (!deps.adapter.externalsCacheKey) {
-    warnOncePerAdapter(
-      warnedNoCacheKey,
-      deps.adapter,
-      'The build adapter declares no `externalsCacheKey`, so cached shared bundles are not ' +
-        'tied to the adapter or its options.'
-    );
-  }
 
   const checksum = getChecksumCore(
     deps.io,
@@ -287,8 +276,7 @@ export async function bundleSharedCore(
   const entryFiles = createBuildResultMap(
     bundleResult,
     false,
-    entryPoints.map(ep => ep.outName),
-    deps.adapter
+    entryPoints.map(ep => ep.outName)
   );
   // An adapter that names an entry itself marks it with `entry`; from here on it goes by that name.
   for (const ep of entryPoints) ep.outName = path.basename(entryFiles[ep.outName]!);

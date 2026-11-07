@@ -205,19 +205,16 @@ function normalizeMappingConfigs(
   configs: SharedMappingConfigs,
   mappingVersion: boolean
 ): NormalizedSharedMappingConfigs {
-  return Object.entries(configs).reduce(
-    (acc, [pattern, cfg]) => {
-      if (!MAPPING_BUILDS.has(cfg.build)) {
-        throw new Error(
-          `Mapping '${pattern}' sets build: '${cfg.build}'; a mapping takes 'separate' or 'package'. ` +
-            `To bundle and publish a library's entry points as one package, declare it with ` +
-            `mappingsFromWorkspace().package('<library>').`
-        );
-      }
+  return Object.entries(configs).reduce((acc, [pattern, cfg]) => {
+    if (!MAPPING_BUILDS.has(cfg.build)) {
+      throw new Error(
+        `Mapping '${pattern}' sets build: '${cfg.build}'; a mapping takes 'separate' or 'package'. ` +
+          `To bundle and publish a library's entry points as one package, declare it with ` +
+          `mappingsFromWorkspace().package('<library>').`
+      );
+    }
 
-      acc[pattern] = normalizeMappingConfig(cfg, mappingVersion);
-      return acc;
-    },
-    Object.create(null) as NormalizedSharedMappingConfigs
-  );
+    acc[pattern] = normalizeMappingConfig(cfg, mappingVersion);
+    return acc;
+  }, Object.create(null) as NormalizedSharedMappingConfigs);
 }

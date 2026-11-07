@@ -32,9 +32,8 @@
 - Core checks the adapter's obligations only where it reads the output, not at compile time.
 - Core still matches entries by file name when an adapter does not name them. An adapter that
   sets `entry` replaces that match, and the fallback goes away once the field is required in v5.
-- Without `entry` or `externalsCacheKey` core warns, once per adapter.
 
-Enforced by: `src/lib/core/build/bundle-shared.spec.ts`, `src/lib/core/build/build-result-map.spec.ts`,
+Enforced by: `src/lib/core/build/bundle-shared.spec.ts`,
 `src/lib/core/build/bundle-exposed-and-mappings.spec.ts`
 Issues: core#200, core#203, core#204, core#218, core#219
 Related: [Externals](externals.md), [Output files](output-files.md),
