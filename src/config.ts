@@ -10,7 +10,7 @@ export {
   setInferVersion,
 } from './lib/config/version-lookup.js';
 export {
-  /** @deprecated Throws in v5. Use `fromPackageJson().filter([...]).override({...})`, each override a complete config. */
+  /** @deprecated Use `fromPackageJson().filter([...]).override({...})` instead, each override a complete config. */
   share,
   shareAll,
   fromPackageJson,

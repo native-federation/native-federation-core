@@ -133,7 +133,8 @@ export async function bundleSharedCore(
     warnOncePerAdapter(
       warnedNoCacheKey,
       deps.adapter,
-      'The build adapter declares no `externalsCacheKey`; v5 requires it.'
+      'The build adapter declares no `externalsCacheKey`, so cached shared bundles are not ' +
+        'tied to the adapter or its options.'
     );
   }
 

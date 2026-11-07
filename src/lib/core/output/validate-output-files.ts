@@ -30,14 +30,14 @@ export function validateOutputFilesCore(
 
   const cause =
     `missing from '${outputDir}': written into a subfolder, or deleted after it was written ` +
-    '(e.g. by a bundle that empties the output folder)';
+    '(e.g. by a bundle that empties the output folder).';
   const published = publishedFileNames(federationInfo);
   const broken = missing.filter(fileName => published.has(fileName));
   if (broken.length > 0) {
-    throw new Error(`remoteEntry.json names ${formatList(broken, 3)}, ${cause}.`);
+    throw new Error(`remoteEntry.json names ${formatList(broken, 3)}, ${cause}`);
   }
-  // A source map or stylesheet nothing loads by name: an outputFiles contract break, fatal only in v5.
-  logger.warn(`Output file(s) ${formatList(missing, 3)} ${cause}; this fails the build in v5.`);
+  // A source map or stylesheet nothing loads by name: an outputFiles contract break, never fatal.
+  logger.warn(`Output file(s) ${formatList(missing, 3)} ${cause}`);
 }
 
 function publishedFileNames(federationInfo: FederationInfo): Set<string> {

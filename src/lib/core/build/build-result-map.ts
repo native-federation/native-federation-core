@@ -47,8 +47,8 @@ export function createBuildResultMap(
     warnOncePerAdapter(
       warnedNoEntry,
       adapter,
-      'The build adapter set no `entry` on its results; core matched entries by file name. ' +
-        'v5 requires `entry` on every entry output.'
+      'The build adapter set no `entry` on its results, so core matched entries by file name. ' +
+        'Set `entry` on every entry output.'
     );
   }
   return map;

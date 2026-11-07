@@ -7,7 +7,7 @@ export function setBuildAdapter(buildAdapter: NFBuildAdapter): void {
   _buildAdapter = buildAdapter;
 }
 
-// Warning frequency only: an adapter that breaks a v5 rule hears about it once per process.
+// Warning frequency only: an adapter hears about each contract gap once per process.
 export function warnOncePerAdapter(
   warned: WeakSet<object>,
   adapter: object | undefined,

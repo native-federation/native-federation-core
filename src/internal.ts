@@ -4,7 +4,7 @@
 export * from './internal/browser.js';
 
 export {
-  /** @deprecated Removed in v5. */
+  /** @deprecated Might be removed in v5. */
   hashFile,
 } from './lib/utils/hash.js';
 export { toDiskCase } from './lib/utils/disk-case.js';
