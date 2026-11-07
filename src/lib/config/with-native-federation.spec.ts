@@ -441,7 +441,9 @@ describe('withNativeFederation', () => {
 
     withNativeFederation({});
 
-    expect(warn).toHaveBeenCalledWith("Shared mapping package '@org/lbi' covers no tsconfig paths key.");
+    expect(warn).toHaveBeenCalledWith(
+      "Shared mapping package '@org/lbi' covers no tsconfig paths key."
+    );
   });
 
   it('warns for a selected mapping the tsconfig it read has no key for', () => {
@@ -453,6 +455,29 @@ describe('withNativeFederation', () => {
     expect(warn).toHaveBeenCalledWith(
       "Shared mapping '@org/ui' matches no paths key in /ws/tsconfig.json, which defines no paths, so it is not shared."
     );
+  });
+
+  // groundwork/06: no tsconfig reads like a tsconfig without paths.
+  describe('without a tsconfig', () => {
+    beforeEach(() => findMappingsTsConfig.mockReturnValue(undefined));
+
+    it('shares no mappings and does not throw', () => {
+      const result = withNativeFederation({});
+
+      expect(getRawMappedPaths).toHaveBeenCalledWith(undefined, undefined);
+      expect(result.sharedMappings).toEqual({});
+    });
+
+    it('names the missing tsconfig for a declared pattern', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      getRawMappedPaths.mockReturnValue({ paths: {}, configs: {}, keys: [], patterns: ['@org/*'] });
+
+      withNativeFederation({ sharedMappings: ['@org/*'] });
+
+      expect(warn).toHaveBeenCalledWith(
+        "Shared mapping '@org/*' matches no paths key as no tsconfig was found, so it is not shared."
+      );
+    });
   });
 
   // An untyped config from 4.9.0-next.1 can still carry it.

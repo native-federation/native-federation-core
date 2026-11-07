@@ -12,13 +12,14 @@ export function findRootTsConfigJson(): string {
 
 // The build's own tsconfig when there is one, so sharing and compiling read the same `paths`
 // (core#149). Workspace-relative, as the Angular adapter resolves it.
-export function findMappingsTsConfig(): string {
+// Undefined without any tsconfig: such a build has no aliases to share.
+export function findMappingsTsConfig(): string | undefined {
   return findMappingsTsConfigCore(nodeIo);
 }
 
-export function findMappingsTsConfigCore(io: FileReaderPort): string {
+export function findMappingsTsConfigCore(io: FileReaderPort): string | undefined {
   const { tsConfig, workspaceRoot } = getConfigContext();
-  if (!tsConfig) return findRootTsConfigJsonCore(io);
+  if (!tsConfig) return findRootTsConfigCore(io);
 
   // `tsConfigPath` is the adapter's to resolve, so cwd is tried too before giving up.
   const candidates = [
@@ -27,27 +28,48 @@ export function findMappingsTsConfigCore(io: FileReaderPort): string {
   const found = candidates.find(file => io.isFile(file));
   if (found) return toDiskCaseCore(io, found);
 
-  const fallback = findRootTsConfigJsonCore(io);
+  const fallback = findRootTsConfigCore(io);
   logger.warn(
     `The tsconfig "${tsConfig}" does not exist (tried ${candidates.join(', ')}); ` +
-      `reading shared mappings from ${fallback} instead.`
+      (fallback ? `reading shared mappings from ${fallback} instead.` : 'no shared mappings.')
   );
   return fallback;
 }
 
 export function findRootTsConfigJsonCore(io: FileReaderPort): string {
+  const found = findRootTsConfigCore(io, true);
+  if (!found) throw new Error('Neither a tsconfig.json nor a tsconfig.base.json was found');
+  return found;
+}
+
+// Lenient: throws only when neither folder has a package.json. Strict keeps the deprecated
+// export's errors as they were.
+function findRootTsConfigCore(io: FileReaderPort, strict = false): string | undefined {
   const from = toDiskCaseCore(io, cwd());
+  const { workspaceRoot } = getConfigContext();
+  const second =
+    workspaceRoot && path.resolve(workspaceRoot) !== from ? path.resolve(workspaceRoot) : undefined;
+  // cwd stays first so an existing resolution doesn't move (core#156).
+  let cwdError: unknown;
   try {
-    return findTsConfigNextToPackageJson(io, from);
+    const found = findTsConfigNextToPackageJson(io, from);
+    if (found) return found;
   } catch (err) {
-    // cwd stays first so an existing resolution doesn't move (core#156).
-    const { workspaceRoot } = getConfigContext();
-    if (!workspaceRoot || path.resolve(workspaceRoot) === from) throw err;
-    return findTsConfigNextToPackageJson(io, path.resolve(workspaceRoot));
+    cwdError = err;
+  }
+  if (!second) {
+    if (cwdError) throw cwdError;
+    return undefined;
+  }
+  try {
+    return findTsConfigNextToPackageJson(io, second);
+  } catch (err) {
+    if (cwdError || strict) throw err;
+    return undefined;
   }
 }
 
-function findTsConfigNextToPackageJson(io: FileReaderPort, folder: string): string {
+function findTsConfigNextToPackageJson(io: FileReaderPort, folder: string): string | undefined {
   const packageJson = findPackageJson(io, folder);
   const projectRoot = path.dirname(packageJson);
   const tsConfigBaseJson = path.join(projectRoot, 'tsconfig.base.json');
@@ -58,8 +80,7 @@ function findTsConfigNextToPackageJson(io: FileReaderPort, folder: string): stri
   } else if (io.exists(tsConfigJson)) {
     return tsConfigJson;
   }
-
-  throw new Error('Neither a tsconfig.json nor a tsconfig.base.json was found');
+  return undefined;
 }
 
 export function findPackageJson(io: FileReaderPort, folder: string): string {

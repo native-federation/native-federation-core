@@ -23,6 +23,12 @@ const writeTsConfig = (paths: Record<string, string[]> | undefined) =>
   );
 
 describe('getRawMappedPathsCore', () => {
+  it('returns no paths without a tsconfig, keeping the declared patterns', () => {
+    const result = getRawMappedPathsCore(createMemoryIo(), undefined, ['@org/*']);
+
+    expect(result).toMatchObject({ paths: {}, keys: [], patterns: ['@org/*'] });
+  });
+
   it('throws when the tsconfig path is not absolute', () => {
     expect(() => getRawMappedPathsCore(createMemoryIo(), 'tsconfig.json')).toThrow(/absolute path/);
   });
