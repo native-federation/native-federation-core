@@ -346,7 +346,7 @@ describe('withNativeFederation', () => {
     });
   });
 
-  // groundwork/09: 'combined' spells out what no build means.
+  // 'combined' spells out what no build means.
   describe("build: 'combined'", () => {
     it('normalizes a shared entry as one without build', () => {
       const combined = withNativeFederation({ shared: { react: { build: 'combined' } } });
@@ -380,6 +380,18 @@ describe('withNativeFederation', () => {
 
       expect(config['@org/a']).toEqual(config['@org/b']);
       expect(config['@org/a']).not.toHaveProperty('build');
+    });
+
+    // A declared package takes no build at all, so the spelling of no build is rejected too.
+    it('is a config under a declared mapping package', () => {
+      getRawMappedPaths.mockReturnValue({
+        paths: {},
+        configs: { '@org/lib/x': { build: 'combined' } },
+        keys: ['@org/lib/x'],
+        packages: { '@org/lib': {} },
+      });
+
+      expect(() => withNativeFederation({})).toThrow(/sits under declared package '@org\/lib'/);
     });
   });
 
@@ -429,9 +441,7 @@ describe('withNativeFederation', () => {
 
     withNativeFederation({});
 
-    expect(warn).toHaveBeenCalledWith(
-      "Shared mapping package '@org/lbi' covers no tsconfig paths key."
-    );
+    expect(warn).toHaveBeenCalledWith("Shared mapping package '@org/lbi' covers no tsconfig paths key.");
   });
 
   it('warns for a selected mapping the tsconfig it read has no key for', () => {

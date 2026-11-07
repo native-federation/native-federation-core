@@ -172,7 +172,7 @@ function warnIgnoredChunks(keys: string[], chunks: boolean): void {
   const packages = [...new Set(keys.map(inferPackageFromSecondary))];
   logger.warn(
     `Shared externals ${packages.map(p => `'${p}'`).join(', ')} set chunks: ${!chunks}, but ` +
-      `without build they are built in the shared bundle, which uses the global chunks: ` +
+      `in the shared bundle they are built with the global chunks: ` +
       `${chunks}. Remove chunks, or give the external a bundle of its own with build: ` +
       `'separate' or 'package'.`
   );

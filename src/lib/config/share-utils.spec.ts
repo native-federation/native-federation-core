@@ -520,5 +520,6 @@ describe('fromPackageJson().only()', () => {
     const both = fromPackageJson({ singleton: true }, ROOT).filter(['chalk', 'tinyglobby']);
 
     expect(keys(mixed.get())).toEqual(keys(both.get()));
+    expect(keys(mixed.get())).toEqual(expect.arrayContaining(['chalk', 'tinyglobby']));
   });
 });
