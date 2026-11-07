@@ -12,6 +12,8 @@ export interface ConfigBuilder<T> {
 }
 
 export interface PackageJsonExternalsBuilder extends ConfigBuilder<ResolvedSharedExternalsConfig> {
+  /** @deprecated Not needed: pass the builder itself; extra keys go in `.override()`. */
+  get(): ResolvedSharedExternalsConfig;
   filter(patterns: string[]): PackageJsonExternalsBuilder;
   skip(externals: SkipList): PackageJsonExternalsBuilder;
   override(externals: ShareExternalsOptions): PackageJsonExternalsBuilder;

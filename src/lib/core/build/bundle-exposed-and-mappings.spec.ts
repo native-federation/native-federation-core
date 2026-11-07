@@ -223,7 +223,8 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         []
       );
 
-      expect(warn).not.toHaveBeenCalled();
+      // The fake sets no `entry`, so only the shared-file warning is ruled out.
+      expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('are written as'));
     });
 
     // The names come from the config, which a rebuild reuses: once per full build is enough.

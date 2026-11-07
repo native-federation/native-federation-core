@@ -1,6 +1,9 @@
 import path from 'path';
 import type { NFBuildAdapterResult } from '../../domain/core/build-adapter.contract.js';
 import { formatList } from '../../utils/format-list.js';
+import { warnOncePerAdapter } from './build-adapter.js';
+
+const warnedNoEntry = new WeakSet<object>();
 
 function stripHash(fileName: string): string {
   const start = fileName.lastIndexOf('-');
@@ -12,10 +15,19 @@ function stripHash(fileName: string): string {
 export function createBuildResultMap(
   buildResult: NFBuildAdapterResult[],
   isHashed: boolean,
-  expectedNames: string[] = []
+  expectedNames: string[] = [],
+  adapter?: object
 ): Record<string, string> {
   const expected = new Set(expectedNames.map(n => path.basename(n)));
   const byEntry = buildResult.some(item => item.entry !== undefined);
+  if (!byEntry && expected.size > 0) {
+    warnOncePerAdapter(
+      warnedNoEntry,
+      adapter,
+      'The build adapter set no `entry` on its results; core matched entries by file name. ' +
+        'v5 requires `entry` on every entry output.'
+    );
+  }
   const map: Record<string, string> = {};
 
   for (const item of buildResult) {

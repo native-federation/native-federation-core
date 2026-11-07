@@ -77,6 +77,8 @@ describe('validateOutputFilesCore', () => {
     expect(warn).toHaveBeenCalledWith(
       expect.stringMatching(/^Output file\(s\) 'Comp\.js\.map', 'Comp\.css' missing from /)
     );
+    // contract/01: v5 throws here too.
+    expect(warn.mock.calls[0]![0]).toMatch(/output folder\); this fails the build in v5\.$/);
   });
 
   // Core knows a file by its base name in the output folder only.

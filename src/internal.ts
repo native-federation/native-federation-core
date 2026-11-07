@@ -4,7 +4,7 @@
 export * from './internal/browser.js';
 
 export {
-  /** @deprecated Might be removed in v5. */
+  /** @deprecated Removed in v5. */
   hashFile,
 } from './lib/utils/hash.js';
 export { toDiskCase } from './lib/utils/disk-case.js';
@@ -17,11 +17,7 @@ export {
   writeImportMap,
 } from './lib/core/output/write-import-map.js';
 
-export {
-  getDefaultCachePath,
-  /** @deprecated Might be removed in v5. */
-  getChecksum,
-} from './lib/core/cache/cache-persistence.js';
+export { getDefaultCachePath, getChecksum } from './lib/core/cache/cache-persistence.js';
 export { collectOutputFiles } from './lib/core/cache/federation-cache.js';
 
 export type {

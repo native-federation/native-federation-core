@@ -153,7 +153,8 @@ export async function bundleExposedAndMappingsCore(
     return createBuildResultMap(
       result,
       hash,
-      entryPoints.map(ep => ep.outName)
+      entryPoints.map(ep => ep.outName),
+      deps.adapter
     );
   };
 
