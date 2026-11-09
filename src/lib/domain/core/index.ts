@@ -6,6 +6,7 @@ export type {
   /** @deprecated Only `bundleExposedAndMappings` returns it; removed from the API in v5. */
   ArtifactInfo,
   ChunkInfo,
+  ChunkMap,
   IntegrityMap,
   OutputFile,
 } from './federation-info.contract.js';

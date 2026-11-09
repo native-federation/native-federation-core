@@ -354,7 +354,11 @@ describe('rebuildForFederation — exposed chunk closures', () => {
     write({ 'home.js': `import './chunk-NEW.js';`, 'chunk-NEW.js': '' });
     const second = await rebuildForFederation(config(), options, ['a'], ['/src/home.ts']);
 
-    expect(first.exposes[0]!.chunks).toEqual(['chunk-OLD.js']);
-    expect(second.exposes[0]!.chunks).toEqual(['chunk-NEW.js']);
+    expect(first.exposes[0]!.chunks).toEqual({
+      '@nf-internal/chunk-OLD': { file: 'chunk-OLD.js', initial: true },
+    });
+    expect(second.exposes[0]!.chunks).toEqual({
+      '@nf-internal/chunk-NEW': { file: 'chunk-NEW.js', initial: true },
+    });
   });
 });

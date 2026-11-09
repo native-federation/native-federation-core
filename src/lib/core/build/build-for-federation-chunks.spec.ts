@@ -17,6 +17,7 @@ import { createFederationCache } from '../cache/federation-cache.js';
 import { createFakeBuildAdapter } from './__test-helpers__/fake-build-adapter.js';
 import { setBuildAdapter } from './build-adapter.js';
 import { buildForFederation } from './build-for-federation.js';
+import { toChunkImport } from '../../domain/core/chunk.js';
 
 // The real build path, unmocked from the plan to remoteEntry.json on disk: only the bundler is
 // faked. It writes what esbuild would, relative `./chunk-*.js` imports between its own files, and
@@ -185,24 +186,39 @@ describe('buildForFederation — published chunk closures', () => {
   });
 
   // Without denseChunking an exposed module keeps the bundler's relative imports and names.
-  it('lists the relative chunk closure of each exposed module', async () => {
+  // The key is still `toChunkImport(file)`: the v5 runtime maps every row under it.
+  it('lists the relative chunks of each exposed module', async () => {
     const { published } = await build({ denseChunking: false, denseExternals: false });
 
     expect(exposedChunks(published)).toEqual({
-      './Home': ['chunk-HOMEAAAA.js', 'chunk-SHAREDAA.js'],
-      './Cart': ['chunk-SHAREDAA.js'],
+      './Home': {
+        '@nf-internal/chunk-HOMEAAAA': { file: 'chunk-HOMEAAAA.js', initial: true },
+        '@nf-internal/chunk-SHAREDAA': { file: 'chunk-SHAREDAA.js', initial: true },
+        '@nf-internal/chunk-ROUTEAAA': { file: 'chunk-ROUTEAAA.js' },
+      },
+      './Cart': {
+        '@nf-internal/chunk-SHAREDAA': { file: 'chunk-SHAREDAA.js', initial: true },
+      },
     });
   });
 
   // With denseChunking the entries import `@nf-internal/*`, while chunk-to-chunk imports stay
   // relative; both resolve, and chunks are renamed by content.
-  it('lists the dense chunk closure of each exposed module', async () => {
+  it('lists the dense chunks of each exposed module', async () => {
     const { published } = await build({ denseChunking: true, denseExternals: false });
+    const row = (marker: string, initial: boolean) => {
+      const file = fileWith(marker);
+      return [toChunkImport(file), initial ? { file, initial } : { file }];
+    };
 
     expect(fs.readFileSync(path.join(dist, 'Home.js'), 'utf-8')).toContain('@nf-internal/chunk-');
     expect(exposedChunks(published)).toEqual({
-      './Home': [fileWith('home-core'), fileWith('exposed-shared')].sort(),
-      './Cart': [fileWith('exposed-shared')],
+      './Home': Object.fromEntries([
+        row('home-core', true),
+        row('exposed-shared', true),
+        row('home-route', false),
+      ]),
+      './Cart': Object.fromEntries([row('exposed-shared', true)]),
     });
     expect(fileWith('home-core')).not.toBe('chunk-HOMEAAAA.js');
   });
@@ -279,17 +295,29 @@ describe('buildForFederation — published chunk closures', () => {
         },
         "exposes": [
           {
-            "chunks": [
-              "chunk-E4LY4AS4.js",
-              "chunk-O4YEPRQO.js",
-            ],
+            "chunks": {
+              "@nf-internal/chunk-E4LY4AS4": {
+                "file": "chunk-E4LY4AS4.js",
+                "initial": true,
+              },
+              "@nf-internal/chunk-MV6JVKWS": {
+                "file": "chunk-MV6JVKWS.js",
+              },
+              "@nf-internal/chunk-O4YEPRQO": {
+                "file": "chunk-O4YEPRQO.js",
+                "initial": true,
+              },
+            },
             "key": "./Home",
             "outFileName": "Home.js",
           },
           {
-            "chunks": [
-              "chunk-O4YEPRQO.js",
-            ],
+            "chunks": {
+              "@nf-internal/chunk-O4YEPRQO": {
+                "file": "chunk-O4YEPRQO.js",
+                "initial": true,
+              },
+            },
             "key": "./Cart",
             "outFileName": "Cart.js",
           },

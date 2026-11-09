@@ -29,6 +29,9 @@ export type SharedInfo = {
 
 export type ChunkInfo = Record<string, string[]>;
 
+// Keyed by the chunk's import name; see docs/architecture/chunks.md
+export type ChunkMap = Record<string, { file: string; initial?: true }>;
+
 export type IntegrityMap = Record<string, string>;
 
 // A file the build wrote into the output folder: scripts, their source maps and any other asset.
@@ -41,8 +44,7 @@ export interface OutputFile {
 export interface ExposesInfo {
   key: string;
   outFileName: string;
-  // see docs/architecture/chunks.md
-  chunks?: string[];
+  chunks?: ChunkMap;
   element?: string;
   dev?: {
     entryPoint: string;

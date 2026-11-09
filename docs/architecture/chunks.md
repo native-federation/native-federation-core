@@ -13,10 +13,12 @@
   `build: 'combined'` keeps a package in the combined bundle, as no `build` does.
 - Which packages share a chunk within one build is not promised; a shared chunk never creates
   more instances than inlining would. Coupling is done with `pool` (see Mapping packages).
-- Each exposed module lists in `chunks` the files of its own build it imports statically, directly
-  or through each other: relative imports and this build's own `@nf-internal` chunks. A dynamic
-  import or any other bare specifier ends the walk. The list is computed from the output files on
-  every build and rebuild.
+- Each exposed module maps in `chunks` every file of its own build it reaches, directly or through
+  each other: relative imports and this build's own `@nf-internal` chunks, static or a literal
+  `import()`. Any other bare specifier ends the walk. A row is keyed by the file's import name
+  (`@nf-internal/<name>`, with or without `denseChunking`) and holds `{ file, initial? }`;
+  `initial: true` marks the files reached by static imports alone. A module that reaches none has
+  no `chunks`. The map is computed from the output files on every build and rebuild.
 - A shared package that sets `preload` preloads every chunk of the bundle it is built in, as the
   top-level `chunks` lists them; shared records carry no list of their own. Core warns when such a
   package is built in the combined bundle, or when `denseChunking` is off.
@@ -35,7 +37,11 @@
   else in `remoteEntry.json`. A bare specifier resolves through the import map, possibly to
   another build's file, so only the runtime can name it.
 - An exposed bundle holds every lazy route of the remote, so its bundle list would preload far
-  more than a module needs; an exposed module gets its own list.
+  more than a module needs; an exposed module gets its own map, and the runtime preloads only its
+  `initial` rows.
+- A map rather than a list, keyed by import name, so a runtime reads the name the built files use
+  instead of deriving it from the file name. Lazy rows make the map complete enough to build an
+  import map from: a dense build imports a lazy chunk by its bare `@nf-internal` name too.
 - The bundle list is already published, so a preload package reuses it. For a package with a
   bundle of its own (`build: 'package'`) it is close to what the package needs. In the combined
   bundle it is every package's chunks, hence the warning. A list per shared record would repeat
@@ -51,9 +57,8 @@
 
 - Code that a mapping and an exposed module both use is duplicated rather than split out.
 - Every extra bundle costs build time and memory, so bundles are split only where the config asks.
-- A chunk an exposed module reaches only through a dynamic import is not listed, so it is not
-  preloaded. A preload package's bundle list does include such chunks, so a library that splits
-  languages, themes or diagrams into lazy chunks preloads all of them.
+- A preload package's bundle list includes chunks it reaches only through a dynamic import, so a
+  library that splits languages, themes or diagrams into lazy chunks preloads all of them.
 - With flat chunking there is no bundle list, so a preload package preloads only its entry files.
 
 Enforced by: `src/lib/core/build/bundle-shared.spec.ts`,

@@ -1,5 +1,10 @@
 import * as path from 'path';
-import type { FederationInfo, OutputFile } from '../../domain/core/federation-info.contract.js';
+import type { ImportSpecifier } from 'es-module-lexer';
+import type {
+  ChunkMap,
+  FederationInfo,
+  OutputFile,
+} from '../../domain/core/federation-info.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
 import type { FileReaderPort } from '../../domain/utils/io-port.contract.js';
 import { CHUNK_PREFIX, toChunkImport } from '../../domain/core/chunk.js';
@@ -8,36 +13,56 @@ import { lexImports } from '../../utils/lex-imports.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import { resolveOutputPath } from '../../utils/output-path.js';
 
-type ImportsOf = (fileName: string) => readonly string[];
+interface FileImports {
+  static: readonly string[];
+  dynamic: readonly string[];
+}
 
-export function staticChunkClosure(roots: readonly string[], importsOf: ImportsOf): string[] {
+type ImportGraph = (fileName: string) => FileImports;
+
+function closure(roots: readonly string[], next: (fileName: string) => readonly string[]) {
   const seen = new Set(roots);
   const queue = [...roots];
-  const closure: string[] = [];
+  const reached = new Set<string>();
 
   while (queue.length > 0) {
-    for (const dep of importsOf(queue.pop()!)) {
+    for (const dep of next(queue.pop()!)) {
       if (seen.has(dep)) continue;
       seen.add(dep);
-      closure.push(dep);
+      reached.add(dep);
       queue.push(dep);
     }
   }
 
-  return closure.sort();
+  return reached;
 }
 
-// Edges are static imports between this build's own scripts: relative ones and its `@nf-internal`
+export function ownerChunks(roots: readonly string[], graph: ImportGraph): ChunkMap {
+  const initial = closure(roots, f => graph(f).static);
+  const all = closure(roots, f => {
+    const g = graph(f);
+    return [...g.static, ...g.dynamic];
+  });
+
+  const chunks: ChunkMap = {};
+  for (const file of [...all].sort()) {
+    chunks[toChunkImport(file)] = initial.has(file) ? { file, initial: true } : { file };
+  }
+  return chunks;
+}
+
+// Edges are imports between this build's own scripts: relative ones and its `@nf-internal`
 // chunks. Any other bare specifier is resolved by the import map, possibly to another build's file,
-// so the walk stops there.
-export function readStaticImportGraph(
+// so the walk stops there. A non-literal `import(x)` is no edge: bundlers split only on literal ones.
+export function readImportGraph(
   io: FileReaderPort,
   outputDir: string,
   files: readonly OutputFile[]
-): ImportsOf {
+): ImportGraph {
   const scripts = new Set(files.map(f => f.fileName).filter(isScript));
   const byChunkImport = new Map([...scripts].map(fileName => [toChunkImport(fileName), fileName]));
-  const memo = new Map<string, string[]>();
+  const memo = new Map<string, FileImports>();
+  const none: FileImports = { static: [], dynamic: [] };
 
   const resolve = (specifier: string): string | undefined => {
     if (specifier.startsWith(CHUNK_PREFIX + '/')) return byChunkImport.get(specifier);
@@ -46,27 +71,34 @@ export function readStaticImportGraph(
     return scripts.has(fileName) ? fileName : undefined;
   };
 
-  const read = (fileName: string): string[] => {
+  const resolveAll = (imports: readonly ImportSpecifier[]) =>
+    imports.map(imp => resolve(imp.n!)).filter((dep): dep is string => dep !== undefined);
+
+  const read = (fileName: string): FileImports => {
     const filePath = path.join(outputDir, fileName);
-    if (!scripts.has(fileName) || !io.exists(filePath)) return [];
+    if (!scripts.has(fileName) || !io.exists(filePath)) return none;
     try {
-      return lexImports(io.readText(filePath), fileName)
-        .filter(imp => imp.d === -1 && imp.n !== undefined)
-        .map(imp => resolve(imp.n!))
-        .filter((dep): dep is string => dep !== undefined);
+      const imports = lexImports(io.readText(filePath), fileName).filter(
+        imp => imp.n !== undefined
+      );
+      return {
+        static: resolveAll(imports.filter(imp => imp.d === -1)),
+        // d === -2 is import.meta, not an import.
+        dynamic: resolveAll(imports.filter(imp => imp.d > -1)),
+      };
     } catch {
       // validateBareImports has reported it.
-      return [];
+      return none;
     }
   };
 
   return fileName => {
-    let deps = memo.get(fileName);
-    if (!deps) {
-      deps = read(fileName);
-      memo.set(fileName, deps);
+    let imports = memo.get(fileName);
+    if (!imports) {
+      imports = read(fileName);
+      memo.set(fileName, imports);
     }
-    return deps;
+    return imports;
   };
 }
 
@@ -76,13 +108,13 @@ export function addChunkClosuresCore(
   files: readonly OutputFile[],
   federationInfo: FederationInfo
 ): FederationInfo {
-  const importsOf = readStaticImportGraph(io, outputDir, files);
+  const graph = readImportGraph(io, outputDir, files);
 
   return {
     ...federationInfo,
     exposes: federationInfo.exposes.map(e => {
-      const chunks = staticChunkClosure([e.outFileName], importsOf);
-      return chunks.length > 0 ? { ...e, chunks } : e;
+      const chunks = ownerChunks([e.outFileName], graph);
+      return Object.keys(chunks).length > 0 ? { ...e, chunks } : e;
     }),
   };
 }
