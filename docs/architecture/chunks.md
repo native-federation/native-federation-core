@@ -10,7 +10,6 @@
   rebuilds and changed bytes always get a new one.
 - Shared packages, mappings and exposed modules are bundled apart.
 - Code splitting (`chunks`) is set per bundle; `build` gives a package a bundle of its own.
-  `build: 'combined'` keeps a package in the combined bundle, as no `build` does.
 - Which packages share a chunk within one build is not promised; a shared chunk never creates
   more instances than inlining would. Coupling is done with `pool` (see Mapping packages).
 

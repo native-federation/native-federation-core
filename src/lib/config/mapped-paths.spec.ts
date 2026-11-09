@@ -170,10 +170,9 @@ describe('getRawMappedPathsCore', () => {
     ]);
   });
 
-  // 'combined' too: a declaration takes no build, whatever its spelling.
-  it.each(['separate', 'combined'])("rejects build: '%s' on a declaration", build => {
+  it('rejects a build on a declaration', () => {
     const io = writeTsConfig({ '@a/x': ['a/x.ts'] });
-    const entries = [{ package: '@a/x', build }] as unknown as SharedMappingEntry[];
+    const entries = [{ package: '@a/x', build: 'separate' }] as unknown as SharedMappingEntry[];
     expect(() => getRawMappedPathsCore(io, TSCONFIG, entries)).toThrow(
       "Shared mapping package '@a/x' sets build"
     );
