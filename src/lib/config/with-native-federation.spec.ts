@@ -348,6 +348,64 @@ describe('withNativeFederation', () => {
     expect(result.shared['chart-lib']).not.toHaveProperty('preload');
   });
 
+  // Densifying compares every field, so entry points of one package that disagree on preload would
+  // publish as two records of one remote.
+  it('sets preload on every entry point of a package once one sets it', () => {
+    const result = withNativeFederation({
+      shared: {
+        'chart-lib': { build: 'package', preload: true },
+        'chart-lib/extras': { build: 'package' },
+        rxjs: {},
+      },
+      features: { denseChunking: true },
+    });
+
+    expect(result.shared['chart-lib/extras'].preload).toBe(true);
+    expect(result.shared['rxjs']).not.toHaveProperty('preload');
+  });
+
+  describe('preload warnings', () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    // The runtime preloads every chunk of the bundle a preload package is built in.
+    it.each([[undefined], ['combined' as const]])(
+      'warns about a preload package in the combined bundle (build: %s)',
+      build => {
+        const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+        withNativeFederation({
+          shared: { 'chart-lib': { build, preload: true } },
+          features: { denseChunking: true },
+        });
+
+        expect(warn).toHaveBeenCalledOnce();
+        expect(warn.mock.calls[0]![0]).toContain("'chart-lib'");
+        expect(warn.mock.calls[0]![0]).toContain("build: 'package'");
+      }
+    );
+
+    // Flat chunking publishes no bundle list, so the runtime has no chunks to preload.
+    it('warns about preload without denseChunking', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      withNativeFederation({ shared: { 'chart-lib': { build: 'package', preload: true } } });
+
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]![0]).toContain('features.denseChunking');
+    });
+
+    it('stays quiet for a preload package with a bundle of its own under denseChunking', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      withNativeFederation({
+        shared: { 'chart-lib': { build: 'package', preload: true }, rxjs: {} },
+        features: { denseChunking: true },
+      });
+
+      expect(warn).not.toHaveBeenCalled();
+    });
+  });
+
   it('normalizes declared packages with the mapping defaults', () => {
     getRawMappedPaths.mockReturnValue({
       paths: { '/ws/libs/lib/index.ts': '@org/lib' },

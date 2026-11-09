@@ -13,10 +13,13 @@
   `build: 'combined'` keeps a package in the combined bundle, as no `build` does.
 - Which packages share a chunk within one build is not promised; a shared chunk never creates
   more instances than inlining would. Coupling is done with `pool` (see Mapping packages).
-- Each exposed module, and each shared package that sets `preload`, lists in `chunks` the files of
-  its own build it imports statically, directly or through each other: relative imports and this
-  build's own `@nf-internal` chunks. A dynamic import or any other bare specifier ends the walk. The
-  list is computed from the output files on every build and rebuild, after densify.
+- Each exposed module lists in `chunks` the files of its own build it imports statically, directly
+  or through each other: relative imports and this build's own `@nf-internal` chunks. A dynamic
+  import or any other bare specifier ends the walk. The list is computed from the output files on
+  every build and rebuild.
+- A shared package that sets `preload` preloads every chunk of the bundle it is built in, as the
+  top-level `chunks` lists them; shared records carry no list of their own. Core warns when such a
+  package is built in the combined bundle, or when `denseChunking` is off.
 
 ## Why
 
@@ -31,13 +34,13 @@
   fetch a module's dependencies, and an exposed module's relative chunk imports appear nowhere
   else in `remoteEntry.json`. A bare specifier resolves through the import map, possibly to
   another build's file, so only the runtime can name it.
-- The runtime reads a shared package's `chunks` only to preload it, so a package without
-  `preload` (and a shared mapping, which cannot set it) carries none: the list would only make
-  `remoteEntry.json` larger.
-- A per-entry `chunks` list would split a dense record into one record per entry point, so it is
-  added after densify. Flat output gets one list per package, the union of its entry points, on
-  each of them: a runtime that densifies flat records compares every field, so differing lists
-  would split the package there too.
+- An exposed bundle holds every lazy route of the remote, so its bundle list would preload far
+  more than a module needs; an exposed module gets its own list.
+- The bundle list is already published, so a preload package reuses it. For a package with a
+  bundle of its own (`build: 'package'`) it is close to what the package needs. In the combined
+  bundle it is every package's chunks, hence the warning. A list per shared record would repeat
+  file names the bundle list already holds, and differ per entry point, which splits a package in
+  a runtime that densifies flat records.
 
 ## Rejected
 
@@ -48,7 +51,10 @@
 
 - Code that a mapping and an exposed module both use is duplicated rather than split out.
 - Every extra bundle costs build time and memory, so bundles are split only where the config asks.
-- A chunk reached only through a dynamic import is not listed, so it is not preloaded.
+- A chunk an exposed module reaches only through a dynamic import is not listed, so it is not
+  preloaded. A preload package's bundle list does include such chunks, so a library that splits
+  languages, themes or diagrams into lazy chunks preloads all of them.
+- With flat chunking there is no bundle list, so a preload package preloads only its entry files.
 
 Enforced by: `src/lib/core/build/bundle-shared.spec.ts`,
 `src/lib/core/build/bundle-exposed-and-mappings.spec.ts`,

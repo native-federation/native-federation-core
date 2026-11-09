@@ -173,8 +173,8 @@ export default withNativeFederation({
   calls of both union.
 - **`fromPackageJson(...).patch()`** merges field by field in call order;
   **`mappingsFromWorkspace().patch()`** emits first-match-wins entries.
-- **`preload`**: on a shared package, asks the runtime to fetch it once the import map is in place,
-  before anything imports it.
+- **`preload`**: on a shared package, asks the runtime to fetch it, with every chunk of the bundle it
+  is built in, once the import map is in place, before anything imports it.
 - **`externals`**: specifiers left bare and never published; something else provides them.
 - **`sharedMappings`**: patterns over the tsconfig `paths` the build compiles with; only barrel
   specifiers can be published.

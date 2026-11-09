@@ -20,8 +20,7 @@ export type SharedInfo = {
   pool?: string;
   bundle?: string;
   outFileName: string;
-  // see docs/architecture/chunks.md
-  chunks?: string[];
+  // see docs/architecture/shared-packages.md
   preload?: true;
   dev?: {
     entryPoint: string;

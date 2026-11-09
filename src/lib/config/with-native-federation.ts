@@ -75,6 +75,7 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
     }),
   };
 
+  warnPreloadWithoutDenseChunking(normalized);
   return normalized;
 }
 
@@ -165,8 +166,60 @@ function normalizeShared(
     chunks
   );
   warnChunksConflicts(result);
+  result = withPackagePreload(result);
+  warnPreloadInCombinedBundle(result);
 
   return result;
+}
+
+const preloadedPackages = (
+  shared: NormalizedSharedExternalsConfig,
+  only = (_: NormalizedExternalConfig) => true
+) => [
+  ...new Set(
+    Object.entries(shared)
+      .filter(([, cfg]) => cfg.preload && only(cfg))
+      .map(([key]) => inferPackageFromSecondary(key))
+  ),
+];
+
+const listed = (packages: string[]) => packages.map(p => `'${p}'`).join(', ');
+
+// A package publishes one record, and densifying splits one whose entry points disagree on preload.
+function withPackagePreload(
+  shared: NormalizedSharedExternalsConfig
+): NormalizedSharedExternalsConfig {
+  const packages = new Set(preloadedPackages(shared));
+  if (packages.size === 0) return shared;
+  return Object.fromEntries(
+    Object.entries(shared).map(([key, cfg]) => [
+      key,
+      packages.has(inferPackageFromSecondary(key)) ? { ...cfg, preload: true as const } : cfg,
+    ])
+  );
+}
+
+// The runtime preloads every chunk of the bundle a preload package is built in.
+function warnPreloadInCombinedBundle(shared: NormalizedSharedExternalsConfig): void {
+  const packages = preloadedPackages(shared, cfg => cfg.build === 'default');
+  if (packages.length === 0) return;
+  logger.warn(
+    `Shared externals ${listed(packages)} set preload, but are built in the combined shared ` +
+      `bundle, so the runtime preloads the chunks of every package in it. Give them a bundle of ` +
+      `their own with build: 'package'.`
+  );
+}
+
+// Without dense chunking, remoteEntry.json lists no chunks per bundle for the runtime to preload.
+function warnPreloadWithoutDenseChunking(normalized: NormalizedFederationConfig): void {
+  if (normalized.features.denseChunking) return;
+  const packages = preloadedPackages(normalized.shared);
+  if (packages.length === 0) return;
+  logger.warn(
+    `Shared externals ${listed(packages)} set preload, but without features.denseChunking the ` +
+      `runtime preloads only their entry files, not their chunks. Enable features.denseChunking ` +
+      `to preload those too.`
+  );
 }
 
 // Secondaries inherit their package's config, so one setting is reported once per package.

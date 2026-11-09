@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as path from 'path';
 import type {
-  DenseSharedInfo,
   ExposesInfo,
   FederationInfo,
   OutputFile,
@@ -183,76 +182,16 @@ describe('addChunkClosuresCore', () => {
     expect(result.exposes[0]).not.toHaveProperty('chunks');
   });
 
-  it('lists the chunk closure of a flat shared external marked preload', () => {
+  // A preload package's chunks are its bundle's, which top-level `chunks` already lists.
+  it('leaves every shared record untouched, preload ones included', () => {
+    const external = shared('@angular/core', 'core.js', { preload: true });
+    const plain = shared('rxjs', 'rx.js');
     const result = run(
-      { 'core.js': `import '@nf-internal/chunk-C';`, 'chunk-C.js': '' },
-      { shared: [shared('@angular/core', 'core.js', { preload: true })] }
-    );
-    expect(result.shared[0]).toMatchObject({
-      packageName: '@angular/core',
-      chunks: ['chunk-C.js'],
-    });
-  });
-
-  // Flat output, regrouped by a runtime with densifyExternals: differing lists per entry point would
-  // split one package into several records, so every entry point carries the package's union.
-  it('gives every flat entry point of a preload package the union of the package', () => {
-    const result = run(
-      {
-        'common.js': `import './chunk-C.js';`,
-        'http.js': `import './chunk-H.js';`,
-        'rx.js': `import './chunk-R.js';`,
-        'chunk-C.js': '',
-        'chunk-H.js': '',
-        'chunk-R.js': '',
-      },
-      {
-        shared: [
-          shared('@angular/common', 'common.js', { preload: true }),
-          shared('@angular/common/http', 'http.js', { preload: true }),
-          shared('rxjs', 'rx.js', { preload: true }),
-        ],
-      }
-    );
-    expect(result.shared.map(s => [s.packageName, s.chunks])).toEqual([
-      ['@angular/common', ['chunk-C.js', 'chunk-H.js']],
-      ['@angular/common/http', ['chunk-C.js', 'chunk-H.js']],
-      ['rxjs', ['chunk-R.js']],
-    ]);
-  });
-
-  // A dense record is one package; its entry points import each other only by bare specifier, so
-  // the union of their closures is what preloading the package needs.
-  it('unions the closures of a dense record, leaving out its own entry files', () => {
-    const dense: DenseSharedInfo = {
-      singleton: true,
-      strictVersion: true,
-      requiredVersion: '^1.0.0',
-      packageName: '@angular/common',
-      preload: true,
-      entries: { '@angular/common': 'common.js', '@angular/common/http': 'http.js' },
-    };
-    const result = run(
-      {
-        'common.js': `import '@nf-internal/chunk-C';`,
-        'http.js': `import '@nf-internal/chunk-H'; import './common.js';`,
-        'chunk-C.js': '',
-        'chunk-H.js': '',
-      },
-      { shared: [dense] }
-    );
-    expect(result.shared[0]).toMatchObject({ chunks: ['chunk-C.js', 'chunk-H.js'] });
-  });
-
-  // Only a preload record's chunks are read by the runtime; this covers chunk records and
-  // shared mappings too, which never carry preload.
-  it('leaves a shared record without preload untouched', () => {
-    const external = shared('@angular/core', 'core.js');
-    const result = run(
-      { 'core.js': `import '@nf-internal/chunk-C';`, 'chunk-C.js': '' },
-      { shared: [external] }
+      { 'core.js': `import './chunk-C.js';`, 'rx.js': '', 'chunk-C.js': '' },
+      { shared: [external, plain] }
     );
     expect(result.shared[0]).toBe(external);
+    expect(result.shared[1]).toBe(plain);
   });
 
   // Cached externals outlive a build; writing into them would leak one build's chunks into the next.

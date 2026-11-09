@@ -1,10 +1,5 @@
 import * as path from 'path';
-import type {
-  DenseSharedInfo,
-  FederationInfo,
-  OutputFile,
-  SharedInfo,
-} from '../../domain/core/federation-info.contract.js';
+import type { FederationInfo, OutputFile } from '../../domain/core/federation-info.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
 import type { FileReaderPort } from '../../domain/utils/io-port.contract.js';
 import { CHUNK_PREFIX, toChunkImport } from '../../domain/core/chunk.js';
@@ -12,7 +7,6 @@ import { isScript } from '../../utils/script-file.js';
 import { lexImports } from '../../utils/lex-imports.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import { resolveOutputPath } from '../../utils/output-path.js';
-import { densifyExternals } from './densify-externals.js';
 
 type ImportsOf = (fileName: string) => readonly string[];
 
@@ -76,7 +70,6 @@ export function readStaticImportGraph(
   };
 }
 
-// Runs after densify: `chunks` differs per entry point, so it must not split a dense group.
 export function addChunkClosuresCore(
   io: FileReaderPort,
   outputDir: string,
@@ -84,38 +77,14 @@ export function addChunkClosuresCore(
   federationInfo: FederationInfo
 ): FederationInfo {
   const importsOf = readStaticImportGraph(io, outputDir, files);
-  const closureOf = (roots: string[]) => staticChunkClosure(roots, importsOf);
-  const flatPackageChunks = flatPreloadPackageChunks(federationInfo.shared, closureOf);
 
   return {
     ...federationInfo,
-    exposes: federationInfo.exposes.map(e => withChunks(e, closureOf([e.outFileName]))),
-    // Only preload records: see docs/architecture/chunks.md
-    shared: federationInfo.shared.map(s => {
-      if (!s.preload) return s;
-      if ('entries' in s) return withChunks(s, closureOf(Object.values(s.entries)));
-      return withChunks(s, flatPackageChunks.get(s.packageName) ?? []);
+    exposes: federationInfo.exposes.map(e => {
+      const chunks = staticChunkClosure([e.outFileName], importsOf);
+      return chunks.length > 0 ? { ...e, chunks } : e;
     }),
   };
-}
-
-// Densifying compares every field, `chunks` included, so a list per entry point would split one flat package
-// in a runtime that densifies it. Grouped as such a runtime does: by npm name, no declared packages.
-function flatPreloadPackageChunks(
-  shared: Array<SharedInfo | DenseSharedInfo>,
-  closureOf: (roots: string[]) => string[]
-): Map<string, string[]> {
-  const flat = shared.filter((s): s is SharedInfo => !!s.preload && !('entries' in s));
-  const chunksOf = new Map<string, string[]>();
-  for (const pkg of densifyExternals(flat, new Map()) as DenseSharedInfo[]) {
-    const chunks = closureOf(Object.values(pkg.entries));
-    for (const specifier of Object.keys(pkg.entries)) chunksOf.set(specifier, chunks);
-  }
-  return chunksOf;
-}
-
-function withChunks<T extends object>(record: T, chunks: string[]): T {
-  return chunks.length > 0 ? { ...record, chunks } : record;
 }
 
 export function addChunkClosures(

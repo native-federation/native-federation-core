@@ -17,7 +17,6 @@ import { createFederationCache } from '../cache/federation-cache.js';
 import { createFakeBuildAdapter } from './__test-helpers__/fake-build-adapter.js';
 import { setBuildAdapter } from './build-adapter.js';
 import { buildForFederation } from './build-for-federation.js';
-import { densifyExternals } from '../output/densify-externals.js';
 
 // The real build path, unmocked from the plan to remoteEntry.json on disk: only the bundler is
 // faked. It writes what esbuild would, relative `./chunk-*.js` imports between its own files, and
@@ -208,41 +207,30 @@ describe('buildForFederation — published chunk closures', () => {
     expect(fileWith('home-core')).not.toBe('chunk-HOMEAAAA.js');
   });
 
+  // A preload package's chunks are those of its bundle, listed once in top-level `chunks`.
   it.each([
     ['off', false],
     ['on', true],
   ])(
-    'lists the chunk closure of each preload shared package with denseChunking %s',
+    'publishes no chunk list on shared records with denseChunking %s',
     async (_, denseChunking) => {
       const { published } = await build({ denseChunking, denseExternals: false });
 
-      // One list per package, the union of its entry points: a runtime that densifies flat records compares
-      // every field, so differing lists would split chart-lib into two records (see densifyExternals below).
-      const union = [
-        fileWith('chart-core'),
-        fileWith('chart-deep'),
-        fileWith('extras-core'),
-      ].sort();
-      expect(flatRecord(published, 'chart-lib').chunks).toEqual(union);
-      expect(flatRecord(published, 'chart-lib/extras').chunks).toEqual(union);
-      // tslib imports a chunk too, but is not marked preload.
-      expect(flatRecord(published, 'tslib')).not.toHaveProperty('chunks');
+      for (const record of published.shared) expect(record).not.toHaveProperty('chunks');
     }
   );
 
-  // Orchestrators up to 4.9 regroup flat records with densifyExternals and no declared packages.
-  it('keeps a flat preload package one record when a runtime densifies it', async () => {
-    const { published } = await build({ denseChunking: false, denseExternals: false });
+  it("lists a preload package's chunks under its bundle", async () => {
+    const { published } = await build({ denseChunking: true, denseExternals: false });
 
-    const regrouped = densifyExternals(published.shared, new Map()).filter(
-      s => s.packageName === 'chart-lib'
+    const bundle = flatRecord(published, 'chart-lib').bundle!;
+    expect(published.chunks?.[bundle]).toEqual(
+      expect.arrayContaining([
+        fileWith('chart-core'),
+        fileWith('chart-deep'),
+        fileWith('extras-core'),
+      ])
     );
-
-    expect(regrouped).toHaveLength(1);
-    expect(Object.keys((regrouped[0] as DenseSharedInfo).entries).sort()).toEqual([
-      'chart-lib',
-      'chart-lib/extras',
-    ]);
   });
 
   it('publishes preload only on the packages configured with it', async () => {
@@ -253,8 +241,7 @@ describe('buildForFederation — published chunk closures', () => {
     expect(flatRecord(published, 'tslib')).not.toHaveProperty('preload');
   });
 
-  // Chunks are computed after densify, so a per-entry list cannot split the package's record.
-  it('gives a dense record the union of its entry points, in one record', async () => {
+  it('keeps a dense preload record one record, without a list of its own', async () => {
     const { published } = await build({ denseChunking: true, denseExternals: true });
 
     const chartLib = published.shared.filter(s => s.packageName === 'chart-lib');
@@ -265,8 +252,8 @@ describe('buildForFederation — published chunk closures', () => {
         'chart-lib': fileWith('chart'),
         'chart-lib/extras': fileWith('extras'),
       },
-      chunks: [fileWith('chart-core'), fileWith('chart-deep'), fileWith('extras-core')].sort(),
     } satisfies Partial<DenseSharedInfo>);
+    expect(chartLib[0]).not.toHaveProperty('chunks');
   });
 
   // The shape a runtime reads; names are content hashes, so they only move when the bytes do.
@@ -311,11 +298,6 @@ describe('buildForFederation — published chunk closures', () => {
         "shared": [
           {
             "bundle": "browser-shared",
-            "chunks": [
-              "chunk-3CNQCWNB.js",
-              "chunk-QTDORPIU.js",
-              "chunk-SDY535X5.js",
-            ],
             "entries": {
               "chart-lib": "chart_lib.D2XIoLh0XZ.js",
               "chart-lib/extras": "chart_lib_extras.GeNvxeJbTq.js",
