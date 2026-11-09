@@ -72,6 +72,7 @@ const SHARED_INFO_FIELDS = [
   'strictVersion',
   'shareScope',
   'pool',
+  'preload',
 ] as const;
 
 // A configured packageInfo replaces resolution, so where it points decides the bytes.

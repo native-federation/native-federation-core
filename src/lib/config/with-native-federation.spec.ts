@@ -331,6 +331,23 @@ describe('withNativeFederation', () => {
     expect(result.shared['react']).not.toHaveProperty('pool');
   });
 
+  it('normalizes preload to true when it is set', () => {
+    const result = withNativeFederation({
+      shared: { 'chart-lib': { preload: true } },
+    });
+
+    expect(result.shared['chart-lib'].preload).toBe(true);
+  });
+
+  // An explicit false and an absent flag must publish the same remoteEntry.json.
+  it.each([[{}], [{ preload: false }]])('omits preload when it is %j', sharedConfig => {
+    const result = withNativeFederation({
+      shared: { 'chart-lib': sharedConfig },
+    });
+
+    expect(result.shared['chart-lib']).not.toHaveProperty('preload');
+  });
+
   it('normalizes declared packages with the mapping defaults', () => {
     getRawMappedPaths.mockReturnValue({
       paths: { '/ws/libs/lib/index.ts': '@org/lib' },

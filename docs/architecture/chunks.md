@@ -13,6 +13,10 @@
   `build: 'combined'` keeps a package in the combined bundle, as no `build` does.
 - Which packages share a chunk within one build is not promised; a shared chunk never creates
   more instances than inlining would. Coupling is done with `pool` (see Mapping packages).
+- Each exposed module, and each shared package that sets `preload`, lists in `chunks` the files of
+  its own build it imports statically, directly or through each other: relative imports and this
+  build's own `@nf-internal` chunks. A dynamic import or any other bare specifier ends the walk. The
+  list is computed from the output files on every build and rebuild, after densify.
 
 ## Why
 
@@ -23,6 +27,17 @@
   shared.
 - A chunk factored out of both a mapping and an exposed module would split one remote against
   itself, because the import map may serve that mapping from another remote.
+- The runtime preloads a module's chunks next to the module itself. `modulepreload` does not
+  fetch a module's dependencies, and an exposed module's relative chunk imports appear nowhere
+  else in `remoteEntry.json`. A bare specifier resolves through the import map, possibly to
+  another build's file, so only the runtime can name it.
+- The runtime reads a shared package's `chunks` only to preload it, so a package without
+  `preload` (and a shared mapping, which cannot set it) carries none: the list would only make
+  `remoteEntry.json` larger.
+- A per-entry `chunks` list would split a dense record into one record per entry point, so it is
+  added after densify. Flat output gets one list per package, the union of its entry points, on
+  each of them: a runtime that densifies flat records compares every field, so differing lists
+  would split the package there too.
 
 ## Rejected
 
@@ -33,9 +48,12 @@
 
 - Code that a mapping and an exposed module both use is duplicated rather than split out.
 - Every extra bundle costs build time and memory, so bundles are split only where the config asks.
+- A chunk reached only through a dynamic import is not listed, so it is not preloaded.
 
 Enforced by: `src/lib/core/build/bundle-shared.spec.ts`,
-`src/lib/core/build/bundle-exposed-and-mappings.spec.ts`
+`src/lib/core/build/bundle-exposed-and-mappings.spec.ts`,
+`src/lib/core/output/chunk-closures.spec.ts`,
+`src/lib/core/build/build-for-federation-chunks.spec.ts`
 Issues: core#138, core#144, core#145
 History: core#6 dense chunk list per bundle → core#141 content-named, shared by name → core#145
 build-local, unshared, mappings built apart from exposed modules

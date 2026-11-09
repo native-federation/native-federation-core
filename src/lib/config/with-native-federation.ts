@@ -148,6 +148,7 @@ function normalizeShared(
       build,
       ...(sharedConfig.shareScope && { shareScope: sharedConfig.shareScope }),
       ...(sharedConfig.pool && { pool: sharedConfig.pool }),
+      ...(sharedConfig.preload && { preload: true as const }),
     };
     return {
       ...acc,

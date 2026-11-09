@@ -20,6 +20,9 @@ export type SharedInfo = {
   pool?: string;
   bundle?: string;
   outFileName: string;
+  // see docs/architecture/chunks.md
+  chunks?: string[];
+  preload?: true;
   dev?: {
     entryPoint: string;
   };
@@ -39,6 +42,8 @@ export interface OutputFile {
 export interface ExposesInfo {
   key: string;
   outFileName: string;
+  // see docs/architecture/chunks.md
+  chunks?: string[];
   element?: string;
   dev?: {
     entryPoint: string;
