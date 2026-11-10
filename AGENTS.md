@@ -168,7 +168,7 @@ export default withNativeFederation({
   `true` or `keepAll` exempts the mapping from pruning entirely.
 - **`chunks`** / **`build`**: code splitting is a property of a bundle. On a shared package
   `chunks` only applies together with a `build`; a mapping gets its own bundle with
-  `build: 'separate'` or `'package'`. `build: 'combined'` is the same as no `build`.
+  `build: 'separate'` or `'package'`.
 - **`.only(patterns)`** narrows either builder's selection; `.filter()` is the same method, and
   calls of both union.
 - **`fromPackageJson(...).patch()`** merges field by field in call order;

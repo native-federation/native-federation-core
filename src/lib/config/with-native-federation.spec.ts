@@ -421,53 +421,17 @@ describe('withNativeFederation', () => {
     });
   });
 
-  // 'combined' spells out what no build means.
-  describe("build: 'combined'", () => {
-    it('normalizes a shared entry as one without build', () => {
-      const combined = withNativeFederation({ shared: { react: { build: 'combined' } } });
-      const unset = withNativeFederation({ shared: { react: {} } });
-
-      expect(combined.shared).toEqual(unset.shared);
-      expect(combined.shared['react']!.build).toBe('default');
+  // 'combined' was the explicit spelling of no build; v5 drops it, so 4.x never accepts it.
+  it("rejects build: 'combined' on a mapping", () => {
+    getRawMappedPaths.mockReturnValue({
+      paths: { '/ws/libs/a/index.ts': '@org/a' },
+      configs: { '@org/a': { build: 'combined' } as never },
+      keys: ['@org/a'],
     });
 
-    it('warns about an ignored chunks setting as without build', () => {
-      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-
-      const result = withNativeFederation({
-        chunks: true,
-        shared: { react: { build: 'combined', chunks: false } },
-      });
-
-      expect(warn).toHaveBeenCalledOnce();
-      expect(warn.mock.calls[0]![0]).toContain("'react'");
-      expect(result.shared['react']!.chunks).toBeUndefined();
-    });
-
-    it('normalizes a mapping as one without build', () => {
-      getRawMappedPaths.mockReturnValue({
-        paths: { '/ws/libs/a/index.ts': '@org/a', '/ws/libs/b/index.ts': '@org/b' },
-        configs: { '@org/a': { build: 'combined' }, '@org/b': {} },
-        keys: ['@org/a', '@org/b'],
-      });
-
-      const config = withNativeFederation({}).sharedMappingsConfig;
-
-      expect(config['@org/a']).toEqual(config['@org/b']);
-      expect(config['@org/a']).not.toHaveProperty('build');
-    });
-
-    // A declared package takes no build at all, so the spelling of no build is rejected too.
-    it('is a config under a declared mapping package', () => {
-      getRawMappedPaths.mockReturnValue({
-        paths: {},
-        configs: { '@org/lib/x': { build: 'combined' } },
-        keys: ['@org/lib/x'],
-        packages: { '@org/lib': {} },
-      });
-
-      expect(() => withNativeFederation({})).toThrow(/sits under declared package '@org\/lib'/);
-    });
+    expect(() => withNativeFederation({})).toThrow(
+      "Mapping '@org/a' sets build: 'combined'; a mapping takes 'separate' or 'package'."
+    );
   });
 
   it('leaves sharedMappingPackages out without declarations', () => {

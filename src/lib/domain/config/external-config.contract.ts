@@ -19,8 +19,7 @@ export interface ExternalConfig {
   version?: string;
   includeSecondaries?: IncludeSecondariesOptions;
   platform?: 'browser' | 'node';
-  // 'combined' is what no `build` means: the platform's combined bundle.
-  build?: 'combined' | 'separate' | 'package';
+  build?: 'separate' | 'package';
   pool?: string;
   chunks?: boolean;
   shareScope?: string;
