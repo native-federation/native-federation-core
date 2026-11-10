@@ -12,10 +12,12 @@
 - With `ignoreUnusedDeps` (the default), only the entry points the build reaches are published.
   A shared package nothing reaches is dropped; `keepAll` keeps every entry point of one that is
   still reached.
-- `preload: true` on a shared package is published on its record as `preload` and changes nothing
-  else in the build. It asks the runtime to fetch the package, with every chunk of the bundle it
-  is built in (see [Chunks](chunks.md)), once the import map is in place, before anything imports
-  it. Once one entry point of a package sets it, every entry point of that package does.
+- `preload: true` on a shared package is published on its record as `preload`. Like any config
+  field, it is part of the shared bundle's config state, so toggling it renames the bundle's entry
+  files on a rebuild; it changes nothing else in the build. It asks the runtime to fetch the
+  package, with every chunk of the bundle it is built in (see [Chunks](chunks.md)), once the import
+  map is in place, before anything imports it. Once one entry point of a package sets it, every
+  entry point of that package does.
 
 ## Why
 

@@ -368,21 +368,32 @@ describe('withNativeFederation', () => {
     afterEach(() => vi.restoreAllMocks());
 
     // The runtime preloads every chunk of the bundle a preload package is built in.
-    it.each([[undefined], ['combined' as const]])(
-      'warns about a preload package in the combined bundle (build: %s)',
-      build => {
-        const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    it('warns about a preload package in the combined bundle', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
 
-        withNativeFederation({
-          shared: { 'chart-lib': { build, preload: true } },
-          features: { denseChunking: true },
-        });
+      withNativeFederation({
+        shared: { 'chart-lib': { preload: true } },
+        features: { denseChunking: true },
+      });
 
-        expect(warn).toHaveBeenCalledOnce();
-        expect(warn.mock.calls[0]![0]).toContain("'chart-lib'");
-        expect(warn.mock.calls[0]![0]).toContain("build: 'package'");
-      }
-    );
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]![0]).toContain("'chart-lib'");
+      expect(warn.mock.calls[0]![0]).toContain("build: 'package'");
+    });
+
+    // extras inherits preload from chart-lib but stays in the combined bundle; naming the
+    // package would point at chart-lib, which already has a bundle of its own.
+    it('names the entry point in the combined bundle, not its package', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      withNativeFederation({
+        shared: { 'chart-lib': { build: 'package', preload: true }, 'chart-lib/extras': {} },
+        features: { denseChunking: true },
+      });
+
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]![0]).toContain("Shared externals 'chart-lib/extras' set preload");
+    });
 
     // Flat chunking publishes no bundle list, so the runtime has no chunks to preload.
     it('warns about preload without denseChunking', () => {

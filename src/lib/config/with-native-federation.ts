@@ -169,13 +169,10 @@ function normalizeShared(
   return result;
 }
 
-const preloadedPackages = (
-  shared: NormalizedSharedExternalsConfig,
-  only = (_: NormalizedExternalConfig) => true
-) => [
+const preloadedPackages = (shared: NormalizedSharedExternalsConfig) => [
   ...new Set(
     Object.entries(shared)
-      .filter(([, cfg]) => cfg.preload && only(cfg))
+      .filter(([, cfg]) => cfg.preload)
       .map(([key]) => inferPackageFromSecondary(key))
   ),
 ];
@@ -198,10 +195,13 @@ function withPackagePreload(
 
 // The runtime preloads every chunk of the bundle a preload package is built in.
 function warnPreloadInCombinedBundle(shared: NormalizedSharedExternalsConfig): void {
-  const packages = preloadedPackages(shared, cfg => cfg.build === 'default');
-  if (packages.length === 0) return;
+  // Keys, not packages: an entry point inherits preload but keeps its own build.
+  const keys = Object.entries(shared)
+    .filter(([, cfg]) => cfg.preload && cfg.build === 'default')
+    .map(([key]) => key);
+  if (keys.length === 0) return;
   logger.warn(
-    `Shared externals ${listed(packages)} set preload, but are built in the combined shared ` +
+    `Shared externals ${listed(keys)} set preload, but are built in the combined shared ` +
       `bundle, so the runtime preloads the chunks of every package in it. Give them a bundle of ` +
       `their own with build: 'package'.`
   );
