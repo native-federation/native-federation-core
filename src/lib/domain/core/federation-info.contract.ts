@@ -20,12 +20,17 @@ export type SharedInfo = {
   pool?: string;
   bundle?: string;
   outFileName: string;
+  // see docs/architecture/shared-packages.md
+  preload?: true;
   dev?: {
     entryPoint: string;
   };
 };
 
 export type ChunkInfo = Record<string, string[]>;
+
+// Keyed by the chunk's import name; see docs/architecture/chunks.md
+export type ChunkMap = Record<string, { file: string; initial?: true }>;
 
 export type IntegrityMap = Record<string, string>;
 
@@ -39,6 +44,7 @@ export interface OutputFile {
 export interface ExposesInfo {
   key: string;
   outFileName: string;
+  chunks?: ChunkMap;
   element?: string;
   dev?: {
     entryPoint: string;

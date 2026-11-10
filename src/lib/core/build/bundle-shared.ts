@@ -535,6 +535,7 @@ function buildResult(
       version: pi.version,
       ...(shared?.shareScope && { shareScope: shared.shareScope }),
       ...(shared?.pool && { pool: shared.pool }),
+      ...(shared?.preload && { preload: true }),
     } as SharedInfo;
   });
 }

@@ -12,6 +12,12 @@
 - With `ignoreUnusedDeps` (the default), only the entry points the build reaches are published.
   A shared package nothing reaches is dropped; `keepAll` keeps every entry point of one that is
   still reached.
+- `preload: true` on a shared package is published on its record as `preload`. Like any config
+  field, it is part of the shared bundle's config state, so toggling it renames the bundle's entry
+  files on a rebuild; it changes nothing else in the build. It asks the runtime to fetch the
+  package, with every chunk of the bundle it is built in (see [Chunks](chunks.md)), once the import
+  map is in place, before anything imports it. Once one entry point of a package sets it, every
+  entry point of that package does.
 
 ## Why
 
@@ -21,6 +27,8 @@
 - A record's version names the bytes in its file.
 - Publishing every entry point of every dependency makes `remoteEntry.json` and the shared
   bundles far larger than what the app uses.
+- Fetching a package before it is used is speculative, so it is opt-in per package: the remote
+  knows a package is heavy and always needed by what it exposes.
 
 ## Rejected
 

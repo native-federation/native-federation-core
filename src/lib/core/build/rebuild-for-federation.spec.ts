@@ -1,4 +1,7 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
@@ -314,5 +317,48 @@ describe('rebuildForFederation — build notification endpoint', () => {
 
   it('withholds the endpoint when notifications are unconfigured', async () => {
     expect(await rebuildWith({ dev: true })).toBeUndefined();
+  });
+});
+
+describe('rebuildForFederation — exposed chunk closures', () => {
+  let workspaceRoot: string;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(affectedSharedKeys).mockReturnValue(new Set());
+    workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-chunks-'));
+    fs.mkdirSync(path.join(workspaceRoot, 'dist'));
+  });
+
+  afterEach(() => fs.rmSync(workspaceRoot, { recursive: true, force: true }));
+
+  const write = (files: Record<string, string>) => {
+    for (const [name, code] of Object.entries(files)) {
+      fs.writeFileSync(path.join(workspaceRoot, 'dist', name), code);
+    }
+    vi.mocked(bundleExposedAndMappings).mockResolvedValueOnce({
+      mappings: [],
+      exposes: [{ key: './Home', outFileName: 'home.js' }],
+      outputFiles: Object.keys(files).map(fileName => ({ fileName, platform: 'browser' })),
+    });
+  };
+
+  // Chunks are named by content, so an edit renames them; a watch rebuild must publish the new
+  // names or the runtime preloads files that no longer exist.
+  it('recomputes exposes[].chunks from the files of each rebuild', async () => {
+    const options = fedOptions([], { workspaceRoot });
+
+    write({ 'home.js': `import './chunk-OLD.js';`, 'chunk-OLD.js': '' });
+    const first = await rebuildForFederation(config(), options, ['a'], ['/src/home.ts']);
+
+    write({ 'home.js': `import './chunk-NEW.js';`, 'chunk-NEW.js': '' });
+    const second = await rebuildForFederation(config(), options, ['a'], ['/src/home.ts']);
+
+    expect(first.exposes[0]!.chunks).toEqual({
+      '@nf-internal/chunk-OLD': { file: 'chunk-OLD.js', initial: true },
+    });
+    expect(second.exposes[0]!.chunks).toEqual({
+      '@nf-internal/chunk-NEW': { file: 'chunk-NEW.js', initial: true },
+    });
   });
 });

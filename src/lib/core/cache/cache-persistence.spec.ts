@@ -84,7 +84,7 @@ describe('getChecksumCore', () => {
     );
   });
 
-  // These five reach remoteEntry.json via buildResult, and a cache hit replays the recorded
+  // These six reach remoteEntry.json via buildResult, and a cache hit replays the recorded
   // externals verbatim — so each has to invalidate or the runtime gets stale negotiation metadata.
   describe.each([
     ['requiredVersion', { requiredVersion: '^2.0.0' }, { requiredVersion: '>=2.0.0' }],
@@ -92,6 +92,7 @@ describe('getChecksumCore', () => {
     ['strictVersion', { strictVersion: true }, { strictVersion: false }],
     ['shareScope', { shareScope: 'a' }, { shareScope: 'b' }],
     ['pool', { pool: 'critical' }, { pool: 'lazy' }],
+    ['preload', { preload: true as const }, {}],
   ])('shared-info field %s', (_field, left, right) => {
     it('changes the checksum when it changes', () => {
       const at = (over: Partial<NormalizedExternalConfig>) =>

@@ -331,6 +331,92 @@ describe('withNativeFederation', () => {
     expect(result.shared['react']).not.toHaveProperty('pool');
   });
 
+  it('normalizes preload to true when it is set', () => {
+    const result = withNativeFederation({
+      shared: { 'chart-lib': { preload: true } },
+    });
+
+    expect(result.shared['chart-lib'].preload).toBe(true);
+  });
+
+  // An explicit false and an absent flag must publish the same remoteEntry.json.
+  it.each([[{}], [{ preload: false }]])('omits preload when it is %j', sharedConfig => {
+    const result = withNativeFederation({
+      shared: { 'chart-lib': sharedConfig },
+    });
+
+    expect(result.shared['chart-lib']).not.toHaveProperty('preload');
+  });
+
+  // Densifying compares every field, so entry points of one package that disagree on preload would
+  // publish as two records of one remote.
+  it('sets preload on every entry point of a package once one sets it', () => {
+    const result = withNativeFederation({
+      shared: {
+        'chart-lib': { build: 'package', preload: true },
+        'chart-lib/extras': { build: 'package' },
+        rxjs: {},
+      },
+      features: { denseChunking: true },
+    });
+
+    expect(result.shared['chart-lib/extras'].preload).toBe(true);
+    expect(result.shared['rxjs']).not.toHaveProperty('preload');
+  });
+
+  describe('preload warnings', () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    // The runtime preloads every chunk of the bundle a preload package is built in.
+    it('warns about a preload package in the combined bundle', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      withNativeFederation({
+        shared: { 'chart-lib': { preload: true } },
+        features: { denseChunking: true },
+      });
+
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]![0]).toContain("'chart-lib'");
+      expect(warn.mock.calls[0]![0]).toContain("build: 'package'");
+    });
+
+    // extras inherits preload from chart-lib but stays in the combined bundle; naming the
+    // package would point at chart-lib, which already has a bundle of its own.
+    it('names the entry point in the combined bundle, not its package', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      withNativeFederation({
+        shared: { 'chart-lib': { build: 'package', preload: true }, 'chart-lib/extras': {} },
+        features: { denseChunking: true },
+      });
+
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]![0]).toContain("Shared externals 'chart-lib/extras' set preload");
+    });
+
+    // Flat chunking publishes no bundle list, so the runtime has no chunks to preload.
+    it('warns about preload without denseChunking', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      withNativeFederation({ shared: { 'chart-lib': { build: 'package', preload: true } } });
+
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]![0]).toContain('features.denseChunking');
+    });
+
+    it('stays quiet for a preload package with a bundle of its own under denseChunking', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      withNativeFederation({
+        shared: { 'chart-lib': { build: 'package', preload: true }, rxjs: {} },
+        features: { denseChunking: true },
+      });
+
+      expect(warn).not.toHaveBeenCalled();
+    });
+  });
+
   it('normalizes declared packages with the mapping defaults', () => {
     getRawMappedPaths.mockReturnValue({
       paths: { '/ws/libs/lib/index.ts': '@org/lib' },

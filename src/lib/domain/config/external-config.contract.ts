@@ -23,6 +23,7 @@ export interface ExternalConfig {
   pool?: string;
   chunks?: boolean;
   shareScope?: string;
+  preload?: boolean;
   packageInfo?: {
     entryPoint: string;
     version?: string;
@@ -38,6 +39,7 @@ export interface NormalizedExternalConfig {
   includeSecondaries?: boolean;
   shareScope?: string;
   pool?: string;
+  preload?: true;
   // Set only when the user set it on an external with a bundle of its own.
   chunks?: boolean;
   platform: 'browser' | 'node';

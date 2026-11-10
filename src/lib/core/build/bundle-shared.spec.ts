@@ -483,6 +483,35 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     });
   });
 
+  it('carries preload through to the shared external', async () => {
+    const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+    const adapter = createFakeBuildAdapter({ io: mem });
+    const sharedBundles: Record<string, NormalizedExternalConfig> = {
+      foo: {
+        singleton: true,
+        strictVersion: false,
+        requiredVersion: '^1.0.0',
+        version: '1.0.0',
+        chunks: false,
+        platform: 'browser',
+        build: 'default',
+        preload: true,
+        packageInfo: { entryPoint: 'foo/index.js', version: '1.0.0', esm: true },
+      },
+    };
+
+    const result = await bundleSharedCore(
+      { io: mem, repo: emptyRepo, adapter },
+      sharedBundles,
+      makeConfig(),
+      makeFedOptions(),
+      [],
+      BUILD_OPTIONS
+    );
+
+    expect(result.externals[0]).toMatchObject({ packageName: 'foo', preload: true });
+  });
+
   it('omits pool from the shared external when it is not configured', async () => {
     const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
     const adapter = createFakeBuildAdapter({ io: mem });
@@ -509,6 +538,7 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     );
 
     expect(result.externals[0]).not.toHaveProperty('pool');
+    expect(result.externals[0]).not.toHaveProperty('preload');
   });
 
   it('resolves an inferred package through the injected repository', async () => {
