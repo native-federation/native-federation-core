@@ -118,10 +118,7 @@ function normalizeShared(
   result = Object.keys(shared).reduce<NormalizedSharedExternalsConfig>((acc, cur) => {
     const key = cur.replace(/\\/g, '/');
     const sharedConfig = shared[cur]!;
-    const build =
-      sharedConfig.build === undefined || sharedConfig.build === 'combined'
-        ? 'default'
-        : sharedConfig.build;
+    const build = sharedConfig.build ?? 'default';
 
     // Without a bundle of its own, an external is built with the global `chunks`.
     const ownChunks = build === 'default' ? undefined : sharedConfig.chunks;
@@ -202,7 +199,7 @@ function warnChunksConflicts(shared: NormalizedSharedExternalsConfig): void {
   }
 }
 
-const MAPPING_BUILDS = new Set([undefined, 'combined', 'separate', 'package']);
+const MAPPING_BUILDS = new Set([undefined, 'separate', 'package']);
 
 function normalizeMappingConfigs(
   configs: SharedMappingConfigs,
@@ -211,7 +208,7 @@ function normalizeMappingConfigs(
   return Object.entries(configs).reduce((acc, [pattern, cfg]) => {
     if (!MAPPING_BUILDS.has(cfg.build)) {
       throw new Error(
-        `Mapping '${pattern}' sets build: '${cfg.build}'; a mapping takes 'combined', 'separate' or 'package'. ` +
+        `Mapping '${pattern}' sets build: '${cfg.build}'; a mapping takes 'separate' or 'package'. ` +
           `To bundle and publish a library's entry points as one package, declare it with ` +
           `mappingsFromWorkspace().package('<library>').`
       );
