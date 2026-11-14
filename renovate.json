@@ -48,6 +48,11 @@
       "description": "Never automerge @softarc/sheriff-core — review compatibility by hand",
       "matchPackageNames": ["@softarc/sheriff-core"],
       "automerge": false
+    },
+    {
+      "description": "Never automerge anything in the release path — it can stage npm releases",
+      "matchFileNames": [".github/workflows/release.yml"],
+      "automerge": false
     }
   ],
   "lockFileMaintenance": {
