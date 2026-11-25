@@ -24,13 +24,13 @@ describe('writeFederationOutputs', () => {
     const federationInfo: FederationInfo = { name: 'shell', shared: [], exposes: [] };
     const options = fedOptions([]);
 
-    writeFederationOutputs(federationInfo, options);
+    writeFederationOutputs(federationInfo, options, { mappings: [] });
 
     expect(writeFederationInfo).toHaveBeenCalledWith(federationInfo, options);
   });
 
   // The dense shape has no import-map representation — @angular/core and its secondaries collapse
-  // into one entry there — so the import map has to come from the flat cache, not from `shared`.
+  // into one entry there — so the import map has to come from the flat lists, not from `shared`.
   it('builds the import map from the flat cache, not from the assembled shared array', () => {
     const externals = [
       flat('@angular/core', 'core.js'),
@@ -43,17 +43,61 @@ describe('writeFederationOutputs', () => {
       exposes: [],
     } as unknown as FederationInfo;
 
-    writeFederationOutputs(federationInfo, options);
+    writeFederationOutputs(federationInfo, options, { mappings: [] });
 
-    expect(writeImportMap).toHaveBeenCalledWith(options.federationCache, options, undefined);
+    expect(writeImportMap).toHaveBeenCalledWith(
+      { externals, chunks: undefined },
+      options,
+      undefined
+    );
+  });
+
+  // core#248: an exposed bundle importing a shared mapping must resolve it through the static
+  // importmap.json, not only through the runtime's map built from remoteEntry.json.
+  it('includes shared mappings next to the cached externals', () => {
+    const external = flat('@angular/core', 'core.js');
+    const mapping = flat('@internal/logging', '_internal_logging-3DJSPYNN.js');
+    const options = fedOptions([external]);
+
+    writeFederationOutputs({ name: 'mfe1', shared: [], exposes: [] }, options, {
+      mappings: [mapping],
+    });
+
+    expect(writeImportMap).toHaveBeenCalledWith(
+      { externals: [external, mapping], chunks: undefined },
+      options,
+      undefined
+    );
+  });
+
+  // core#248: with denseChunking an exposed bundle imports its chunks as `@nf-internal/...`. Those
+  // live in the artifact's chunks, which only the assembled federation info merges with the cache's.
+  it('takes the chunks from the federation info, exposed and mapping bundles included', () => {
+    const options = fedOptions([]);
+    const chunks = {
+      'browser-angular_core': ['chunk-YSTJXBMP.js'],
+      'mapping-or-exposed': ['chunk-NUORN2G7.js'],
+    };
+
+    writeFederationOutputs({ name: 'mfe3', shared: [], exposes: [], chunks }, options, {
+      mappings: [],
+    });
+
+    expect(writeImportMap).toHaveBeenCalledWith({ externals: [], chunks }, options, undefined);
   });
 
   it('threads the integrity map through to the import map', () => {
     const options = fedOptions([]);
     const integrity = { 'core.js': 'sha384-abc' };
 
-    writeFederationOutputs({ name: 'shell', shared: [], exposes: [], integrity }, options);
+    writeFederationOutputs({ name: 'shell', shared: [], exposes: [], integrity }, options, {
+      mappings: [],
+    });
 
-    expect(writeImportMap).toHaveBeenCalledWith(options.federationCache, options, integrity);
+    expect(writeImportMap).toHaveBeenCalledWith(
+      { externals: [], chunks: undefined },
+      options,
+      integrity
+    );
   });
 });

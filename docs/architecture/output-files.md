@@ -11,6 +11,9 @@
 - Before `remoteEntry.json` is written, core checks that the files it lists are still on disk, so
   a later bundle that deletes an earlier one's files is caught before anything is published.
 - Adapters post-process from `outputFiles`, not from a glob or from `remoteEntry.json`.
+- `importmap.json` maps every specifier `remoteEntry.json` publishes, one entry each: shared
+  packages, shared mappings, and the chunks of every bundle, exposed and mapping bundles included.
+  A host without the runtime loads an exposed module with this map alone.
 
 ## Why
 
@@ -19,6 +22,10 @@
   "which files did this build produce?".
 - Deriving that answer from `remoteEntry.json` misses files it does not name, and globbing the
   output directory picks up the application's own output too.
+
+- No Native Federation package reads `importmap.json`; the runtime builds its own map from
+  `remoteEntry.json`. Hosts that load an exposed bundle directly do read it, so a specifier missing
+  there fails only for them.
 
 ## Rejected
 
@@ -29,7 +36,8 @@
 - A file an adapter does not report is neither hashed nor checked.
 
 Enforced by: `src/lib/core/output/validate-output-files.spec.ts`,
+`src/lib/core/output/write-federation-outputs.spec.ts`,
 `src/lib/core/cache/federation-cache.spec.ts`
-Issues: core#177, core#178
+Issues: core#177, core#178, core#248
 Related: [Build adapter](build-adapter.md), [Published imports](published-imports.md),
 [Shared cache](shared-cache.md), [Chunks](chunks.md)
