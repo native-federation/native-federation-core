@@ -20,6 +20,6 @@ export function finalizeFederationBuild(
   validateOutputFiles(fedOptions, federationInfo, outputFiles);
   validateBareImports(config, fedOptions, federationInfo, outputFiles, { fullReport });
   const published = addChunkClosures(fedOptions, outputFiles, federationInfo);
-  writeFederationOutputs(published, fedOptions);
+  writeFederationOutputs(published, fedOptions, artifactInfo);
   return published;
 }
