@@ -315,7 +315,7 @@ describe('shareAllCore (end-to-end via injected repository)', () => {
   // core#247: the secondaries lookup for an uninstalled override walked a relative path forever.
   it('completes for a relative projectPath with an override that is not installed', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-    vi.spyOn(logger, 'verbose').mockImplementation(() => undefined);
+    const verbose = vi.spyOn(logger, 'verbose').mockImplementation(() => undefined);
     // memory-io resolves relative keys against cwd, as nodeIo would
     const memory = createMemoryIo().setFile(
       path.resolve('packages/app/package.json'),
@@ -342,7 +342,11 @@ describe('shareAllCore (end-to-end via injected repository)', () => {
     );
 
     expect(Object.keys(result!).sort()).toEqual(['@not/exist', 'mylib']);
-    expect(warn).toHaveBeenCalledWith('Could not find folder containing dep @not/exist');
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Could not find @not/exist in any node_modules above packages/app')
+    );
+    warn.mockRestore();
+    verbose.mockRestore();
   });
 
   // Overrides are explicit additions, so the filter does not apply to them.

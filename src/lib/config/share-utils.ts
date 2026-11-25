@@ -270,7 +270,9 @@ export function shareCore(
       const libPackageJson = findDepPackageJson(key, path.dirname(packagePath), repo);
 
       if (!libPackageJson) {
-        logger.warn('Could not find folder containing dep ' + key);
+        logger.warn(
+          `Could not find ${key} in any node_modules above ${path.dirname(packagePath)}; its secondary entry points are not shared. Install it, or set includeSecondaries: false for it.`
+        );
         continue;
       }
 
