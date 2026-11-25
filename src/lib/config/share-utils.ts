@@ -92,7 +92,7 @@ export function shareAllCore(
   } = {},
   repo: PackageJsonRepository = sharedPackageJsonRepository
 ): ResolvedSharedExternalsConfig {
-  const projectPath = inferProjectPath(opts.projectPath);
+  const projectPath = inferProjectPath(opts.projectPath, io);
 
   const versionMaps = getVersionMaps(projectPath, projectPath, repo);
   const sharedExternals: ShareExternalsOptions = {};
@@ -206,7 +206,7 @@ export function shareCore(
   skipList = DEFAULT_SKIP_LIST,
   repo: PackageJsonRepository = sharedPackageJsonRepository
 ): ResolvedSharedExternalsConfig {
-  projectPath = inferProjectPath(projectPath);
+  projectPath = inferProjectPath(projectPath, io);
   const packagePath = findPackageJson(io, projectPath);
 
   const preparedSkipList = prepareSkipList(skipList);

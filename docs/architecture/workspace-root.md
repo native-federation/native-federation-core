@@ -5,11 +5,12 @@
 ## Rules
 
 - What a build writes and reads is resolved against `workspaceRoot`: the output path (which may
-  also be absolute), exposed entry points, the `package.json` a config's `share()` calls read, the
-  tsconfig used for shared mappings, and the scan for unused dependencies.
+  also be absolute), exposed entry points, the `packageJson` option, the `package.json` a config's
+  `share()` calls read, the tsconfig used for shared mappings, and the scan for unused
+  dependencies.
 - A relative `projectPath` given to `fromPackageJson()`, `share()` or `shareAll()` is resolved
-  against `workspaceRoot`, or the working directory when no workspace root is set. The dependency
-  lookups that start there walk its real parent folders.
+  against `workspaceRoot`, or the working directory when none is set. It becomes absolute either
+  way, so the dependency lookups that start there walk its real parent folders.
 - A relative `workspaceRoot` is resolved against the working directory once, during normalization.
 - The output does not depend on the directory the build starts in: all of it lands in one
   directory, so `remoteEntry.json` always sits next to the files it names.
@@ -33,8 +34,6 @@
 
 Enforced by: `src/lib/config/configuration-context.spec.ts`,
 `src/lib/config/project-paths.spec.ts`, `src/lib/config/share-utils.spec.ts`,
-`src/lib/core/build/bundle-exposed-and-mappings.spec.ts`
+`src/lib/core/normalize-options.spec.ts`, `src/lib/core/build/bundle-exposed-and-mappings.spec.ts`
 Issues: core#112, core#156, core#161, core#251
-History: relative `projectPath` read against the working directory → core#251 against
-`workspaceRoot`
 Related: [Shared mappings](shared-mappings.md)

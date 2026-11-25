@@ -104,8 +104,7 @@ export function inferProjectPath(
 ): string {
   const { packageJson, workspaceRoot } = getConfigContext();
   if (projectPath) {
-    if (path.isAbsolute(projectPath)) return projectPath;
-    return path.resolve(workspaceRoot || toDiskCaseCore(io, cwd()), projectPath);
+    return toDiskCaseCore(io, path.resolve(workspaceRoot || cwd(), projectPath));
   }
   if (packageJson) return path.dirname(packageJson);
   return workspaceRoot || toDiskCaseCore(io, cwd());

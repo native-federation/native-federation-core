@@ -245,6 +245,26 @@ describe('normalizeFederationOptionsCore', () => {
     expect(result.options.workspaceRoot).toBe(root);
   });
 
+  // core#251: a relative packageJson read against cwd would seed the shared-dep lookups elsewhere.
+  it('resolves a relative packageJson against the workspace root', async () => {
+    const io = createMemoryIo().setFile(CONFIG_PATH, '');
+    let seen: ConfigurationContext | undefined;
+    const loadConfig = vi.fn(async () => {
+      seen = { ...getConfigContext() };
+      return makeConfig();
+    });
+
+    const result = await normalizeFederationOptionsCore(
+      { io, loadConfig },
+      { ...baseOptions, packageJson: 'apps/shell/package.json' },
+      cache
+    );
+
+    const expected = path.join(path.resolve('/ws'), 'apps/shell/package.json');
+    expect(seen?.packageJson).toBe(expected);
+    expect(result.options.packageJson).toBe(expected);
+  });
+
   // Several remotes built in one process: each config must see its own workspace root.
   it('gives concurrent calls their own workspace context', async () => {
     const configA = path.join('/a', 'federation.config.js');

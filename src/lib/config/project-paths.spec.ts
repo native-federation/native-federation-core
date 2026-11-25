@@ -216,10 +216,18 @@ describe('inferProjectPath', () => {
     expect(inferProjectPath('apps/shell', io)).toBe(path.join(ROOT, 'apps/shell'));
   });
 
-  it('keeps an absolute path as given', () => {
+  it('keeps an absolute path, normalized', () => {
     useWorkspace(WS, io);
     const abs = path.resolve('/elsewhere/app');
-    expect(inferProjectPath(abs, io)).toBe(abs);
+    expect(inferProjectPath(path.join(abs, 'x', '..') + path.sep, io)).toBe(abs);
+  });
+
+  // Every other branch returns an on-disk spelling; an explicit path must agree with them.
+  it('returns the on-disk spelling of an explicit path', () => {
+    const misCased = path.resolve('/drive/ws/app');
+    const onDisk = path.resolve('/DRIVE/ws/app');
+    const cased = createMemoryIo().setDiskCase(misCased, onDisk);
+    expect(inferProjectPath(misCased, cased)).toBe(onDisk);
   });
 
   it('falls back to the package.json folder, then the workspace root, then cwd', () => {
