@@ -265,6 +265,19 @@ describe('normalizeFederationOptionsCore', () => {
     expect(result.options.packageJson).toBe(expected);
   });
 
+  it('keeps an absolute packageJson outside the workspace root', async () => {
+    const io = createMemoryIo().setFile(CONFIG_PATH, '');
+    const outside = path.resolve('/other/package.json');
+
+    const result = await normalizeFederationOptionsCore(
+      { io, loadConfig: vi.fn(async () => makeConfig()) },
+      { ...baseOptions, packageJson: outside },
+      cache
+    );
+
+    expect(result.options.packageJson).toBe(outside);
+  });
+
   // Several remotes built in one process: each config must see its own workspace root.
   it('gives concurrent calls their own workspace context', async () => {
     const configA = path.join('/a', 'federation.config.js');

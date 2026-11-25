@@ -597,7 +597,7 @@ describe('a relative projectPath', () => {
 
   // Unresolved, the walk from '..' went '../' → './' and found cwd's node_modules, which is not
   // an ancestor of the start.
-  it('does not find a dependency installed only below the start folder', () => {
+  it('walks the real parents of a start above cwd when no workspace root is set', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     vi.spyOn(logger, 'verbose').mockImplementation(() => undefined);
     const io = createMemoryIo()

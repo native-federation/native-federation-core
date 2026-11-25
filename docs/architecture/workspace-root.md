@@ -11,8 +11,6 @@
 - A relative `projectPath` given to `fromPackageJson()`, `share()` or `shareAll()` is resolved
   against `workspaceRoot`, or the working directory when none is set. It becomes absolute either
   way, so the dependency lookups that start there walk its real parent folders.
-  Adapter helpers that read a `projectPath` themselves resolve it with `inferProjectPath` from
-  `./internal`, while the config evaluates.
 - A relative `workspaceRoot` is resolved against the working directory once, during normalization.
 - The output does not depend on the directory the build starts in: all of it lands in one
   directory, so `remoteEntry.json` always sits next to the files it names.
