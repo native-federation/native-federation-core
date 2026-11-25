@@ -27,7 +27,12 @@ import { matchesWildcard } from '../utils/path-patterns.js';
 import { inferPackageFromSecondary } from '../utils/normalize.js';
 
 export const fromPackageJson = (
-  baseCfg: ShareAllExternalsOptions,
+  baseCfg: ShareAllExternalsOptions = {
+    singleton: true,
+    strictVersion: true,
+    requiredVersion: 'auto',
+    build: 'package',
+  },
   projectPath?: string
 ): PackageJsonExternalsBuilder => {
   const skipList: SkipList = [...DEFAULT_SKIP_LIST];
