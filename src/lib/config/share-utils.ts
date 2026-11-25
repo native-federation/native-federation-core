@@ -270,7 +270,7 @@ export function shareCore(
       const libPackageJson = findDepPackageJson(key, path.dirname(packagePath), repo);
 
       if (!libPackageJson) {
-        logger.error('Could not find folder containing dep ' + key);
+        logger.warn('Could not find folder containing dep ' + key);
         continue;
       }
 
