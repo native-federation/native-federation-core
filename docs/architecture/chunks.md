@@ -59,12 +59,18 @@
 - A preload package's bundle list includes chunks it reaches only through a dynamic import, so a
   library that splits languages, themes or diagrams into lazy chunks preloads all of them.
 - With flat chunking there is no bundle list, so a preload package preloads only its entry files.
+- Without code splitting, each entry point of a bundle inlines its own copy of the private files
+  it shares with the other entry points (a relative import cannot be made external), so module
+  state in those files exists once per entry point. `build: 'separate'` does this whatever
+  `chunks` says, and `pool` does not help: it couples which build serves the packages, not their
+  files. A package whose entry points share private files needs `chunks` on in one bundle that
+  holds them all: the combined bundle (the default) or `build: 'package'`.
 
 Enforced by: `src/lib/core/build/bundle-shared.spec.ts`,
 `src/lib/core/build/bundle-exposed-and-mappings.spec.ts`,
 `src/lib/core/output/chunk-closures.spec.ts`,
 `src/lib/core/build/build-for-federation-chunks.spec.ts`
-Issues: core#138, core#144, core#145
+Issues: core#138, core#144, core#145, core#246
 History: core#6 dense chunk list per bundle → core#141 content-named, shared by name → core#145
 build-local, unshared, mappings built apart from exposed modules
 Related: [Mapping packages](mapping-packages.md), [Build adapter](build-adapter.md),
