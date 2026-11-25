@@ -286,6 +286,20 @@ describe('withNativeFederation', () => {
       expect(warn).not.toHaveBeenCalled();
     });
 
+    it('warns when members of one pool disagree, naming the pool bundle', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      withNativeFederation({
+        shared: {
+          libA: { build: 'pool', pool: 'p1', chunks: true },
+          libB: { build: 'pool', pool: 'p1', chunks: false },
+        },
+      });
+
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]![0]).toContain("'browser-pool-p1'");
+    });
+
     // Each platform gets a bundle of its own, so these do not compete.
     it('does not warn when one package is built for both platforms with different chunks', () => {
       const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
@@ -312,6 +326,12 @@ describe('withNativeFederation', () => {
     });
 
     expect(result.shared['react'].shareScope).toBe('isolated');
+  });
+
+  it.each([undefined, '', '-'])("throws when build: 'pool' has pool: %j", pool => {
+    expect(() => withNativeFederation({ shared: { libA: { build: 'pool', pool } } })).toThrow(
+      "Shared external 'libA' sets build: 'pool' without a pool."
+    );
   });
 
   it('passes a per-external pool through normalization', () => {
@@ -368,11 +388,14 @@ describe('withNativeFederation', () => {
     afterEach(() => vi.restoreAllMocks());
 
     // The runtime preloads every chunk of the bundle a preload package is built in.
-    it('warns about a preload package in the combined bundle', () => {
+    it.each([
+      ['the combined bundle', {}],
+      ['a pool bundle', { build: 'pool', pool: 'p1' }],
+    ] as const)('warns about a preload package in %s', (_, cfg) => {
       const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
 
       withNativeFederation({
-        shared: { 'chart-lib': { preload: true } },
+        shared: { 'chart-lib': { ...cfg, preload: true } },
         features: { denseChunking: true },
       });
 

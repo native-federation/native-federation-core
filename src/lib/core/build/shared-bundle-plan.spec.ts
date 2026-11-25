@@ -73,6 +73,82 @@ describe('planSharedBundles', () => {
     expect(plans[0]!.externals).toEqual(['react*']);
   });
 
+  // core#249: unshared deps that pool members both import are split out once, not inlined per member.
+  describe("build: 'pool'", () => {
+    const pooled = (pool: string, overrides: Partial<NormalizedExternalConfig> = {}) =>
+      ext({ build: 'pool', pool, ...overrides });
+
+    it('builds the members of one pool in one bundle per platform', () => {
+      const plans = planSharedBundles(
+        config({
+          libA: pooled('p1'),
+          'libA/sub': pooled('p1'),
+          libB: pooled('p1'),
+          libS: pooled('p1', { platform: 'node' }),
+        }),
+        []
+      );
+
+      expect(plans.map(p => [p.bundleName, p.keys, p.kind])).toEqual([
+        ['browser-pool-p1', ['libA', 'libA/sub', 'libB'], 'separate'],
+        ['node-pool-p1', ['libS'], 'separate'],
+      ]);
+    });
+
+    it('gives each pool a bundle of its own', () => {
+      const plans = planSharedBundles(config({ libA: pooled('p1'), libB: pooled('p2') }), []);
+
+      expect(plans.map(p => p.bundleName)).toEqual(['browser-pool-p1', 'browser-pool-p2']);
+    });
+
+    // Like the combined bundle: members stay bare to each other and to their own subpaths, so a
+    // member imported from elsewhere is still served through the import map.
+    it('keeps the full externals list', () => {
+      const externals = ['libA', 'libA/sub', 'libB', 'other'];
+      const plans = planSharedBundles(
+        config({ libA: pooled('p1'), 'libA/sub': pooled('p1'), libB: pooled('p1') }),
+        externals
+      );
+
+      expect(plans[0]!.externals).toEqual(externals);
+    });
+
+    it('does not collide with a package whose name starts with pool-', () => {
+      const plans = planSharedBundles(
+        config({ 'pool-p1': ext({ build: 'package' }), libA: pooled('p1') }),
+        []
+      );
+
+      expect(plans.map(p => p.bundleName)).toEqual(['browser-pool_p1', 'browser-pool-p1']);
+    });
+
+    // The runtime pools per share scope, so one label in two scopes is two pools.
+    it('gives each share scope of a pool a bundle of its own', () => {
+      const plans = planSharedBundles(
+        config({ libA: pooled('p1'), libB: pooled('p1', { shareScope: 'iso' }) }),
+        []
+      );
+
+      expect(plans.map(p => p.bundleName)).toEqual(['browser-pool-p1', 'browser-pool-iso-p1']);
+    });
+
+    // `pool` alone is runtime metadata; only build: 'pool' moves a package.
+    it('leaves a pooled package without build in the combined bundle', () => {
+      const plans = planSharedBundles(config({ libA: ext({ pool: 'p1' }) }), []);
+
+      expect(plans.map(p => p.bundleName)).toEqual(['browser-shared']);
+    });
+
+    it('lets a member that sets chunks decide it for the pool', () => {
+      const plans = planSharedBundles(
+        config({ libA: pooled('p1'), libB: pooled('p1', { chunks: false }) }, true),
+        []
+      );
+
+      expect(plans[0]!.chunks).toBe(false);
+    });
+  });
+
   it('splitShared routes by platform and build type', () => {
     const { sharedBrowser, sharedServer, separateBrowser, separateServer } = splitShared({
       a: ext({ platform: 'browser', build: 'default' }),

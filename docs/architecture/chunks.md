@@ -9,7 +9,12 @@
 - Chunks are named by a hash of the bytes they serve, so identical bytes keep one name across
   rebuilds and changed bytes always get a new one.
 - Shared packages, mappings and exposed modules are bundled apart.
-- Code splitting (`chunks`) is set per bundle; `build` gives a package a bundle of its own.
+- Code splitting (`chunks`) is set per bundle; `build` gives a package, or a pool, a bundle of its
+  own.
+- `build: 'pool'` builds the shared packages of one platform, share scope and `pool` label in one
+  bundle, `<platform>-pool-<label>`. Like the combined bundle it keeps every shared specifier bare,
+  its members' own subpaths included, so a subpath a member does not publish stays unresolved.
+  `pool` alone builds nothing together.
 - Which packages share a chunk within one build is not promised; a shared chunk never creates
   more instances than inlining would. Coupling is done with `pool` (see Mapping packages).
 - Each exposed module maps in `chunks` every file of its own build it reaches, directly or through
@@ -20,7 +25,7 @@
   no `chunks`. The map is computed from the output files on every build and rebuild.
 - A shared package that sets `preload` preloads every chunk of the bundle it is built in, as the
   top-level `chunks` lists them; shared records carry no list of their own. Core warns when such a
-  package is built in the combined bundle, or when `denseChunking` is off.
+  package is built in the combined bundle or a pool bundle, or when `denseChunking` is off.
 
 ## Why
 
@@ -43,9 +48,9 @@
   import map from: a dense build imports a lazy chunk by its bare `@nf-internal` name too.
 - The bundle list is already published, so a preload package reuses it. For a package with a
   bundle of its own (`build: 'package'`) it is close to what the package needs. In the combined
-  bundle it is every package's chunks, hence the warning. A list per shared record would repeat
-  file names the bundle list already holds, and differ per entry point, which splits a package in
-  a runtime that densifies flat records.
+  bundle or a pool bundle it is every member's chunks, hence the warning. A list per shared
+  record would repeat file names the bundle list already holds, and differ per entry point, which
+  splits a package in a runtime that densifies flat records.
 
 ## Rejected
 
@@ -62,15 +67,20 @@
 - Without code splitting, each entry point of a bundle inlines its own copy of the private files
   it shares with the other entry points (a relative import cannot be made external), so module
   state in those files exists once per entry point. `build: 'separate'` does this whatever
-  `chunks` says, and `pool` does not help: it couples which build serves the packages, not their
+  `chunks` says. `pool` alone does not help: it couples which build serves the packages, not their
   files. A package whose entry points share private files needs `chunks` on in one bundle that
-  holds them all: the combined bundle (the default) or `build: 'package'`.
+  holds them all: the combined bundle (the default), `build: 'package'` or `build: 'pool'`.
+- An unshared dependency two packages with bundles of their own both import is inlined into each.
+  `build: 'pool'` splits it into one chunk, but that keeps one instance only where one build
+  serves the remote's whole pool in that share scope: the runtime may still publish a member the
+  serving build does not ship from another build, with its own copy.
 
 Enforced by: `src/lib/core/build/bundle-shared.spec.ts`,
 `src/lib/core/build/bundle-exposed-and-mappings.spec.ts`,
 `src/lib/core/output/chunk-closures.spec.ts`,
-`src/lib/core/build/build-for-federation-chunks.spec.ts`
-Issues: core#138, core#144, core#145, core#246
+`src/lib/core/build/build-for-federation-chunks.spec.ts`,
+`src/lib/core/build/shared-bundle-plan.spec.ts`
+Issues: core#138, core#144, core#145, core#246, core#249
 History: core#6 dense chunk list per bundle → core#141 content-named, shared by name → core#145
 build-local, unshared, mappings built apart from exposed modules
 Related: [Mapping packages](mapping-packages.md), [Build adapter](build-adapter.md),
