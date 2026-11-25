@@ -312,6 +312,43 @@ describe('shareAllCore (end-to-end via injected repository)', () => {
     expect(Object.keys(result!).sort()).toEqual(['@org/a', '@org/b', 'rxjs']);
   });
 
+  // core#247: the secondaries lookup for an uninstalled override walked a relative path forever.
+  it('completes for a relative projectPath with an override that is not installed', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const verbose = vi.spyOn(logger, 'verbose').mockImplementation(() => undefined);
+    // memory-io resolves relative keys against cwd, as nodeIo would
+    const memory = createMemoryIo().setFile(
+      path.resolve('packages/app/package.json'),
+      JSON.stringify({ dependencies: { mylib: '^1.2.3' } })
+    );
+    let probes = 0;
+    const io = {
+      ...memory,
+      exists: (p: string) => {
+        if (++probes > 200) throw new Error('walk did not terminate');
+        return memory.exists(p);
+      },
+    };
+    const repo = createPackageJsonRepository(io);
+
+    const result = shareAllCore(
+      io,
+      { singleton: true, includeSecondaries: false },
+      {
+        projectPath: 'packages/app',
+        overrides: { '@not/exist': { singleton: true, strictVersion: false } },
+      },
+      repo
+    );
+
+    expect(Object.keys(result!).sort()).toEqual(['@not/exist', 'mylib']);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Could not find @not/exist in any node_modules above packages/app')
+    );
+    warn.mockRestore();
+    verbose.mockRestore();
+  });
+
   // Overrides are explicit additions, so the filter does not apply to them.
   it('keeps overrides that the filter does not cover', () => {
     const io = createMemoryIo().setFile(

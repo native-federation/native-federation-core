@@ -1,10 +1,22 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
 import { createPackageJsonRepository, getPkgFolder } from './package-json-repository.js';
-import { createMemoryIo } from './__test-helpers__/memory-io.js';
+import { createMemoryIo, type MemoryIo } from './__test-helpers__/memory-io.js';
 import { logger } from '../logger.js';
 
 const abs = (p: string) => path.resolve(p);
+
+// The walk is synchronous, so vitest's timeout can never fire on a hang; cap the probes instead.
+const bounded = (io: MemoryIo, max = 50): MemoryIo => {
+  let calls = 0;
+  return {
+    ...io,
+    exists: (p: string) => {
+      if (++calls > max) throw new Error(`walk did not terminate (last probe: ${p})`);
+      return io.exists(p);
+    },
+  };
+};
 
 describe('getPkgFolder', () => {
   it('returns the first segment for an unscoped package', () => {
@@ -79,10 +91,44 @@ describe('createPackageJsonRepository', () => {
 
     it('returns null and logs when the dependency cannot be found', () => {
       const verbose = vi.spyOn(logger, 'verbose').mockImplementation(() => undefined);
-      const repo = createPackageJsonRepository(createMemoryIo());
+      const repo = createPackageJsonRepository(bounded(createMemoryIo()));
 
       expect(repo.findDepPackageJson('missing', abs('/ws'))).toBeNull();
       expect(verbose).toHaveBeenCalled();
+    });
+
+    // core#247: a relative walk used to oscillate between '.' and './' forever.
+    it.each(['packages/action-tracker/core', './packages/a', 'packages\\a', '', '../x'])(
+      'returns null for a missing dependency from relative %j',
+      start => {
+        vi.spyOn(logger, 'verbose').mockImplementation(() => undefined);
+        const repo = createPackageJsonRepository(bounded(createMemoryIo()));
+
+        expect(repo.findDepPackageJson('@not/exist', start)).toBeNull();
+      }
+    );
+
+    // memory-io resolves relative keys against cwd, the same place nodeIo looks.
+    it('finds a dependency from a relative start and keeps the path relative', () => {
+      const io = bounded(createMemoryIo().setFile(abs('node_modules/react/package.json'), '{}'));
+      const repo = createPackageJsonRepository(io);
+
+      expect(repo.findDepPackageJson('react', 'packages/a')).toBe(
+        path.join('node_modules', 'react', 'package.json')
+      );
+    });
+
+    it('prefers the nearest node_modules from a relative start', () => {
+      const io = bounded(
+        createMemoryIo()
+          .setFile(abs('node_modules/react/package.json'), '{}')
+          .setFile(abs('packages/a/node_modules/react/package.json'), '{}')
+      );
+      const repo = createPackageJsonRepository(io);
+
+      expect(repo.findDepPackageJson('react', 'packages/a/src')).toBe(
+        path.join('packages', 'a', 'node_modules', 'react', 'package.json')
+      );
     });
   });
 });

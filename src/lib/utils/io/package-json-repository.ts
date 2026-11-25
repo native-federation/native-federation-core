@@ -74,7 +74,10 @@ export function createPackageJsonRepository(
 
     while (path.dirname(directory) !== directory) {
       if (io.exists(mainPkgJsonPath)) break;
-      directory = normalize(path.dirname(directory), true);
+      // A relative walk ends at './', whose raw dirname '.' never equals it.
+      const parent = normalize(path.dirname(directory), true);
+      if (parent === directory) break;
+      directory = parent;
       mainPkgJsonPath = path.join(directory, 'node_modules', mainPkgName, 'package.json');
     }
 
