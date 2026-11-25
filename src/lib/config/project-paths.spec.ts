@@ -5,7 +5,7 @@ import { cwd } from 'process';
 import {
   findMappingsTsConfigCore,
   findRootTsConfigJsonCore,
-  inferProjectPath,
+  inferProjectPathCore,
 } from './project-paths.js';
 import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
 import { usePackageJson, useTsConfig, useWorkspace } from './configuration-context.js';
@@ -198,7 +198,7 @@ describe('findMappingsTsConfigCore', () => {
 });
 
 // core#251: a relative projectPath reads the same package.json whichever directory the build starts in.
-describe('inferProjectPath', () => {
+describe('inferProjectPathCore', () => {
   const WS = path.resolve('/ws');
   const io = createMemoryIo();
 
@@ -209,17 +209,17 @@ describe('inferProjectPath', () => {
 
   it('resolves a relative path against the workspace root', () => {
     useWorkspace(WS, io);
-    expect(inferProjectPath('apps/shell', io)).toBe(path.join(WS, 'apps/shell'));
+    expect(inferProjectPathCore('apps/shell', io)).toBe(path.join(WS, 'apps/shell'));
   });
 
   it('resolves a relative path against cwd without a workspace root', () => {
-    expect(inferProjectPath('apps/shell', io)).toBe(path.join(ROOT, 'apps/shell'));
+    expect(inferProjectPathCore('apps/shell', io)).toBe(path.join(ROOT, 'apps/shell'));
   });
 
   it('keeps an absolute path, normalized', () => {
     useWorkspace(WS, io);
     const abs = path.resolve('/elsewhere/app');
-    expect(inferProjectPath(path.join(abs, 'x', '..') + path.sep, io)).toBe(abs);
+    expect(inferProjectPathCore(path.join(abs, 'x', '..') + path.sep, io)).toBe(abs);
   });
 
   // Every other branch returns an on-disk spelling; an explicit path must agree with them.
@@ -227,14 +227,14 @@ describe('inferProjectPath', () => {
     const misCased = path.resolve('/drive/ws/app');
     const onDisk = path.resolve('/DRIVE/ws/app');
     const cased = createMemoryIo().setDiskCase(misCased, onDisk);
-    expect(inferProjectPath(misCased, cased)).toBe(onDisk);
+    expect(inferProjectPathCore(misCased, cased)).toBe(onDisk);
   });
 
   it('falls back to the package.json folder, then the workspace root, then cwd', () => {
-    expect(inferProjectPath(undefined, io)).toBe(ROOT);
+    expect(inferProjectPathCore(undefined, io)).toBe(ROOT);
     useWorkspace(WS, io);
-    expect(inferProjectPath('', io)).toBe(WS);
+    expect(inferProjectPathCore('', io)).toBe(WS);
     usePackageJson(path.join(WS, 'apps/shell/package.json'));
-    expect(inferProjectPath(undefined, io)).toBe(path.join(WS, 'apps/shell'));
+    expect(inferProjectPathCore(undefined, io)).toBe(path.join(WS, 'apps/shell'));
   });
 });

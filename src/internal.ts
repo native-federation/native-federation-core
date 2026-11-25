@@ -8,6 +8,7 @@ export {
   hashFile,
 } from './lib/utils/hash.js';
 export { toDiskCase } from './lib/utils/disk-case.js';
+export { inferProjectPath } from './lib/config/project-paths.js';
 export { logger, setLogLevel } from './lib/utils/logger.js';
 
 export { RebuildQueue, type TrackResult } from './lib/core/rebuild-queue.js';

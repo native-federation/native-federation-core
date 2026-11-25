@@ -20,7 +20,7 @@ import type {
   SharedExternalsConfig,
   ShareExternalsOptions,
 } from '../domain/config/external-config.contract.js';
-import { findPackageJson, inferProjectPath } from './project-paths.js';
+import { findPackageJson, inferProjectPathCore } from './project-paths.js';
 import { isInferVersion, lookupVersion, applyAutoRequiredOptions } from './version-lookup.js';
 import { addSecondaries, getSecondaries } from './secondaries.js';
 import { matchesWildcard } from '../utils/path-patterns.js';
@@ -92,7 +92,7 @@ export function shareAllCore(
   } = {},
   repo: PackageJsonRepository = sharedPackageJsonRepository
 ): ResolvedSharedExternalsConfig {
-  const projectPath = inferProjectPath(opts.projectPath, io);
+  const projectPath = inferProjectPathCore(opts.projectPath, io);
 
   const versionMaps = getVersionMaps(projectPath, projectPath, repo);
   const sharedExternals: ShareExternalsOptions = {};
@@ -206,7 +206,7 @@ export function shareCore(
   skipList = DEFAULT_SKIP_LIST,
   repo: PackageJsonRepository = sharedPackageJsonRepository
 ): ResolvedSharedExternalsConfig {
-  projectPath = inferProjectPath(projectPath, io);
+  projectPath = inferProjectPathCore(projectPath, io);
   const packagePath = findPackageJson(io, projectPath);
 
   const preparedSkipList = prepareSkipList(skipList);

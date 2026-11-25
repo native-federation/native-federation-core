@@ -98,10 +98,13 @@ export function findPackageJson(io: FileReaderPort, folder: string): string {
   );
 }
 
-export function inferProjectPath(
-  projectPath: string | undefined,
-  io: FileReaderPort = nodeIo
-): string {
+// Matches how fromPackageJson()/share() read a projectPath, for adapter helpers that walk it too.
+// The workspace root is only in the context while a config evaluates.
+export function inferProjectPath(projectPath?: string): string {
+  return inferProjectPathCore(projectPath, nodeIo);
+}
+
+export function inferProjectPathCore(projectPath: string | undefined, io: FileReaderPort): string {
   const { packageJson, workspaceRoot } = getConfigContext();
   if (projectPath) {
     return toDiskCaseCore(io, path.resolve(workspaceRoot || cwd(), projectPath));
