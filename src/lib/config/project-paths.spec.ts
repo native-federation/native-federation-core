@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { logger } from '../utils/logger.js';
 import * as path from 'path';
 import { cwd } from 'process';
-import { findMappingsTsConfigCore, findRootTsConfigJsonCore } from './project-paths.js';
+import {
+  findMappingsTsConfigCore,
+  findRootTsConfigJsonCore,
+  inferProjectPath,
+} from './project-paths.js';
 import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
 import { usePackageJson, useTsConfig, useWorkspace } from './configuration-context.js';
 
@@ -190,5 +194,39 @@ describe('findMappingsTsConfigCore', () => {
       .setFile(path.join(ROOT, 'tsconfig.json'), '{}');
 
     expect(findMappingsTsConfigCore(io)).toBe(path.join(ROOT, 'tsconfig.json'));
+  });
+});
+
+// core#251: a relative projectPath reads the same package.json whichever directory the build starts in.
+describe('inferProjectPath', () => {
+  const WS = path.resolve('/ws');
+  const io = createMemoryIo();
+
+  afterEach(() => {
+    useWorkspace('');
+    usePackageJson(undefined);
+  });
+
+  it('resolves a relative path against the workspace root', () => {
+    useWorkspace(WS, io);
+    expect(inferProjectPath('apps/shell', io)).toBe(path.join(WS, 'apps/shell'));
+  });
+
+  it('resolves a relative path against cwd without a workspace root', () => {
+    expect(inferProjectPath('apps/shell', io)).toBe(path.join(ROOT, 'apps/shell'));
+  });
+
+  it('keeps an absolute path as given', () => {
+    useWorkspace(WS, io);
+    const abs = path.resolve('/elsewhere/app');
+    expect(inferProjectPath(abs, io)).toBe(abs);
+  });
+
+  it('falls back to the package.json folder, then the workspace root, then cwd', () => {
+    expect(inferProjectPath(undefined, io)).toBe(ROOT);
+    useWorkspace(WS, io);
+    expect(inferProjectPath('', io)).toBe(WS);
+    usePackageJson(path.join(WS, 'apps/shell/package.json'));
+    expect(inferProjectPath(undefined, io)).toBe(path.join(WS, 'apps/shell'));
   });
 });

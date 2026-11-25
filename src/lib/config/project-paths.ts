@@ -102,16 +102,11 @@ export function inferProjectPath(
   projectPath: string | undefined,
   io: FileReaderPort = nodeIo
 ): string {
-  if (!projectPath && getConfigContext().packageJson) {
-    projectPath = path.dirname(getConfigContext().packageJson || '');
+  const { packageJson, workspaceRoot } = getConfigContext();
+  if (projectPath) {
+    if (path.isAbsolute(projectPath)) return projectPath;
+    return path.resolve(workspaceRoot || toDiskCaseCore(io, cwd()), projectPath);
   }
-
-  if (!projectPath && getConfigContext().workspaceRoot) {
-    projectPath = getConfigContext().workspaceRoot || '';
-  }
-
-  if (!projectPath) {
-    projectPath = toDiskCaseCore(io, cwd());
-  }
-  return projectPath;
+  if (packageJson) return path.dirname(packageJson);
+  return workspaceRoot || toDiskCaseCore(io, cwd());
 }
