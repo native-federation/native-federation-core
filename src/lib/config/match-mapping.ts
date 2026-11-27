@@ -1,8 +1,10 @@
 import * as path from 'path';
 import type { PathToImport } from '../domain/utils/mapped-path.contract.js';
 import { parseWildcard, substituteWildcard, toPosix } from '../utils/path-patterns.js';
+import { MODULE_EXTENSIONS } from '../utils/module-file.js';
 
-const MODULE_EXTENSION_PATTERN = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
+const EXTENSION_GROUP = `(${MODULE_EXTENSIONS.join('|')})`;
+const MODULE_EXTENSION_PATTERN = new RegExp(`\\.${EXTENSION_GROUP}$`);
 
 /** Declaration files describe a module, they are not one. */
 const DECLARATION_PATTERN = /\.d\.(ts|mts|cts)$/;
@@ -49,7 +51,7 @@ export function matchMapping(filePath: string, sharedMappings: PathToImport): st
 /**
  * Detect if it's a barrel file which is inferred by typescript
  */
-const INDEX_PATTERN = /\/index\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
+const INDEX_PATTERN = new RegExp(`/index\\.${EXTENSION_GROUP}$`);
 
 function isIndexOf(filePath: string, dirPath: string): boolean {
   return filePath.startsWith(dirPath + path.sep) && INDEX_PATTERN.test(filePath);

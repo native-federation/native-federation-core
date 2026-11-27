@@ -11,6 +11,7 @@ import type {
 } from '../domain/config/federation-config.contract.js';
 import { matchesWildcard } from '../utils/path-patterns.js';
 import { formatDifference } from '../utils/format-list.js';
+import { resolveModuleFile } from '../utils/module-file.js';
 
 type SelectionEntry = string | [string[], MappingConfigInput];
 
@@ -68,7 +69,7 @@ export function getRawMappedPathsCore(
     // An empty target list is the compile's error to report (TS5066).
     const target = mappings[key]?.[0];
     if (!target) continue;
-    const libPath = path.normalize(path.join(base, target));
+    const libPath = resolveTarget(io, path.normalize(path.join(base, target)));
 
     if (shareAll || patterns.some(pattern => matchesWildcard(key, pattern))) {
       mappedPaths[libPath] = key;
@@ -76,6 +77,13 @@ export function getRawMappedPathsCore(
   }
 
   return { paths: mappedPaths, configs, keys: Object.keys(mappings), patterns, packages };
+}
+
+// Only a target that names nothing on disk gets an extension: a folder stays a folder, so
+// everything under it keeps counting as part of the mapping.
+function resolveTarget(io: FileReaderPort, libPath: string): string {
+  if (io.isFile(libPath) || io.isDirectory(libPath)) return libPath;
+  return resolveModuleFile(io, libPath) ?? libPath;
 }
 
 // Resolved like the compile resolves them: through `extends`, against `baseUrl` or else the
