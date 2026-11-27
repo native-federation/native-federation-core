@@ -19,7 +19,7 @@ export interface ExternalConfig {
   version?: string;
   includeSecondaries?: IncludeSecondariesOptions;
   platform?: 'browser' | 'node';
-  build?: 'separate' | 'package';
+  build?: 'separate' | 'package' | 'pool';
   pool?: string;
   chunks?: boolean;
   shareScope?: string;
@@ -43,7 +43,7 @@ export interface NormalizedExternalConfig {
   // Set only when the user set it on an external with a bundle of its own.
   chunks?: boolean;
   platform: 'browser' | 'node';
-  build: 'default' | 'separate' | 'package';
+  build: 'default' | 'separate' | 'package' | 'pool';
   packageInfo?: {
     entryPoint: string;
     version: string;

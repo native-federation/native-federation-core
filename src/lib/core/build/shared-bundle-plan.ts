@@ -1,6 +1,6 @@
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
-import { sharedBundleName, sharedBundlePackage } from '../../utils/normalize.js';
+import { sharedBundleOf } from '../../utils/normalize.js';
 
 export interface SharedBundlePlan {
   bundleName: string;
@@ -42,6 +42,7 @@ export function splitShared(shared: Record<string, NormalizedExternalConfig>): S
 interface SeparateGroup {
   entries: Record<string, NormalizedExternalConfig>;
   chunks?: boolean;
+  ownPackage?: string;
 }
 
 function planSeparate(
@@ -53,20 +54,24 @@ function planSeparate(
   const grouped: Record<string, SeparateGroup> = {};
 
   for (const [key, shared] of Object.entries(separate)) {
-    const packageName = sharedBundlePackage(key, shared.build);
-    const group = (grouped[packageName] ??= { entries: {} });
+    const { bundleName, ownPackage } = sharedBundleOf(key, shared);
+    const group = (grouped[bundleName] ??= { entries: {}, ownPackage });
     group.entries[key] = shared;
     // Until 5.0 a disagreement only warns (normalizeShared), and the first value wins.
     group.chunks ??= shared.chunks;
   }
 
-  return Object.entries(grouped).map(([packageName, { entries, chunks }]) => ({
-    bundleName: sharedBundleName(platform, packageName),
+  return Object.entries(grouped).map(([bundleName, { entries, chunks, ownPackage }]) => ({
+    bundleName,
     platform,
     chunks: chunks ?? globalChunks,
     entries,
     // The package and its own subpaths are what this bundle builds; 'react-dom' is not 'react's.
-    externals: externals.filter(e => e !== packageName && !e.startsWith(packageName + '/')),
+    // A pool keeps them all, like the combined bundle.
+    externals:
+      ownPackage === undefined
+        ? externals
+        : externals.filter(e => e !== ownPackage && !e.startsWith(ownPackage + '/')),
     keys: Object.keys(entries),
     kind: 'separate',
   }));
