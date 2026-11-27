@@ -12,6 +12,11 @@
   `strictVersion: true`, `requiredVersion: 'auto'` and `build: 'package'`. A passed base replaces
   that default instead of merging into it. A config without `shared` keeps its own default, without
   `build: 'package'`.
+- An inferred `requiredVersion` keeps a declared semver range (`{ range }` still applies to it). A
+  declared value that is not (`catalog:`, `workspace:`, `npm:`, `file:`, a dist-tag) publishes `~`
+  on the installed version, floored (`17.3.5` → `~17.3.0`; a prerelease keeps its tag,
+  `~18.0.0-rc.1`), or `{ range }` applied to it. With nothing installed, or no valid `version` in
+  its `package.json`, the declared value is kept.
 - An override configures the package it names; it never removes another package whose name starts
   with it.
 - Secondary entry points core expands from a shared package inherit its settings.

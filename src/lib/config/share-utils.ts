@@ -21,7 +21,7 @@ import type {
   ShareExternalsOptions,
 } from '../domain/config/external-config.contract.js';
 import { findPackageJson, inferProjectPathCore } from './project-paths.js';
-import { isInferVersion, lookupVersion, applyAutoRequiredOptions } from './version-lookup.js';
+import { isInferVersion, lookupVersion, publishedRequiredVersion } from './version-lookup.js';
 import { addSecondaries, getSecondaries } from './secondaries.js';
 import { matchesWildcard } from '../utils/path-patterns.js';
 import { inferPackageFromSecondary } from '../utils/normalize.js';
@@ -124,14 +124,18 @@ export function shareAllCore(
 
       let requiredVersion: string;
       if (inferVersion) {
-        // versions[key] is the raw value from package.json (e.g. '^1.2.3' or '1.2.3').
-        const base = versions[key]!;
-        requiredVersion = isAutoObject
-          ? applyAutoRequiredOptions(base, {
-              range: requiredVersionCfg.range,
-              version: requiredVersionCfg.version ?? config.version,
-            })
-          : base;
+        requiredVersion = publishedRequiredVersion(
+          versions[key]!,
+          key,
+          projectPath,
+          repo,
+          isAutoObject
+            ? {
+                range: requiredVersionCfg.range,
+                version: requiredVersionCfg.version ?? config.version,
+              }
+            : undefined
+        );
       } else {
         requiredVersion = requiredVersionCfg as string;
       }
@@ -247,10 +251,13 @@ export function shareCore(
       // raw already carries the explicit version, if any — no need to pass it again below.
       const raw = resolvedVersion ?? lookupVersion(key, projectPath, repo);
 
-      shareObject.requiredVersion =
-        isAutoObject && requiredVersionCfg.range
-          ? applyAutoRequiredOptions(raw, { range: requiredVersionCfg.range })
-          : raw;
+      shareObject.requiredVersion = publishedRequiredVersion(
+        raw,
+        key,
+        projectPath,
+        repo,
+        isAutoObject && requiredVersionCfg.range ? { range: requiredVersionCfg.range } : undefined
+      );
 
       // The declared range's floor, not the installed version: only a fallback where none is installed.
       shareObject.version = raw.replace(/^\D*/, '');
