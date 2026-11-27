@@ -33,6 +33,8 @@
   same library differently publish it differently, and core cannot detect that.
 - Without `denseExternals`, a host can still take one package's entry points from different
   remotes, as for any multi-entry library.
+- A mapping name that is not npm-style warns, unless a declaration covers it; it never fails the
+  build.
 
 Enforced by: `src/lib/config/mapping-utils.spec.ts`, `src/lib/core/output/densify-externals.spec.ts`
 Issues: core#198, core#213, core#214, core#215
