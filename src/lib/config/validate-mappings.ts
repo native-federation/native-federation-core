@@ -65,12 +65,16 @@ export function isNpmStylePackage(importName: string): boolean {
 
 // A mapping is published and grouped (`build: 'package'`, pruning, denseExternals) by the package
 // its import name implies, so a name like '@shared' or '~app/utils' has no sound package to
-// group under.
-export function warnNonNpmMappingNames(paths: PathToImport): void {
+// group under. A `.package()` declaration names the package itself, so its mappings are exempt.
+export function warnNonNpmMappingNames(
+  paths: PathToImport,
+  declaredPrefixes: readonly string[]
+): void {
   const offenders = [
     ...new Set(
       Object.values(paths)
         .filter(importName => !isNpmStylePackage(importName))
+        .filter(importName => declaredPackageOf(importName, declaredPrefixes) === undefined)
         .map(inferPackageFromSecondary)
     ),
   ];

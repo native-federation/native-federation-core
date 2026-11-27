@@ -119,20 +119,39 @@ describe('warnNonNpmMappingNames', () => {
 
   it('stays quiet for npm-style names', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-    warnNonNpmMappingNames({ '/ws/libs/ui/index.ts': '@org/ui' });
+    warnNonNpmMappingNames({ '/ws/libs/ui/index.ts': '@org/ui' }, []);
     expect(warn).not.toHaveBeenCalled();
   });
 
   // Secondaries of one offending package collapse into a single warning.
   it('warns once per offending package', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-    warnNonNpmMappingNames({
-      '/ws/libs/a/index.ts': '~app/a',
-      '/ws/libs/b/index.ts': '~app/b',
-      '/ws/libs/ui/index.ts': '@org/ui',
-    });
+    warnNonNpmMappingNames(
+      {
+        '/ws/libs/a/index.ts': '~app/a',
+        '/ws/libs/b/index.ts': '~app/b',
+        '/ws/libs/ui/index.ts': '@org/ui',
+      },
+      []
+    );
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("'~app'"));
+  });
+
+  // A declaration names the package, so core does not have to infer it from the name.
+  it('stays quiet for mappings under a declared package', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    warnNonNpmMappingNames(
+      {
+        '/ws/libs/a/index.ts': '~app/a',
+        '/ws/libs/b/index.ts': '~app/b',
+        '/ws/libs/s/index.ts': '#internal/ui',
+        '/ws/libs/o/index.ts': '~other/x',
+      },
+      ['~app', '#internal']
+    );
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("'~other'"));
   });
 });
 
