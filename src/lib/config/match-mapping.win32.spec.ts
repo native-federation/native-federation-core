@@ -1,9 +1,10 @@
+import type * as nodePath from 'path';
 import { describe, expect, it, vi } from 'vitest';
 
 // Mapped paths are built with path.join/normalize, so on Windows they carry backslashes. Running
 // match-mapping against path.win32 reproduces that on any CI host.
 vi.mock('path', async () => {
-  const actual = await vi.importActual<typeof import('path')>('path');
+  const actual = await vi.importActual<typeof nodePath>('path');
   return { ...actual.win32, default: actual.win32 };
 });
 
