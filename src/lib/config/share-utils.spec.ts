@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
+import semver from 'semver';
 import { fromPackageJson, shareAllCore, shareCore } from './share-utils.js';
 import { DEFAULT_SKIP_LIST } from './default-skip-list.js';
 import { logger } from '../utils/logger.js';
 import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
 import { createPackageJsonRepository } from '../utils/io/package-json-repository.js';
 import { useWorkspace } from './configuration-context.js';
+import type { ShareAllExternalsOptions } from '../domain/config/external-config.contract.js';
 
 describe('shareCore (end-to-end via injected repository)', () => {
   const PROJECT = path.resolve('/ws/app');
@@ -538,6 +540,107 @@ describe('shareAllCore (end-to-end via injected repository)', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('mutually exclusive'));
     warn.mockRestore();
   });
+
+  // An override key used to act as a name prefix, so `react` also removed `react-dom`.
+  describe('an override names one package', () => {
+    const reactDeps = (extra: Record<string, string> = {}) => {
+      const io = createMemoryIo().setFile(
+        path.join(PROJECT, 'package.json'),
+        JSON.stringify({
+          dependencies: {
+            react: '^19.0.0',
+            'react-dom': '^19.0.0',
+            'react-router': '^7.0.0',
+            ...extra,
+          },
+        })
+      );
+      return { io, repo: createPackageJsonRepository(io) };
+    };
+    const reactOverride = {
+      react: { singleton: false, requiredVersion: '~19.1.0', includeSecondaries: false },
+    };
+
+    it('keeps packages whose name starts with the override key', () => {
+      const { io, repo } = reactDeps();
+
+      const result = shareAllCore(
+        io,
+        { singleton: true, includeSecondaries: false },
+        { projectPath: PROJECT, overrides: reactOverride },
+        repo
+      );
+
+      expect(Object.keys(result!).sort()).toEqual(['react', 'react-dom', 'react-router']);
+      expect(result!['react']).toMatchObject({ singleton: false, requiredVersion: '~19.1.0' });
+      expect(result!['react-dom']).toMatchObject({ singleton: true, requiredVersion: '^19.0.0' });
+      expect(result!['react-router']).toMatchObject({ singleton: true, requiredVersion: '^7.0.0' });
+    });
+
+    it('keeps a scoped package that extends the override key', () => {
+      const io = createMemoryIo().setFile(
+        path.join(PROJECT, 'package.json'),
+        JSON.stringify({ dependencies: { '@scope/pkg': '^1.0.0', '@scope/pkg-extra': '^1.0.0' } })
+      );
+      const repo = createPackageJsonRepository(io);
+
+      const result = shareAllCore(
+        io,
+        { singleton: true, includeSecondaries: false },
+        {
+          projectPath: PROJECT,
+          overrides: { '@scope/pkg': { singleton: false, includeSecondaries: false } },
+        },
+        repo
+      );
+
+      expect(Object.keys(result!).sort()).toEqual(['@scope/pkg', '@scope/pkg-extra']);
+      expect(result!['@scope/pkg-extra']).toMatchObject({ singleton: true });
+    });
+
+    it('applies a patch to a package whose name starts with the override key', () => {
+      const { io, repo } = reactDeps();
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+      const result = shareAllCore(
+        io,
+        { singleton: true, includeSecondaries: false },
+        {
+          projectPath: PROJECT,
+          overrides: reactOverride,
+          patches: [{ patterns: ['react-dom'], cfg: { strictVersion: true } }],
+        },
+        repo
+      );
+
+      expect(result!['react-dom']).toMatchObject({ singleton: true, strictVersion: true });
+      expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('react-dom'));
+      warn.mockRestore();
+    });
+
+    it('reports a patch on an unknown package as matching nothing, not as overridden', () => {
+      const { io, repo } = reactDeps();
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+      shareAllCore(
+        io,
+        { singleton: true, includeSecondaries: false },
+        {
+          projectPath: PROJECT,
+          overrides: reactOverride,
+          patches: [{ patterns: ['react-foo'], cfg: { strictVersion: true } }],
+        },
+        repo
+      );
+
+      const patchWarnings = warn.mock.calls
+        .map(([m]) => String(m))
+        .filter(m => m.includes('react-foo'));
+      expect(patchWarnings).toHaveLength(1);
+      expect(patchWarnings[0]).toContain('matches no shared package');
+      warn.mockRestore();
+    });
+  });
 });
 
 // fromPackageJson reads through nodeIo, so these run against this repo's own package.json; they
@@ -637,5 +740,119 @@ describe('fromPackageJson() without a base config', () => {
 
     expect(shared['chalk']!.strictVersion).toBeUndefined();
     expect(shared['chalk']!.build).toBeUndefined();
+  });
+});
+
+// The orchestrator cannot parse a protocol value or a dist-tag, so these publish a range on the
+// installed version instead.
+describe('a declared value that is not a semver range', () => {
+  const PROJECT = path.resolve('/ws/app');
+
+  const workspace = (dependencies: Record<string, string>, installed: Record<string, object>) => {
+    const io = createMemoryIo().setFile(
+      path.join(PROJECT, 'package.json'),
+      JSON.stringify({ dependencies })
+    );
+    for (const [name, pkg] of Object.entries(installed)) {
+      io.setFile(path.join(PROJECT, 'node_modules', name, 'package.json'), JSON.stringify(pkg));
+    }
+    return { io, repo: createPackageJsonRepository(io) };
+  };
+
+  const viaShareAll = (
+    dependencies: Record<string, string>,
+    installed: Record<string, object>,
+    requiredVersion?: ShareAllExternalsOptions['requiredVersion']
+  ) => {
+    const { io, repo } = workspace(dependencies, installed);
+    return shareAllCore(
+      io,
+      { singleton: true, includeSecondaries: false, requiredVersion },
+      { projectPath: PROJECT },
+      repo
+    )!;
+  };
+
+  it.each(['catalog:', 'workspace:^1.2.0', 'npm:other@^1.0.0', 'file:../lib', 'latest'])(
+    'publishes ~ on the installed version, floored, for %s through shareAll',
+    declared => {
+      const result = viaShareAll({ mylib: declared }, { mylib: { version: '17.3.5' } });
+
+      expect(result['mylib']!.requiredVersion).toBe('~17.3.0');
+      expect(semver.satisfies('17.3.5', result['mylib']!.requiredVersion!)).toBe(true);
+    }
+  );
+
+  // ~18.0.0 would not admit 18.0.0-rc.1 itself, nor another copy at rc.2.
+  it('keeps the tag of an installed prerelease', () => {
+    const result = viaShareAll({ mylib: 'catalog:' }, { mylib: { version: '18.0.0-rc.1' } });
+
+    expect(result['mylib']!.requiredVersion).toBe('~18.0.0-rc.1');
+    expect(semver.satisfies('18.0.0-rc.1', result['mylib']!.requiredVersion!)).toBe(true);
+  });
+
+  it('publishes ~ on the installed version, floored, through share', () => {
+    const { io, repo } = workspace({ mylib: 'catalog:' }, { mylib: { version: '17.3.5' } });
+
+    const result = shareCore(
+      io,
+      { mylib: { singleton: true, requiredVersion: 'auto', includeSecondaries: false } },
+      PROJECT,
+      DEFAULT_SKIP_LIST,
+      repo
+    );
+
+    expect(result['mylib']!.requiredVersion).toBe('~17.3.0');
+  });
+
+  it('applies { range } to the installed version, without the floor', () => {
+    const shareAllResult = viaShareAll(
+      { mylib: 'workspace:^1.2.0' },
+      { mylib: { version: '1.4.2' } },
+      { range: '^' }
+    );
+    const { io, repo } = workspace({ mylib: 'workspace:^1.2.0' }, { mylib: { version: '1.4.2' } });
+    const shareResult = shareCore(
+      io,
+      { mylib: { requiredVersion: { range: '^' }, includeSecondaries: false } },
+      PROJECT,
+      DEFAULT_SKIP_LIST,
+      repo
+    );
+
+    expect(shareAllResult['mylib']!.requiredVersion).toBe('^1.4.2');
+    expect(shareResult['mylib']!.requiredVersion).toBe('^1.4.2');
+  });
+
+  it('copies a semver range unchanged', () => {
+    const result = viaShareAll({ mylib: '^17.0.0' }, { mylib: { version: '17.3.5' } });
+
+    expect(result['mylib']!.requiredVersion).toBe('^17.0.0');
+  });
+
+  it.each([
+    ['nothing is installed', {}],
+    // common for a workspace:* link
+    ['the installed package.json has no version', { mylib: { name: 'mylib' } }],
+  ])('keeps the declared value when %s', (_label, installed) => {
+    const result = viaShareAll({ mylib: 'workspace:*' }, installed);
+
+    expect(result['mylib']!.requiredVersion).toBe('workspace:*');
+  });
+
+  it('applies { range } to an explicit version instead of the installed one', () => {
+    const result = viaShareAll(
+      { mylib: 'catalog:' },
+      { mylib: { version: '17.3.5' } },
+      { range: '^', version: '2.0.0' }
+    );
+
+    expect(result['mylib']!.requiredVersion).toBe('^2.0.0');
+  });
+
+  it('leaves a requiredVersion the user wrote untouched', () => {
+    const result = viaShareAll({ mylib: 'catalog:' }, { mylib: { version: '17.3.5' } }, '^17.1.0');
+
+    expect(result['mylib']!.requiredVersion).toBe('^17.1.0');
   });
 });
