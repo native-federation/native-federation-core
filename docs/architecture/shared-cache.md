@@ -12,6 +12,9 @@
 - A hit is also checked against the current plan, so a package that has since become external is
   not left inlined in a cached bundle. When in doubt, the cache misses.
 - npm-linked packages are also keyed on their content.
+- A bundle holding several packages (the combined bundle, a `build: 'pool'` bundle) is one cache
+  entry: a change to any of its packages, or to which packages it holds, misses it for all of
+  them.
 - A hit runs no build, so data an adapter needs from that build is stored with the cache entry
   (`cacheData`).
 - A shared run replaces the previous results only when every shared bundle has finished. A failed

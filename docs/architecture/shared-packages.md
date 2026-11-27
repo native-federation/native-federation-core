@@ -8,6 +8,10 @@
 - It has one version for all its entry points: the installed one, unless the config pins a
   version. The declared range is a last resort, with a warning. A vendored copy of an installed
   package pins its version, or it is published as the installed one.
+- `fromPackageJson()` without a base config shares every dependency with `singleton: true`,
+  `strictVersion: true`, `requiredVersion: 'auto'` and `build: 'package'`. A passed base replaces
+  that default instead of merging into it. A config without `shared` keeps its own default, without
+  `build: 'package'`.
 - Secondary entry points core expands from a shared package inherit its settings.
 - With `ignoreUnusedDeps` (the default), only the entry points the build reaches are published.
   A shared package nothing reaches is dropped; `keepAll` keeps every entry point of one that is
@@ -32,6 +36,9 @@
 
 ## Rejected
 
+- Merging a passed base into the `fromPackageJson()` default: every existing config that leaves out
+  `strictVersion` or `build` would silently switch to strict versions and per-package bundles, and
+  `build` has no value that turns it back off.
 - Taking the version from the declared range in `package.json`: a range does not name the bytes,
   so an upgrade would keep serving old files under the old version.
 

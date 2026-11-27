@@ -26,8 +26,8 @@ import type {
 import { logger } from '../utils/logger.js';
 import {
   inferPackageFromSecondary,
-  sharedBundleName,
-  sharedBundlePackage,
+  normalizePackageName,
+  sharedBundleOf,
 } from '../utils/normalize.js';
 
 export function withNativeFederation(config: FederationConfig): NormalizedFederationConfig {
@@ -120,6 +120,12 @@ function normalizeShared(
     const key = cur.replace(/\\/g, '/');
     const sharedConfig = shared[cur]!;
     const build = sharedConfig.build ?? 'default';
+    if (build === 'pool' && !normalizePackageName(sharedConfig.pool ?? '')) {
+      throw new Error(
+        `Shared external '${key}' sets build: 'pool' without a pool. Add pool: '<name>' to build ` +
+          `it with the other packages of that pool, or use build: 'package'.`
+      );
+    }
 
     // Without a bundle of its own, an external is built with the global `chunks`.
     const ownChunks = build === 'default' ? undefined : sharedConfig.chunks;
@@ -164,7 +170,7 @@ function normalizeShared(
   );
   warnChunksConflicts(result);
   result = withPackagePreload(result);
-  warnPreloadInCombinedBundle(result);
+  warnPreloadInSharedBundle(result);
 
   return result;
 }
@@ -194,16 +200,16 @@ function withPackagePreload(
 }
 
 // The runtime preloads every chunk of the bundle a preload package is built in.
-function warnPreloadInCombinedBundle(shared: NormalizedSharedExternalsConfig): void {
+function warnPreloadInSharedBundle(shared: NormalizedSharedExternalsConfig): void {
   // Keys, not packages: an entry point inherits preload but keeps its own build.
   const keys = Object.entries(shared)
-    .filter(([, cfg]) => cfg.preload && cfg.build === 'default')
+    .filter(([, cfg]) => cfg.preload && (cfg.build === 'default' || cfg.build === 'pool'))
     .map(([key]) => key);
   if (keys.length === 0) return;
   logger.warn(
-    `Shared externals ${listed(keys)} set preload, but are built in the combined shared ` +
-      `bundle, so the runtime preloads the chunks of every package in it. Give them a bundle of ` +
-      `their own with build: 'package'.`
+    `Shared externals ${listed(keys)} set preload, but are built in a bundle with other ` +
+      `packages (the combined shared bundle or a pool), so the runtime preloads the chunks of ` +
+      `every package in it. Give them a bundle of their own with build: 'package'.`
   );
 }
 
@@ -227,7 +233,7 @@ function warnIgnoredChunks(keys: string[], chunks: boolean): void {
     `Shared externals ${packages.map(p => `'${p}'`).join(', ')} set chunks: ${!chunks}, but ` +
       `in the shared bundle they are built with the global chunks: ` +
       `${chunks}. Remove chunks, or give the external a bundle of its own with build: ` +
-      `'separate' or 'package'.`
+      `'separate', 'package' or 'pool'.`
   );
 }
 
@@ -236,7 +242,7 @@ function warnChunksConflicts(shared: NormalizedSharedExternalsConfig): void {
   const bundles = new Map<string, Record<string, string[]>>();
   for (const [key, cfg] of Object.entries(shared)) {
     if (cfg.chunks === undefined) continue;
-    const bundleName = sharedBundleName(cfg.platform, sharedBundlePackage(key, cfg.build));
+    const { bundleName } = sharedBundleOf(key, cfg);
     const votes = bundles.get(bundleName) ?? {};
     (votes[String(cfg.chunks)] ??= []).push(key);
     bundles.set(bundleName, votes);
