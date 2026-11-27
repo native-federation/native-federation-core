@@ -17,6 +17,8 @@
   on the installed version, floored (`17.3.5` → `~17.3.0`; a prerelease keeps its tag,
   `~18.0.0-rc.1`), or `{ range }` applied to it. With nothing installed, or no valid `version` in
   its `package.json`, the declared value is kept.
+- An override configures the package it names; it never removes another package whose name starts
+  with it.
 - Secondary entry points core expands from a shared package inherit its settings.
 - With `ignoreUnusedDeps` (the default), only the entry points the build reaches are published.
   A shared package nothing reaches is dropped; `keepAll` keeps every entry point of one that is

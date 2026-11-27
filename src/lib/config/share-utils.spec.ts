@@ -540,6 +540,107 @@ describe('shareAllCore (end-to-end via injected repository)', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('mutually exclusive'));
     warn.mockRestore();
   });
+
+  // An override key used to act as a name prefix, so `react` also removed `react-dom`.
+  describe('an override names one package', () => {
+    const reactDeps = (extra: Record<string, string> = {}) => {
+      const io = createMemoryIo().setFile(
+        path.join(PROJECT, 'package.json'),
+        JSON.stringify({
+          dependencies: {
+            react: '^19.0.0',
+            'react-dom': '^19.0.0',
+            'react-router': '^7.0.0',
+            ...extra,
+          },
+        })
+      );
+      return { io, repo: createPackageJsonRepository(io) };
+    };
+    const reactOverride = {
+      react: { singleton: false, requiredVersion: '~19.1.0', includeSecondaries: false },
+    };
+
+    it('keeps packages whose name starts with the override key', () => {
+      const { io, repo } = reactDeps();
+
+      const result = shareAllCore(
+        io,
+        { singleton: true, includeSecondaries: false },
+        { projectPath: PROJECT, overrides: reactOverride },
+        repo
+      );
+
+      expect(Object.keys(result!).sort()).toEqual(['react', 'react-dom', 'react-router']);
+      expect(result!['react']).toMatchObject({ singleton: false, requiredVersion: '~19.1.0' });
+      expect(result!['react-dom']).toMatchObject({ singleton: true, requiredVersion: '^19.0.0' });
+      expect(result!['react-router']).toMatchObject({ singleton: true, requiredVersion: '^7.0.0' });
+    });
+
+    it('keeps a scoped package that extends the override key', () => {
+      const io = createMemoryIo().setFile(
+        path.join(PROJECT, 'package.json'),
+        JSON.stringify({ dependencies: { '@scope/pkg': '^1.0.0', '@scope/pkg-extra': '^1.0.0' } })
+      );
+      const repo = createPackageJsonRepository(io);
+
+      const result = shareAllCore(
+        io,
+        { singleton: true, includeSecondaries: false },
+        {
+          projectPath: PROJECT,
+          overrides: { '@scope/pkg': { singleton: false, includeSecondaries: false } },
+        },
+        repo
+      );
+
+      expect(Object.keys(result!).sort()).toEqual(['@scope/pkg', '@scope/pkg-extra']);
+      expect(result!['@scope/pkg-extra']).toMatchObject({ singleton: true });
+    });
+
+    it('applies a patch to a package whose name starts with the override key', () => {
+      const { io, repo } = reactDeps();
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+      const result = shareAllCore(
+        io,
+        { singleton: true, includeSecondaries: false },
+        {
+          projectPath: PROJECT,
+          overrides: reactOverride,
+          patches: [{ patterns: ['react-dom'], cfg: { strictVersion: true } }],
+        },
+        repo
+      );
+
+      expect(result!['react-dom']).toMatchObject({ singleton: true, strictVersion: true });
+      expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('react-dom'));
+      warn.mockRestore();
+    });
+
+    it('reports a patch on an unknown package as matching nothing, not as overridden', () => {
+      const { io, repo } = reactDeps();
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+
+      shareAllCore(
+        io,
+        { singleton: true, includeSecondaries: false },
+        {
+          projectPath: PROJECT,
+          overrides: reactOverride,
+          patches: [{ patterns: ['react-foo'], cfg: { strictVersion: true } }],
+        },
+        repo
+      );
+
+      const patchWarnings = warn.mock.calls
+        .map(([m]) => String(m))
+        .filter(m => m.includes('react-foo'));
+      expect(patchWarnings).toHaveLength(1);
+      expect(patchWarnings[0]).toContain('matches no shared package');
+      warn.mockRestore();
+    });
+  });
 });
 
 // fromPackageJson reads through nodeIo, so these run against this repo's own package.json; they
