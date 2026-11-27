@@ -111,7 +111,7 @@ export function shareAllCore(
       if (opts.filter && !opts.filter.some(f => matchesWildcard(key, f))) {
         continue;
       }
-      if (!!opts.overrides && Object.keys(opts.overrides).some(o => key.startsWith(o))) {
+      if (opts.overrides && Object.hasOwn(opts.overrides, key)) {
         continue;
       }
 
@@ -182,7 +182,7 @@ function applyPatches(
       if (matches.length === 0) {
         const shadowedByOverride =
           !!overrides &&
-          Object.keys(overrides).some(o => pattern.startsWith(o) || matchesWildcard(o, pattern));
+          Object.keys(overrides).some(o => o === pattern || matchesWildcard(o, pattern));
         logger.warn(
           shadowedByOverride
             ? `Ignoring patch for '${pattern}': it is already configured via 'overrides' ('patch' and 'overrides' are mutually exclusive per external).`
