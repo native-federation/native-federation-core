@@ -1,10 +1,8 @@
 import * as path from 'path';
 import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
 
-export const MODULE_EXTENSIONS = ['ts', 'tsx', 'mts', 'cts', 'js', 'jsx', 'mjs', 'cjs'] as const;
+const MODULE_EXTENSIONS = ['ts', 'tsx', 'mts', 'cts', 'js', 'jsx', 'mjs', 'cjs'] as const;
 
-// Resolved the way a relative module import resolves: as given, with an extension, then as a
-// folder's index file.
 export function resolveModuleFile(io: FileReaderPort, p: string): string | null {
   const abs = path.resolve(p);
 

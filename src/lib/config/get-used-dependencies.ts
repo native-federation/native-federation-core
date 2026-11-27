@@ -45,10 +45,6 @@ export function getUsedDependenciesFactory(
   return getUsedDependenciesFactoryCore(defaultDeps, workspaceRoot, fallbackEntryPoints);
 }
 
-function toRootRelative(root: string, file: string): string {
-  return path.isAbsolute(file) ? path.relative(root, file) : file;
-}
-
 export function getUsedDependenciesFactoryCore(
   deps: UsedDependenciesDeps,
   workspaceRoot: string,
@@ -70,7 +66,7 @@ export function getUsedDependenciesFactoryCore(
     const fileInfos = entryFiles.reduce(
       (acc, entryFile) => ({
         ...acc,
-        ...deps.getProjectData(toRootRelative(workspaceRoot, entryFile), workspaceRoot, {
+        ...deps.getProjectData(path.relative(workspaceRoot, entryFile), workspaceRoot, {
           includeExternalLibraries: true,
           includeRawImports: true,
         }),
@@ -98,11 +94,12 @@ export function getUsedDependenciesFactoryCore(
 // The analysis needs an existing file, while the bundler also accepts an extensionless path or
 // a folder.
 function resolveEntryPoint(io: FileReaderPort, workspaceRoot: string, entryPoint: string): string {
-  const resolved = resolveModuleFile(io, path.resolve(workspaceRoot, entryPoint));
+  const absolute = path.resolve(workspaceRoot, entryPoint);
+  const resolved = resolveModuleFile(io, absolute);
   if (!resolved) {
     throw new Error(
       `[removeUnusedDeps] Entry point '${entryPoint}' does not exist: no file, no file with a ` +
-        `module extension and no folder with an index file at ${path.resolve(workspaceRoot, entryPoint)}.`
+        `module extension and no folder with an index file at ${absolute}.`
     );
   }
   return resolved;

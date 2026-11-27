@@ -69,10 +69,8 @@ export function getRawMappedPathsCore(
     // An empty target list is the compile's error to report (TS5066).
     const target = mappings[key]?.[0];
     if (!target) continue;
-    const libPath = resolveTarget(io, path.normalize(path.join(base, target)));
-
     if (shareAll || patterns.some(pattern => matchesWildcard(key, pattern))) {
-      mappedPaths[libPath] = key;
+      mappedPaths[resolveTarget(io, path.normalize(path.join(base, target)))] = key;
     }
   }
 
@@ -82,7 +80,7 @@ export function getRawMappedPathsCore(
 // Only a target that names nothing on disk gets an extension: a folder stays a folder, so
 // everything under it keeps counting as part of the mapping.
 function resolveTarget(io: FileReaderPort, libPath: string): string {
-  if (io.isFile(libPath) || io.isDirectory(libPath)) return libPath;
+  if (libPath.includes('*') || io.isDirectory(libPath)) return libPath;
   return resolveModuleFile(io, libPath) ?? libPath;
 }
 
