@@ -20,6 +20,9 @@ importers:
       es-module-lexer:
         specifier: ^2.3.2
         version: 2.3.2
+      semver:
+        specifier: ^7.8.6
+        version: 7.8.6
       tinyglobby:
         specifier: ^0.2.17
         version: 0.2.17
@@ -33,6 +36,9 @@ importers:
       '@types/node':
         specifier: ~24.19.0
         version: 24.19.2
+      '@types/semver':
+        specifier: ^7.8.0
+        version: 7.8.0
       '@vitest/coverage-v8':
         specifier: ^4.1.11
         version: 4.1.12(vitest@4.1.12)
@@ -771,6 +777,9 @@ packages:
 
   '@types/node@24.19.2':
     resolution: {integrity: sha512-93d49wCWJkCyN87MxLpNN6KXPCwFw7bVUg79mGUV1OS40JGWwVCr8n61DXCSqz7CV6/VfPkb7xec7uP2M+QHWQ==}
+
+  '@types/semver@7.8.0':
+    resolution: {integrity: sha512-1mAINjtQCXXeLkJ9ehXkwOcBpqtLxiVtKhpUf83DdRNdQKV0iXZpaHYqRr7nj+wvxuJzoAmAwXI+sCNMv1CzLQ==}
 
   '@typescript-eslint/eslint-plugin@8.72.1':
     resolution: {integrity: sha512-5CokTWXpmbylfFabsbvHC0CAw3XLaGnoa+nFJX5FR592h/LoZsENUE6p/rg5xvkKrFEXz6pYmgI29AgXc2N3BQ==}
@@ -2056,6 +2065,8 @@ snapshots:
   '@types/node@24.19.2':
     dependencies:
       undici-types: 7.24.6
+
+  '@types/semver@7.8.0': {}
 
   '@typescript-eslint/eslint-plugin@8.72.1(@typescript-eslint/parser@8.72.1(eslint@10.14.0(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3))(eslint@10.14.0(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3)':
     dependencies:

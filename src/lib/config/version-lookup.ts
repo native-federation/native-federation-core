@@ -1,4 +1,9 @@
-import { getVersionMaps, type VersionMap } from '../utils/package/package-info.js';
+import semver from 'semver';
+import {
+  findDepPackageJson,
+  getVersionMaps,
+  type VersionMap,
+} from '../utils/package/package-info.js';
 import type { PackageJsonRepository } from '../domain/utils/package-json.contract.js';
 
 let inferVersion = false;
@@ -45,9 +50,35 @@ function lookupVersionInMap(key: string, versions: VersionMap): string | null {
   return versions[key]!;
 }
 
+type AutoRange = 'exact' | '^' | '~' | 'minor' | 'patch';
+
+// A declared value semver cannot read (catalog:, workspace:, a dist-tag) is replaced by the installed version.
+export function publishedRequiredVersion(
+  declared: string,
+  key: string,
+  projectRoot: string,
+  repo: PackageJsonRepository,
+  opts?: { range?: AutoRange; version?: string }
+): string {
+  const explicit = !!opts?.version && opts.version !== 'auto';
+  if (explicit || semver.validRange(declared)) {
+    return opts ? applyAutoRequiredOptions(declared, opts) : declared;
+  }
+
+  const pkgJsonPath = findDepPackageJson(key, projectRoot, repo);
+  const installed = semver.valid(pkgJsonPath ? repo.readJson(pkgJsonPath)['version'] : null);
+  if (!installed) {
+    return declared;
+  }
+
+  return opts?.range
+    ? applyAutoRequiredOptions(installed, { range: opts.range })
+    : `~${semver.major(installed)}.${semver.minor(installed)}.0`;
+}
+
 export function applyAutoRequiredOptions(
   baseVersion: string,
-  opts?: { range?: 'exact' | '^' | '~' | 'minor' | 'patch'; version?: string }
+  opts?: { range?: AutoRange; version?: string }
 ): string {
   const explicit = opts?.version && opts.version !== 'auto' ? opts.version : undefined;
   const raw = (explicit ?? baseVersion ?? '').trim();
