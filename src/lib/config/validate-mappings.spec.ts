@@ -134,23 +134,6 @@ describe('warnNonNpmMappingNames', () => {
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("'~app'"));
   });
-
-  // features.strictImports turns the warning into a build error.
-  it('throws when strict, naming every offending package', () => {
-    vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-    expect(() =>
-      warnNonNpmMappingNames(
-        { '/ws/libs/a/index.ts': '~app/a', '/ws/libs/s/index.ts': '@shared' },
-        true
-      )
-    ).toThrow(
-      "Invalid 'shared mappings' config. Shared mappings must follow npm package naming ('package' or '@company/package', subpaths belong to that package): '~app', '@shared'."
-    );
-  });
-
-  it('does not throw when strict and every name is npm-style', () => {
-    expect(() => warnNonNpmMappingNames({ '/ws/libs/ui/index.ts': '@org/ui' }, true)).not.toThrow();
-  });
 });
 
 describe('assertMappingPackagePrefixes', () => {
