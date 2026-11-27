@@ -151,6 +151,7 @@ exports[`public API > exports exactly the snapshotted names from each entry poin
     "getChecksum: value",
     "getDefaultCachePath: value",
     "hashFile: value",
+    "inferProjectPath: value",
     "isInSkipList: value",
     "isUnderAnyDir: value",
     "isUnderDir: value",

@@ -98,20 +98,15 @@ export function findPackageJson(io: FileReaderPort, folder: string): string {
   );
 }
 
-export function inferProjectPath(
-  projectPath: string | undefined,
-  io: FileReaderPort = nodeIo
-): string {
-  if (!projectPath && getConfigContext().packageJson) {
-    projectPath = path.dirname(getConfigContext().packageJson || '');
-  }
+// Reads the workspace root from the config context, which is only set while a config evaluates.
+export function inferProjectPath(projectPath?: string): string {
+  return inferProjectPathCore(nodeIo, projectPath);
+}
 
-  if (!projectPath && getConfigContext().workspaceRoot) {
-    projectPath = getConfigContext().workspaceRoot || '';
-  }
-
-  if (!projectPath) {
-    projectPath = toDiskCaseCore(io, cwd());
-  }
-  return projectPath;
+export function inferProjectPathCore(io: FileReaderPort, projectPath?: string): string {
+  const { packageJson, workspaceRoot } = getConfigContext();
+  const base = workspaceRoot || toDiskCaseCore(io, cwd());
+  if (projectPath) return toDiskCaseCore(io, path.resolve(base, projectPath));
+  if (packageJson) return path.dirname(packageJson);
+  return base;
 }

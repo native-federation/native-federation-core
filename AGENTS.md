@@ -193,6 +193,8 @@ Detail lives in `src/lib/domain/core/build-adapter.contract.ts`; the why in
 - Imports the adapter adds itself go in `NFBuildAdapter.externals`, passed via `NFAdapterInput`
   when the adapter normalizes the config itself.
 - Write each entry as its `outName`, or set `entry` on its result.
+- A config helper that reads a `projectPath` resolves it with `inferProjectPath` (`./internal`),
+  while the config evaluates, so it reads the same folder as `fromPackageJson()`.
 - `setup` receives the bundle's `kind`; `isMappingOrExposed` and `optimizedMappings` are deprecated.
 - Declare `externalsCacheKey`; implement `cacheData` only if you need data from a cached build.
 - Map relative imports into a shared mapping with `createMappingImportResolver`

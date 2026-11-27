@@ -1,10 +1,11 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
 import { fromPackageJson, shareAllCore, shareCore } from './share-utils.js';
 import { DEFAULT_SKIP_LIST } from './default-skip-list.js';
 import { logger } from '../utils/logger.js';
 import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
 import { createPackageJsonRepository } from '../utils/io/package-json-repository.js';
+import { useWorkspace } from './configuration-context.js';
 
 describe('shareCore (end-to-end via injected repository)', () => {
   const PROJECT = path.resolve('/ws/app');
@@ -343,7 +344,9 @@ describe('shareAllCore (end-to-end via injected repository)', () => {
 
     expect(Object.keys(result!).sort()).toEqual(['@not/exist', 'mylib']);
     expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining('Could not find @not/exist in any node_modules above packages/app')
+      expect.stringContaining(
+        `Could not find @not/exist in any node_modules above ${path.resolve('packages/app')}`
+      )
     );
     warn.mockRestore();
     verbose.mockRestore();
@@ -558,6 +561,59 @@ describe('fromPackageJson().only()', () => {
 
     expect(keys(mixed.get())).toEqual(keys(both.get()));
     expect(keys(mixed.get())).toEqual(expect.arrayContaining(['chalk', 'tinyglobby']));
+  });
+});
+
+// core#251: a relative projectPath is read against workspaceRoot, not the working directory.
+describe('a relative projectPath', () => {
+  const WS = path.resolve('/ws');
+
+  afterEach(() => {
+    useWorkspace('');
+    vi.restoreAllMocks();
+  });
+
+  it('reads the package.json under the workspace root', () => {
+    const io = createMemoryIo()
+      .setFile(
+        path.join(WS, 'apps/shell/package.json'),
+        JSON.stringify({ dependencies: { mylib: '^1.2.3' } })
+      )
+      .setFile(
+        path.resolve('apps/shell/package.json'),
+        JSON.stringify({ dependencies: { wrong: '1' } })
+      );
+    useWorkspace(WS, io);
+
+    const result = shareAllCore(
+      io,
+      { singleton: true, includeSecondaries: false },
+      { projectPath: 'apps/shell' },
+      createPackageJsonRepository(io)
+    );
+
+    expect(Object.keys(result!)).toEqual(['mylib']);
+  });
+
+  // Unresolved, the walk from '..' went '../' → './' and found cwd's node_modules, which is not
+  // an ancestor of the start.
+  it('walks the real parents of a start above cwd when no workspace root is set', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(logger, 'verbose').mockImplementation(() => undefined);
+    const io = createMemoryIo()
+      .setFile(path.resolve('../package.json'), '{}')
+      .setFile(path.resolve('node_modules/react/package.json'), '{}');
+
+    const result = shareCore(
+      io,
+      { react: { singleton: true, requiredVersion: '^19.0.0' } },
+      '..',
+      [],
+      createPackageJsonRepository(io)
+    );
+
+    expect(Object.keys(result)).toEqual(['react']);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Could not find react'));
   });
 });
 
