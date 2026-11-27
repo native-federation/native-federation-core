@@ -12,6 +12,8 @@
   `strictVersion: true`, `requiredVersion: 'auto'` and `build: 'package'`. A passed base replaces
   that default instead of merging into it. A config without `shared` keeps its own default, without
   `build: 'package'`.
+- An override configures the package it names; it never removes another package whose name starts
+  with it.
 - Secondary entry points core expands from a shared package inherit its settings.
 - With `ignoreUnusedDeps` (the default), only the entry points the build reaches are published.
   A shared package nothing reaches is dropped; `keepAll` keeps every entry point of one that is
