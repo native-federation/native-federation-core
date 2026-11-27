@@ -65,17 +65,19 @@ export function isNpmStylePackage(importName: string): boolean {
 
 // A mapping is published and grouped (`build: 'package'`, pruning, denseExternals) by the package
 // its import name implies, so a name like '@shared' or '~app/utils' has no sound package to
-// group under.
-export function warnNonNpmMappingNames(paths: PathToImport, strict = false): void {
+// group under. A `.package()` declaration names the package itself, so its mappings are exempt.
+export function warnNonNpmMappingNames(
+  paths: PathToImport,
+  declaredPrefixes: readonly string[]
+): void {
   const offenders = [
     ...new Set(
       Object.values(paths)
         .filter(importName => !isNpmStylePackage(importName))
+        .filter(importName => declaredPackageOf(importName, declaredPrefixes) === undefined)
         .map(inferPackageFromSecondary)
     ),
   ];
-  if (offenders.length === 0) return;
-
   for (const packageName of offenders) {
     logger.warn(
       `Shared mapping '${packageName}' does not follow npm package naming. Name mappings ` +
@@ -84,14 +86,6 @@ export function warnNonNpmMappingNames(paths: PathToImport, strict = false): voi
         `build: 'package' bundles them together.`
     );
   }
-
-  if (!strict) return;
-
-  throw new Error(
-    `Invalid 'shared mappings' config. Shared mappings must follow npm package naming ` +
-      `('package' or '@company/package', subpaths belong to that package): ` +
-      `${formatList(offenders, MAX_LISTED)}.`
-  );
 }
 
 // At least as deep as the name rule, so a declared package is never coarser than it.
