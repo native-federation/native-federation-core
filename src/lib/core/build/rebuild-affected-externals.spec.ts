@@ -24,6 +24,7 @@ const { rebuildAffectedExternals } = await import('./rebuild-for-federation.js')
 const { withStagedExternals } = await import('../cache/federation-cache.js');
 const { planSharedBundles } = await import('./shared-bundle-plan.js');
 const { executeSharedBundlePlans } = await import('./build-for-federation.js');
+const { cacheEntryCore } = await import('../cache/cache-persistence.js');
 
 function config(): NormalizedFederationConfig {
   return {
@@ -98,6 +99,29 @@ describe('rebuildAffectedExternals — port-injected resolution + invalidation',
     expect(fed.federationCache.externals).toEqual(cached);
     // The adapter reads it after every rebuild, and nothing re-ran to provide it again.
     expect(fed.federationCache.adapterData).toEqual({ 'browser-shared': ['a'] });
+  });
+
+  // A pool bundle builds every member at once, so a change to one member invalidates all of them.
+  it('clears the whole pool bundle when one member changes', async () => {
+    const pooled = { platform: 'browser', build: 'pool', pool: 'p1' } as NormalizedExternalConfig;
+    const cfg = { ...config(), shared: { a: pooled, b: pooled } };
+    const io = linkedIo();
+    const entry = cacheEntryCore(io, '/cache', 'browser-pool-p1', true);
+    io.setFile(`${entry.dir}/b.js`, 'cached');
+
+    await rebuildAffectedExternals(
+      cfg,
+      fedOptions([]),
+      ['a', 'b'],
+      ['/dev/a/src/x.ts'],
+      undefined,
+      io,
+      repo()
+    );
+
+    expect(io.exists(`${entry.dir}/b.js`)).toBe(false);
+    const [plan] = vi.mocked(executeSharedBundlePlans).mock.calls[0]![0];
+    expect([plan!.bundleName, plan!.keys]).toEqual(['browser-pool-p1', ['a', 'b']]);
   });
 
   it('is a no-op when no files changed', async () => {
