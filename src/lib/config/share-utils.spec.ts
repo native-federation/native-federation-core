@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
+import semver from 'semver';
 import { fromPackageJson, shareAllCore, shareCore } from './share-utils.js';
 import { DEFAULT_SKIP_LIST } from './default-skip-list.js';
 import { logger } from '../utils/logger.js';
@@ -677,8 +678,17 @@ describe('a declared value that is not a semver range', () => {
       const result = viaShareAll({ mylib: declared }, { mylib: { version: '17.3.5' } });
 
       expect(result['mylib']!.requiredVersion).toBe('~17.3.0');
+      expect(semver.satisfies('17.3.5', result['mylib']!.requiredVersion!)).toBe(true);
     }
   );
+
+  // ~18.0.0 would not admit 18.0.0-rc.1 itself, nor another copy at rc.2.
+  it('keeps the tag of an installed prerelease', () => {
+    const result = viaShareAll({ mylib: 'catalog:' }, { mylib: { version: '18.0.0-rc.1' } });
+
+    expect(result['mylib']!.requiredVersion).toBe('~18.0.0-rc.1');
+    expect(semver.satisfies('18.0.0-rc.1', result['mylib']!.requiredVersion!)).toBe(true);
+  });
 
   it('publishes ~ on the installed version, floored, through share', () => {
     const { io, repo } = workspace({ mylib: 'catalog:' }, { mylib: { version: '17.3.5' } });
@@ -727,6 +737,16 @@ describe('a declared value that is not a semver range', () => {
     const result = viaShareAll({ mylib: 'workspace:*' }, installed);
 
     expect(result['mylib']!.requiredVersion).toBe('workspace:*');
+  });
+
+  it('applies { range } to an explicit version instead of the installed one', () => {
+    const result = viaShareAll(
+      { mylib: 'catalog:' },
+      { mylib: { version: '17.3.5' } },
+      { range: '^', version: '2.0.0' }
+    );
+
+    expect(result['mylib']!.requiredVersion).toBe('^2.0.0');
   });
 
   it('leaves a requiredVersion the user wrote untouched', () => {

@@ -12,10 +12,11 @@
   `strictVersion: true`, `requiredVersion: 'auto'` and `build: 'package'`. A passed base replaces
   that default instead of merging into it. A config without `shared` keeps its own default, without
   `build: 'package'`.
-- An inferred `requiredVersion` copies the declared value when it is a semver range. A declared
-  value that is not (`catalog:`, `workspace:`, `npm:`, `file:`, a dist-tag) publishes `~` on the
-  installed version, floored (`17.3.5` → `~17.3.0`), or `{ range }` applied to it; with nothing
-  installed, or no `version` in its `package.json`, the declared value is kept.
+- An inferred `requiredVersion` keeps a declared semver range (`{ range }` still applies to it). A
+  declared value that is not (`catalog:`, `workspace:`, `npm:`, `file:`, a dist-tag) publishes `~`
+  on the installed version, floored (`17.3.5` → `~17.3.0`; a prerelease keeps its tag,
+  `~18.0.0-rc.1`), or `{ range }` applied to it. With nothing installed, or no valid `version` in
+  its `package.json`, the declared value is kept.
 - Secondary entry points core expands from a shared package inherit its settings.
 - With `ignoreUnusedDeps` (the default), only the entry points the build reaches are published.
   A shared package nothing reaches is dropped; `keepAll` keeps every entry point of one that is

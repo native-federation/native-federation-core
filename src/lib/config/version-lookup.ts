@@ -71,8 +71,10 @@ export function publishedRequiredVersion(
     return declared;
   }
 
-  return opts?.range
-    ? applyAutoRequiredOptions(installed, { range: opts.range })
+  if (opts?.range) return applyAutoRequiredOptions(installed, { range: opts.range });
+  // A floored range never admits a prerelease, so one keeps its tag.
+  return semver.prerelease(installed)
+    ? `~${installed}`
     : `~${semver.major(installed)}.${semver.minor(installed)}.0`;
 }
 
