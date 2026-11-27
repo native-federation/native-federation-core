@@ -51,7 +51,7 @@ export function matchMapping(filePath: string, sharedMappings: PathToImport): st
 /**
  * Detect if it's a barrel file which is inferred by typescript
  */
-const INDEX_PATTERN = new RegExp(`/index\\.${EXTENSION_GROUP}$`);
+const INDEX_PATTERN = new RegExp(`[\\\\/]index\\.${EXTENSION_GROUP}$`);
 
 function isIndexOf(filePath: string, dirPath: string): boolean {
   return filePath.startsWith(dirPath + path.sep) && INDEX_PATTERN.test(filePath);
