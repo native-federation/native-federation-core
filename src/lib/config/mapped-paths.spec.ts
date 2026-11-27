@@ -252,6 +252,21 @@ describe('getRawMappedPathsCore', () => {
     expect(result).toEqual({ [path.join(ROOT, 'a/first.ts')]: '@a' });
   });
 
+  // An extensionless target never matched the file the analysis reports, so the mapping was
+  // pruned and inlined. A folder must stay a folder: everything under it belongs to the mapping.
+  it('adds the extension to a target that names no file or folder, and leaves a folder alone', () => {
+    const io = writeTsConfig({ '@p/noext': ['libs/noext/index'], '@p/dir': ['libs/dir'] })
+      .setFile(path.join(ROOT, 'libs/noext/index.ts'), '')
+      .setFile(path.join(ROOT, 'libs/dir/index.ts'), '');
+
+    const { paths: result } = getRawMappedPathsCore(io, TSCONFIG);
+
+    expect(result).toEqual({
+      [path.join(ROOT, 'libs/noext/index.ts')]: '@p/noext',
+      [path.join(ROOT, 'libs/dir')]: '@p/dir',
+    });
+  });
+
   it('resolves paths relative to an explicit rootPath when given', () => {
     const io = writeTsConfig({ '@a': ['a/index.ts'] });
     const { paths: result } = getRawMappedPathsCore(

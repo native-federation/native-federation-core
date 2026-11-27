@@ -13,13 +13,16 @@ import * as path from 'path';
 describe('getUsedDependenciesFactoryCore', () => {
   // Build deps backed by memory-io: `projectData` is the canned sheriff output
   // and `node_modules` holds package.json + entry files so transient peer
-  // discovery (getPackageInfo + getExternalImports) runs fs-free.
+  // discovery (getPackageInfo + getExternalImports) runs fs-free. Every analyzed file also
+  // exists under `root`, because entry points are resolved on disk before sheriff runs.
   function makeDeps(
     projectData: ProjectData,
-    files: Record<string, string> = {}
+    files: Record<string, string> = {},
+    root = '/ws'
   ): UsedDependenciesDeps {
     const io = createMemoryIo();
     io.setFile('/ws/package.json', JSON.stringify({ name: 'app' }));
+    for (const p of Object.keys(projectData)) io.setFile(path.resolve(root, p), '');
     for (const [p, content] of Object.entries(files)) io.setFile(p, content);
     return {
       io,
@@ -281,13 +284,17 @@ describe('getUsedDependenciesFactoryCore', () => {
       workspaceRoot = 'c:/ws',
       imports = ['libs/ui/button.ts']
     ) {
-      const deps = makeDeps({
-        'src/comp.ts': {
-          imports,
-          externalLibraries: [],
-          unresolvedImports: [],
-        },
-      } as unknown as ProjectData);
+      const deps = makeDeps(
+        {
+          'src/comp.ts': {
+            imports,
+            externalLibraries: [],
+            unresolvedImports: [],
+          },
+        } as unknown as ProjectData,
+        {},
+        workspaceRoot
+      );
 
       return getUsedDependenciesFactoryCore(
         deps,
@@ -356,11 +363,14 @@ describe('getUsedDependenciesFactoryCore', () => {
   // onto workspaceRoot, so a cwd root resolved mappings against the wrong folder whenever the
   // build ran from elsewhere.
   it('roots the sheriff scan at workspaceRoot, not cwd', () => {
-    const deps = makeDeps({} as ProjectData);
+    const deps = makeDeps({} as ProjectData, { '/ws/src/comp.ts': '' });
     const getProjectData = vi.fn(() => ({}) as ProjectData);
     deps.getProjectData = getProjectData;
 
-    getUsedDependenciesFactoryCore(deps, '/ws')({
+    getUsedDependenciesFactoryCore(
+      deps,
+      '/ws'
+    )({
       exposes: { './Comp': { file: 'src/comp.ts' } },
       sharedMappings: {},
     });
@@ -371,11 +381,14 @@ describe('getUsedDependenciesFactoryCore', () => {
   // Sheriff joins the entry onto its root unconditionally, so '/ws/src/comp.ts' would become
   // '/ws/ws/src/comp.ts'.
   it('hands sheriff an absolute entry point relative to workspaceRoot', () => {
-    const deps = makeDeps({} as ProjectData);
+    const deps = makeDeps({} as ProjectData, { '/ws/src/comp.ts': '' });
     const getProjectData = vi.fn(() => ({}) as ProjectData);
     deps.getProjectData = getProjectData;
 
-    getUsedDependenciesFactoryCore(deps, '/ws')({
+    getUsedDependenciesFactoryCore(
+      deps,
+      '/ws'
+    )({
       exposes: { './Comp': { file: '/ws/src/comp.ts' } },
       sharedMappings: {},
     });
@@ -385,6 +398,44 @@ describe('getUsedDependenciesFactoryCore', () => {
       '/ws',
       expect.anything()
     );
+  });
+
+  // Sheriff needs an existing file; the bundler also accepts these spellings, so they were
+  // valid exposes that crashed the analysis with sheriff's FsPath/EISDIR error.
+  it.each([
+    ['an extensionless expose', 'src/main', path.join('src', 'main.ts')],
+    ['a folder expose', 'src/widget', path.join('src', 'widget', 'index.ts')],
+  ])('hands sheriff the file %s resolves to', (_, file, expected) => {
+    const deps = makeDeps({} as ProjectData, {
+      '/ws/src/main.ts': '',
+      '/ws/src/widget/index.ts': '',
+    });
+    const getProjectData = vi.fn(() => ({}) as ProjectData);
+    deps.getProjectData = getProjectData;
+
+    getUsedDependenciesFactoryCore(
+      deps,
+      '/ws'
+    )({
+      exposes: { './Comp': { file } },
+      sharedMappings: {},
+    });
+
+    expect(getProjectData).toHaveBeenCalledWith(expected, '/ws', expect.anything());
+  });
+
+  it('names the expose file when nothing exists at it', () => {
+    const deps = makeDeps({} as ProjectData);
+
+    expect(() =>
+      getUsedDependenciesFactoryCore(
+        deps,
+        '/ws'
+      )({
+        exposes: { './Comp': { file: 'src/missing' } },
+        sharedMappings: {},
+      })
+    ).toThrow(/Entry point 'src\/missing' does not exist/);
   });
 
   it('throws when neither exposes nor fallback entry points are available', () => {

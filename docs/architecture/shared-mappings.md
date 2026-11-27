@@ -8,6 +8,9 @@
   go through `shared`, not through mappings.
 - Mappings come from the `paths` of the tsconfig the build compiles with, read with TypeScript's
   own API, so `extends` and `baseUrl` mean exactly what they mean to the compiler.
+- A `paths` target may be a file, a folder (its index file is the entry point) or a file without
+  its extension, which is resolved the way a module import is; a folder is never narrowed to its
+  index file.
 - `sharedMappings` selects from those keys by pattern, optionally with per-mapping settings;
   leaving it out shares every key.
 - A mapping is pruned like a shared package: one that nothing in the build reaches, directly or

@@ -1,8 +1,7 @@
 import * as path from 'path';
 import * as ts from 'typescript';
 import type { FileReaderPort } from '../domain/utils/io-port.contract.js';
-
-const RESOLVE_EXTENSIONS = ['.ts', '.js', '.mjs', '.cjs'];
+import { resolveModuleFile } from '../utils/module-file.js';
 
 export function getExternalImportsCore(io: FileReaderPort, entryFilePath: string): string[] {
   const visited = new Set<string>();
@@ -12,31 +11,12 @@ export function getExternalImportsCore(io: FileReaderPort, entryFilePath: string
     return !specifier.startsWith('.') && !path.isAbsolute(specifier);
   }
 
-  function resolveAsFileOrDirectory(p: string): string | null {
-    const abs = path.resolve(p);
-
-    if (io.isFile(abs)) return abs;
-
-    for (const ext of RESOLVE_EXTENSIONS) {
-      if (io.isFile(abs + ext)) return abs + ext;
-    }
-
-    if (io.isDirectory(abs)) {
-      for (const file of RESOLVE_EXTENSIONS.map(e => 'index' + e)) {
-        const indexPath = path.join(abs, file);
-        if (io.isFile(indexPath)) return indexPath;
-      }
-    }
-
-    return null;
-  }
-
   function handleSpecifier(spec: string, fromFile: string) {
     if (isExternal(spec)) {
       externals.add(spec);
       return;
     }
-    const resolvedPath = resolveAsFileOrDirectory(path.resolve(path.dirname(fromFile), spec));
+    const resolvedPath = resolveModuleFile(io, path.resolve(path.dirname(fromFile), spec));
     if (resolvedPath) visit(resolvedPath);
   }
 
@@ -45,7 +25,7 @@ export function getExternalImportsCore(io: FileReaderPort, entryFilePath: string
     if (visited.has(absPath)) return;
     visited.add(absPath);
 
-    const resolvedFile: string | null = resolveAsFileOrDirectory(absPath);
+    const resolvedFile: string | null = resolveModuleFile(io, absPath);
     if (!resolvedFile) return;
     const fromFile: string = resolvedFile;
 

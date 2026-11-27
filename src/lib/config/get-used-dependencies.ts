@@ -10,6 +10,7 @@ import { type ExposeEntry } from '../domain/config/federation-config.contract.js
 import { isSharedMapping, matchMapping } from './match-mapping.js';
 import { isNonBarrelImport } from './validate-mappings.js';
 import { logger } from '../utils/logger.js';
+import { resolveModuleFile } from '../utils/module-file.js';
 import * as path from 'path';
 import * as ts from 'typescript';
 
@@ -44,10 +45,6 @@ export function getUsedDependenciesFactory(
   return getUsedDependenciesFactoryCore(defaultDeps, workspaceRoot, fallbackEntryPoints);
 }
 
-function toRootRelative(root: string, file: string): string {
-  return path.isAbsolute(file) ? path.relative(root, file) : file;
-}
-
 export function getUsedDependenciesFactoryCore(
   deps: UsedDependenciesDeps,
   workspaceRoot: string,
@@ -61,11 +58,15 @@ export function getUsedDependenciesFactoryCore(
       throw new Error(
         '[removeUnusedDeps] native-federation is missing an entryPoint! You can set it using the Federation options or by setting an exposed module in the Federation config file.'
       );
+    const entryFiles = entryPoints.map(entryPoint =>
+      resolveEntryPoint(deps.io, workspaceRoot, entryPoint)
+    );
+
     // Rooted at workspaceRoot because its root-relative results are re-joined onto it below.
-    const fileInfos = Object.values(entryPoints ?? []).reduce(
-      (acc, entryPoint) => ({
+    const fileInfos = entryFiles.reduce(
+      (acc, entryFile) => ({
         ...acc,
-        ...deps.getProjectData(toRootRelative(workspaceRoot, entryPoint), workspaceRoot, {
+        ...deps.getProjectData(path.relative(workspaceRoot, entryFile), workspaceRoot, {
           includeExternalLibraries: true,
           includeRawImports: true,
         }),
@@ -88,6 +89,20 @@ export function getUsedDependenciesFactoryCore(
       ...resolveUsedMappings(fileInfos, workspaceRoot, config.sharedMappings, deps.io),
     };
   };
+}
+
+// The analysis needs an existing file, while the bundler also accepts an extensionless path or
+// a folder.
+function resolveEntryPoint(io: FileReaderPort, workspaceRoot: string, entryPoint: string): string {
+  const absolute = path.resolve(workspaceRoot, entryPoint);
+  const resolved = resolveModuleFile(io, absolute);
+  if (!resolved) {
+    throw new Error(
+      `[removeUnusedDeps] Entry point '${entryPoint}' does not exist: no file, no file with a ` +
+        `module extension and no folder with an index file at ${absolute}.`
+    );
+  }
+  return resolved;
 }
 
 function addTransientDeps(
