@@ -560,3 +560,26 @@ describe('fromPackageJson().only()', () => {
     expect(keys(mixed.get())).toEqual(expect.arrayContaining(['chalk', 'tinyglobby']));
   });
 });
+
+describe('fromPackageJson() without a base config', () => {
+  const ROOT = process.cwd();
+
+  it('shares every dependency as a strict singleton built per package', () => {
+    const shared = fromPackageJson(undefined, ROOT).only(['chalk']).get();
+
+    expect(shared['chalk']).toMatchObject({
+      singleton: true,
+      strictVersion: true,
+      build: 'package',
+    });
+    expect(shared['chalk']!.requiredVersion).not.toBe('auto');
+  });
+
+  // A passed base replaces the default; it is not merged into it.
+  it('uses a passed base as is', () => {
+    const shared = fromPackageJson({ singleton: true }, ROOT).only(['chalk']).get();
+
+    expect(shared['chalk']!.strictVersion).toBeUndefined();
+    expect(shared['chalk']!.build).toBeUndefined();
+  });
+});
