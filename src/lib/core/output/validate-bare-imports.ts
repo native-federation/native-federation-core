@@ -27,6 +27,15 @@ export interface BareImportScan {
   unparsable: { fileName: string; error: string }[];
 }
 
+type FindingKind = 'unresolved' | 'unparsable';
+
+interface Finding {
+  kind: FindingKind;
+  message: string;
+  // Only findings with a specifier take part in the rebuild suppression key.
+  specifier?: string;
+}
+
 const reportedSpecifiers = new WeakMap<FederationCache, string>();
 
 export function validateBareImports(
@@ -38,50 +47,57 @@ export function validateBareImports(
 ): void {
   const start = process.hrtime();
   const outputDir = resolveOutputPath(fedOptions);
-  const { unresolved, unparsable } = findUnresolvedImportsCore(
-    nodeIo,
-    outputDir,
-    files,
-    config,
-    federationInfo
-  );
+  const scan = findUnresolvedImportsCore(nodeIo, outputDir, files, config, federationInfo);
   logger.measure(start, 'Validated the bare imports of the published files.');
 
   const strict = config.features.strictImports;
-  const report = strict ? logger.error : logger.warn;
-  for (const { fileName, error } of unparsable) {
-    report(`Could not scan '${fileName}': ${error}`);
-  }
+  const fails = (_kind: FindingKind) => strict;
 
   // A watch rebuild repeating unchanged warnings buries new ones. Only the specifiers are compared:
-  // chunks are named after their content, so an edit renames the importers. A strict build always
-  // reports, since it fails.
-  const key = unresolved.map(u => u.specifier).join('\n');
+  // chunks are named after their content, so an edit renames the importers.
+  const findings = toFindings(scan);
+  const key = findings.flatMap(f => f.specifier ?? []).join('\n');
   const previous = reportedSpecifiers.get(fedOptions.federationCache);
   reportedSpecifiers.set(fedOptions.federationCache, key);
-  if (!strict && !fullReport && key === previous) {
-    if (unresolved.length > 0) {
-      logger.notice(
-        `${unresolved.length} unresolved bare import(s), unchanged since the last build.`
-      );
-    }
-  } else {
-    for (const { specifier, importers, reason } of unresolved) {
-      report(
-        `'${specifier}' will not resolve (imported by ${formatList(importers, 3)}). ${reason}`
-      );
-    }
+  const unchanged = !fullReport && key === previous;
+
+  let quieted = 0;
+  for (const finding of findings) {
+    if (fails(finding.kind)) logger.error(finding.message);
+    else if (unchanged && finding.specifier !== undefined) quieted++;
+    else logger.warn(finding.message);
+  }
+  if (quieted > 0) {
+    logger.notice(`${quieted} unresolved bare import(s), unchanged since the last build.`);
   }
   if (!fullReport && previous && !key) logger.info('All bare imports resolve.');
 
-  if (strict && (unresolved.length > 0 || unparsable.length > 0)) {
-    const problems: string[] = [];
-    if (unresolved.length > 0) {
-      problems.push(`${unresolved.length} bare import(s) cannot be resolved from remoteEntry.json`);
-    }
-    if (unparsable.length > 0) problems.push(`${unparsable.length} file(s) could not be scanned`);
+  const problems = (Object.keys(PROBLEM) as FindingKind[]).flatMap(kind => {
+    const count = findings.filter(f => f.kind === kind && fails(kind)).length;
+    return count > 0 ? [PROBLEM[kind](count)] : [];
+  });
+  if (problems.length > 0) {
     throw new Error(`${problems.join(' and ')} (features.strictImports). See the errors above.`);
   }
+}
+
+const PROBLEM: Record<FindingKind, (count: number) => string> = {
+  unresolved: n => `${n} bare import(s) cannot be resolved from remoteEntry.json`,
+  unparsable: n => `${n} file(s) could not be scanned`,
+};
+
+function toFindings({ unresolved, unparsable }: BareImportScan): Finding[] {
+  return [
+    ...unparsable.map(({ fileName, error }) => ({
+      kind: 'unparsable' as const,
+      message: `Could not scan '${fileName}': ${error}`,
+    })),
+    ...unresolved.map(({ specifier, importers, reason }) => ({
+      kind: 'unresolved' as const,
+      specifier,
+      message: `'${specifier}' will not resolve (imported by ${formatList(importers, 3)}). ${reason}`,
+    })),
+  ];
 }
 
 // The import map only has exact keys, so a subpath of a shared package resolves only when it is
