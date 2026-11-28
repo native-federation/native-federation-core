@@ -1,16 +1,23 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as crypto from 'crypto';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import {
   cacheEntryCore,
+  getChecksum,
   getChecksumCore,
   getFilename,
   prepareCacheCore,
   type CacheMetadata,
 } from './cache-persistence.js';
+import { bundleSharedCore } from '../build/bundle-shared.js';
+import { createFakeBuildAdapter } from '../build/__test-helpers__/fake-build-adapter.js';
 import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
+import { createPackageJsonRepository } from '../../utils/io/package-json-repository.js';
+import { prepareSkipList } from '../../config/default-skip-list.js';
 import { logger } from '../../utils/logger.js';
 import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
+import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 
 const ext = (version?: string) => ({ version }) as NormalizedExternalConfig;
 
@@ -278,6 +285,95 @@ describe('getChecksumCore', () => {
     const aAgain = getChecksumCore(io, base, '0', '', {}, { '@scope/lib': '111' });
     expect(a).not.toBe(b);
     expect(a).toBe(aAgain);
+  });
+});
+
+// The exported positional getChecksum must keep producing the key bundleShared stores, so a tool
+// that computes it up front finds the entry a build wrote.
+describe('getChecksum parity with bundleShared', () => {
+  // bundleShared reads the builder version from the nearest package.json above its own file.
+  const BUILDER_PKG = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../../../../package.json'
+  );
+
+  it('equals the checksum bundleShared stores for the same bundle', async () => {
+    const mem = createMemoryIo()
+      .setFile(BUILDER_PKG, JSON.stringify({ version: '9.9.9' }))
+      .setFile('/ws/package.json', JSON.stringify({ name: 'app', dependencies: { foo: '^2.0.0' } }))
+      .setFile(
+        '/ws/node_modules/foo/package.json',
+        JSON.stringify({ name: 'foo', version: '2.3.4', type: 'module', exports: './index.js' })
+      )
+      .setFile('/ws/node_modules/foo/index.js', 'export {};');
+    const adapterKey = { adapter: 'fake', options: { target: 'es2022' } };
+    const adapter = { ...createFakeBuildAdapter({ io: mem }), externalsCacheKey: adapterKey };
+    const shared: Record<string, NormalizedExternalConfig> = {
+      foo: {
+        singleton: true,
+        strictVersion: true,
+        requiredVersion: '^2.0.0',
+        version: '2.0.0',
+        platform: 'browser',
+        build: 'default',
+        pool: 'core',
+      },
+    };
+    const config: NormalizedFederationConfig = {
+      $type: 'classic',
+      name: 'app',
+      exposes: {},
+      shared,
+      sharedMappings: {},
+      sharedMappingsConfig: {},
+      skip: prepareSkipList([]),
+      chunks: true,
+      externals: ['host-sdk'],
+      features: {
+        mappingVersion: true,
+        ignoreUnusedDeps: true,
+        denseChunking: true,
+        denseExternals: false,
+        integrityHashes: false,
+        synthesizeCjsExports: true,
+        strictImports: false,
+      },
+    };
+    const externals = ['foo', 'rxjs', 'host-sdk'];
+
+    await bundleSharedCore(
+      { io: mem, repo: createPackageJsonRepository(mem), adapter },
+      shared,
+      config,
+      {
+        workspaceRoot: '/ws',
+        outputPath: 'dist',
+        federationConfig: 'federation.config.js',
+        dev: false,
+        federationCache: { externals: [], bundlerCache: undefined, cachePath: '/cache' },
+        entryPoints: [],
+        projectName: 'app',
+        cacheExternalArtifacts: true,
+        watchLinkedDeps: false,
+      },
+      externals,
+      { platform: 'browser', bundleName: 'browser-shared', chunks: true }
+    );
+
+    const stored = JSON.parse(mem.readText('/cache/browser-shared.meta.json')).checksum;
+    expect(
+      getChecksum(
+        shared,
+        '0',
+        '9.9.9',
+        config.features,
+        {},
+        { foo: '2.3.4' },
+        adapterKey,
+        ['host-sdk'],
+        true
+      )
+    ).toBe(stored);
   });
 });
 
