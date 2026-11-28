@@ -524,6 +524,32 @@ exports[`characterisation: exports resolution > E7: a browser build skips the no
 }
 `;
 
+exports[`characterisation: exports resolution > E8: an array skips an element whose matching condition is null 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "p",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "p": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/p/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+  "warnings": [],
+}
+`;
+
 exports[`characterisation: install layouts > I1: a package reached only through a dependency's own install 1`] = `
 {
   "bundles": {
@@ -549,6 +575,50 @@ exports[`characterisation: install layouts > I1: a package reached only through 
     "d": {
       "bundle": "browser-shared",
       "entry": "node_modules/d/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: install layouts > I2: a shared package reached through a dependency is the root's install 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "a",
+        "c",
+        "x",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "a": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/a/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+    "c": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/c/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+    "x": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/x/index.js",
       "requiredVersion": "^1.0.0",
       "singleton": true,
       "strictVersion": true,
