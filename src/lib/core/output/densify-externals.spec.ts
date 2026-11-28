@@ -114,6 +114,28 @@ describe('densifyExternals', () => {
     expect(result.map(r => r.bundle)).toEqual(['mapping-org_ui_button', 'mapping-bundle']);
   });
 
+  it('splits on a group key without writing it', () => {
+    const result = densifyExternals(
+      [
+        flat('@org/ui/button', 'button.js'),
+        flat('@org/ui/card', 'card.js'),
+        flat('@org/ui/table', 'table.js'),
+      ],
+      new Map(),
+      new Map([
+        ['@org/ui/button', 'mapping-org_ui_button'],
+        ['@org/ui/card', 'mapping-bundle'],
+        ['@org/ui/table', 'mapping-bundle'],
+      ])
+    );
+
+    expect(result.map(r => r.entries)).toEqual([
+      { '@org/ui/button': 'button.js' },
+      { '@org/ui/card': 'card.js', '@org/ui/table': 'table.js' },
+    ]);
+    expect(JSON.stringify(result)).not.toContain('mapping-');
+  });
+
   it('splits external secondaries planned into different bundles but merges those sharing one', () => {
     const result = densifyExternals(
       [

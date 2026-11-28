@@ -41,6 +41,21 @@ export function planMappingBundles(config: NormalizedFederationConfig): MappingB
   }));
 }
 
+// Keyed by mapped import, for chunked bundles only: densify keeps their mappings in separate
+// records (see docs/architecture/mapping-packages.md).
+export function mappingBundleByImport(
+  config: NormalizedFederationConfig
+): ReadonlyMap<string, string> {
+  const bundles = new Map<string, string>();
+  for (const plan of planMappingBundles(config)) {
+    if (!plan.chunks) continue;
+    for (const mappedImport of Object.values(plan.entries)) {
+      bundles.set(mappedImport, plan.bundleName);
+    }
+  }
+  return bundles;
+}
+
 // `chunks` is set per bundle, so the mappings in one must agree; a mapping that leaves it out
 // takes whatever the others set.
 function agreeOnChunks(

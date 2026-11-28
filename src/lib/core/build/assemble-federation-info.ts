@@ -3,6 +3,7 @@ import type { NormalizedFederationConfig } from '../../domain/config/federation-
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
 import { type DenseFederationInfo, densifyExternals } from '../output/densify-externals.js';
 import { mappingPackageByImport } from '../../config/mapping-utils.js';
+import { mappingBundleByImport } from './mapping-bundle-plan.js';
 
 /**
  * Derives the `remoteEntry.json` payload from the populated federation cache. Shared by the initial
@@ -24,7 +25,11 @@ export function assembleFederationInfo(
 
   const federationInfo: DenseFederationInfo = {
     name: config.name,
-    shared: densifyExternals(sharedExternals, mappingPackageByImport(config)),
+    shared: densifyExternals(
+      sharedExternals,
+      mappingPackageByImport(config),
+      mappingBundleByImport(config)
+    ),
     exposes: artifactInfo.exposes,
     buildNotificationsEndpoint:
       fedOptions.buildNotifications?.enable && fedOptions.dev
