@@ -8,8 +8,17 @@
 - Only barrel specifiers are published for mappings. A published mapping whose specifier looks
   like a file path fails the build.
 - After `remoteEntry.json` is assembled, core reads every script the build wrote and checks each
-  bare import against what `remoteEntry.json` declares, its chunks and `externals`. It warns by
-  default and fails the build with `features.strictImports`.
+  bare import against what `remoteEntry.json` declares, the keys of its owners' chunk maps and
+  `externals`. Each finding is one of three kinds, and one rule decides whether it fails or warns:
+  - an unresolved bare import warns, and fails the build with `features.strictImports`;
+  - an `@nf-internal` chunk that no owner's chunk map lists fails a full build whatever
+    `strictImports` says;
+  - a script the check could not scan fails a full build whatever `strictImports` says.
+- A watch rebuild without `strictImports` only warns, for every kind, so the dev loop keeps
+  running; the next full build fails. A strict build, rebuild or not, fails on every finding.
+- A watch rebuild whose specifiers are the same as the previous build's only notes how many there
+  are. Unlisted chunks take part in that comparison like any other specifier; a file that could
+  not be scanned has no specifier and is reported on every rebuild.
 - The check reads the files in the output directory, so cached bundles are covered too, and it
   never passes a file it could not read.
 
@@ -22,7 +31,16 @@
   import, so the build is the only place that can catch it, and a runtime "failed to resolve
   module specifier" becomes a build-time message.
 - An import map does not resolve file-shaped specifiers reliably, hence barrels only.
-- Strict mode is opt-in, so existing builds are not broken by a minor release.
+- An ordinary unresolved import fails only with strict mode, which stays opt-in so existing
+  configs keep building: a lazy import on a path that is never taken never fails at runtime.
+- An unlisted chunk can never load: only core writes `@nf-internal` names, and the import map
+  holds only the chunks an owner lists, so the miss is a build defect, not a config choice. It
+  usually means the build adapter did not return a file it wrote, which only the adapter can
+  fix.
+- A script the check cannot scan is the only way the chunk-map walk misses an edge, so passing it
+  would publish maps that may be incomplete.
+- Specifiers, not importers, are compared across rebuilds because chunks are named after their
+  content, so an edit renames the importers.
 
 ## Limits
 
