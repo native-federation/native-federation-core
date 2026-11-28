@@ -142,8 +142,21 @@ describe('findOptimalExport with an array target', () => {
     expect(findOptimalExport([], info, 'browser')).toBe(NOT_EXPORTED);
   });
 
-  it('stops at a null element', () => {
-    expect(findOptimalExport([null, './valid.js'], info, 'browser')).toBe(NOT_EXPORTED);
+  it.each([
+    ['a null element', [null, './x.mjs']],
+    ['an element whose winning condition is null', [{ import: null }, './x.mjs']],
+    [
+      'an element whose winning condition is outside the package',
+      [{ default: '../o.mjs' }, './x.mjs'],
+    ],
+  ])('skips %s to the next element', (_, target) => {
+    expect(findOptimalExport(target, info, 'browser')?.entryPoint).toBe(
+      path.join('/pkg', './x.mjs')
+    );
+  });
+
+  it('is not exported when the only element is null', () => {
+    expect(findOptimalExport([null], info, 'browser')).toBe(NOT_EXPORTED);
   });
 });
 

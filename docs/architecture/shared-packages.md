@@ -28,7 +28,8 @@
   invalid one, at the subpath or under the condition that wins, means the entry point is not
   exported: core does not fall back to `module`, `main` or a conventional file, and the "No meta
   data found" warning says the package's exports block it. An array target resolves to its first
-  valid target; with none, it is not exported either.
+  element that resolves; a `null` or invalid element, also one under a nested condition, is
+  skipped. When no element resolves, it is not exported either.
 - The condition is picked as an ESM key, else `default`, else the first key that is not `types`.
   A browser entry never takes a `node` key, nor a node entry a `browser` key. A shared entry uses
   its own `platform`, in its bundle and in the unused-dependency scan; the scan reads a package

@@ -23,7 +23,7 @@ export function replaceGlob(target: ExportEntry, replacement: string): ExportEnt
  * best target, preferring ESM and never taking the other platform's condition. Returns a
  * {@link PackageInfo} with `entryPoint` resolved relative to `info.entryPoint`, `undefined`
  * when no condition matches, or {@link NOT_EXPORTED} when the package blocks the entry
- * (`null`, a target outside the package, or no valid array target).
+ * (`null`, a target outside the package, or an array none of whose elements resolves).
  */
 export function findOptimalExport(
   target: ExportEntry,
@@ -43,9 +43,8 @@ export function findOptimalExport(
   if (!target) return undefined;
   if (Array.isArray(target)) {
     for (const candidate of target) {
-      if (typeof candidate === 'string' && !isValidTarget(candidate)) continue;
       const result = findOptimalExport(candidate, info, platform, isESM);
-      if (result !== undefined) return result;
+      if (result !== undefined && result !== NOT_EXPORTED) return result;
     }
     return NOT_EXPORTED;
   }
