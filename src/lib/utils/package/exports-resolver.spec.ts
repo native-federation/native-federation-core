@@ -117,6 +117,19 @@ describe('findOptimalExport with an array target', () => {
   });
 });
 
+describe('findOptimalExport with a target outside the package', () => {
+  it('is not exported', () => {
+    expect(findOptimalExport('../outside.js', info)).toBe(NOT_EXPORTED);
+    expect(findOptimalExport('dist/index.js', info)).toBe(NOT_EXPORTED);
+  });
+
+  it('is not exported under the condition that wins', () => {
+    expect(findOptimalExport({ import: '../outside.mjs', default: './d.js' }, info)).toBe(
+      NOT_EXPORTED
+    );
+  });
+});
+
 describe('findOptimalExport with a null target', () => {
   it('is not exported', () => {
     expect(findOptimalExport(null, info)).toBe(NOT_EXPORTED);
