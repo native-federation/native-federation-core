@@ -87,6 +87,39 @@ describe('package-info facade (with injected repository)', () => {
     warn.mockRestore();
   });
 
+  // The production repository lists only the workspace root here, so the loop sees one folder
+  // today; this pins what a second folder would get: the first folder's "not exported" ends the
+  // search, as a resolved entry does.
+  it('stops at the first package.json folder whose package blocks the entry point', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const first = path.join(WS, 'first');
+    const second = path.join(WS, 'second');
+    const io = createMemoryIo()
+      .setFile(
+        path.join(first, 'node_modules/lib/package.json'),
+        JSON.stringify({ version: '1.0.0', exports: { '.': null } })
+      )
+      .setFile(
+        path.join(second, 'node_modules/lib/package.json'),
+        JSON.stringify({ version: '2.0.0', exports: { '.': './index.js' } })
+      );
+    const base = createPackageJsonRepository(io);
+    const repo = {
+      ...base,
+      getPackageJsonFiles: () => [
+        { content: {}, directory: first },
+        { content: {}, directory: second },
+      ],
+    };
+
+    expect(tryGetPackageInfo('lib', WS, repo, 'browser')).toBeNull();
+    expect(getPackageInfo('lib', WS, repo, 'browser')).toBeNull();
+    expect(warn).toHaveBeenCalledWith(
+      'No meta data found for shared lib lib: its package.json exports blocks this entry point'
+    );
+    warn.mockRestore();
+  });
+
   it('passes the platform through to the exports conditions', () => {
     const io = createMemoryIo()
       .setFile(path.join(WS, 'package.json'), JSON.stringify({ dependencies: { lib: '1.0.0' } }))
