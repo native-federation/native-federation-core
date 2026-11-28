@@ -1,6 +1,12 @@
 import { getProjectData as sheriffGetProjectData, type ProjectData } from '@softarc/sheriff-core';
-import { sharedPackageJsonRepository, tryGetPackageInfo } from '../utils/package/package-info.js';
-import { type PackageJsonRepository } from '../domain/utils/package-json.contract.js';
+import { sharedPackageJsonRepository } from '../utils/package/package-info.js';
+import { resolveInstalledPackageInfo } from '../utils/package/entry-point-resolver.js';
+import { NOT_EXPORTED } from '../utils/package/exports-resolver.js';
+import { normalize } from '../utils/normalize.js';
+import {
+  type PackageInfo,
+  type PackageJsonRepository,
+} from '../domain/utils/package-json.contract.js';
 import { getExternalImportsCore } from './get-external-imports.js';
 import { nodeIo } from '../utils/io/node-io-adapter.js';
 import { type FileReaderPort } from '../domain/utils/io-port.contract.js';
@@ -113,6 +119,13 @@ function resolveEntryPoint(io: FileReaderPort, workspaceRoot: string, entryPoint
   return resolved;
 }
 
+// `importer` is the real directory of the package whose entry closure imports `name`; packages
+// imported by workspace files have none.
+interface PendingPackage {
+  name: string;
+  importer?: string;
+}
+
 function addTransientDeps(
   packages: Set<string>,
   workspaceRoot: string,
@@ -120,36 +133,51 @@ function addTransientDeps(
   shared: Record<string, { platform: 'browser' | 'node' }>,
   configPlatform: 'browser' | 'node'
 ) {
-  const packagesAndPeers = new Set<string>([...packages]);
-  const discovered = new Set<string>(packagesAndPeers);
-  const stack = [...packagesAndPeers];
+  const packagesAndPeers = new Set<string>(packages);
+  // Keyed on the installed entry file, not the name: two installs of one name can import
+  // different things.
+  const scanned = new Set<string>();
+  const stack: PendingPackage[] = [...packages].map(name => ({ name }));
 
   while (stack.length > 0) {
-    const dep = stack.pop();
-
-    if (!dep) {
-      continue;
-    }
+    const { name, importer } = stack.pop()!;
 
     // see docs/architecture/package-resolution.md#platform
-    const platform = shared[dep]?.platform ?? configPlatform;
-    const pInfo = tryGetPackageInfo(dep, workspaceRoot, deps.repo, platform);
+    const platform = shared[name]?.platform ?? configPlatform;
+    const found = findInstalledPackage(name, importer, workspaceRoot, platform, deps);
+    if (!found) continue;
 
-    if (!pInfo) {
-      continue;
-    }
+    const entryPoint = deps.io.realpath(found.info.entryPoint);
+    if (scanned.has(entryPoint)) continue;
+    scanned.add(entryPoint);
 
-    const peerDeps = getExternalImportsCore(deps.io, pInfo.entryPoint);
-
-    for (const peerDep of peerDeps) {
-      if (!discovered.has(peerDep)) {
-        discovered.add(peerDep);
-        stack.push(peerDep);
-        packagesAndPeers.add(peerDep);
-      }
+    for (const peerDep of getExternalImportsCore(deps.io, found.info.entryPoint)) {
+      packagesAndPeers.add(peerDep);
+      stack.push({ name: peerDep, importer: found.directory });
     }
   }
   return packagesAndPeers;
+}
+
+// Node resolves an import from the importing file, so a dependency of a dependency is only
+// visible from that package's own directory under an isolated install. The workspace root is the
+// fallback only when the importer sees no install at all: an install it does see decides.
+function findInstalledPackage(
+  name: string,
+  importer: string | undefined,
+  workspaceRoot: string,
+  platform: 'browser' | 'node',
+  deps: UsedDependenciesDeps
+): { info: PackageInfo; directory: string } | null {
+  const root = normalize(workspaceRoot, true);
+  for (const from of importer ? [importer, root] : [root]) {
+    const pkgJsonPath = deps.repo.findDepPackageJson(name, from);
+    if (!pkgJsonPath) continue;
+    const info = resolveInstalledPackageInfo(deps.repo, name, pkgJsonPath, platform);
+    if (!info || info === NOT_EXPORTED) return null;
+    return { info, directory: deps.io.realpath(path.dirname(pkgJsonPath)) };
+  }
+  return null;
 }
 
 function resolveUsedMappings(

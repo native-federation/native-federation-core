@@ -295,7 +295,7 @@ describe('getUsedDependenciesFactoryCore', () => {
       link(io, storeDeps('b'), 'c');
       link(io, storeDeps('c'), 'd');
 
-      expect(scan(io)).toEqual(['a', 'b']);
+      expect(scan(io)).toEqual(['a', 'b', 'c', 'd']);
     });
 
     // `a` and `b` each depend on their own install of `c`, and the two versions import different
@@ -311,7 +311,7 @@ describe('getUsedDependenciesFactoryCore', () => {
       link(io, storeDeps('a'), 'c', '1.0.0');
       link(io, storeDeps('b'), 'c', '2.0.0');
 
-      expect(scan(io)).toEqual(['a', 'b', 'c']);
+      expect(scan(io)).toEqual(['a', 'b', 'c', 'x', 'y']);
     });
 
     // A linked checkout outside the workspace has no node_modules path back to the root, so the
@@ -334,7 +334,7 @@ describe('getUsedDependenciesFactoryCore', () => {
       link(io, '/ws/node_modules', 'a');
       link(io, storeDeps('a'), 'c', '2.0.0');
 
-      expect(scan(io)).toEqual(['a', 'c', 'x']);
+      expect(scan(io)).toEqual(['a', 'c', 'y']);
     });
 
     // `a`'s own `c` blocks its root entry; the root's `c` is not what `a` imports, so it is not
@@ -351,7 +351,7 @@ describe('getUsedDependenciesFactoryCore', () => {
       link(io, '/ws/node_modules', 'a');
       link(io, storeDeps('a'), 'c', '2.0.0');
 
-      expect(scan(io)).toEqual(['a', 'c', 'x']);
+      expect(scan(io)).toEqual(['a', 'c']);
     });
   });
 
