@@ -303,7 +303,7 @@ describe('findUnresolvedImportsCore', () => {
     expect(result).toEqual([]);
   });
 
-  // Until unlisted chunks fail on their own, such a name is reported like any other bare import.
+  // validateBareImports decides that such a name fails; the scan only finds and explains it.
   it('reports a chunk no owner map lists as an unresolved import', () => {
     const io = createMemoryIo()
       .setFile(out('main.js'), `import "@nf-internal/chunk-X";`)
@@ -320,6 +320,8 @@ describe('findUnresolvedImportsCore', () => {
     expect(result.map(r => [r.specifier, r.importers])).toEqual([
       ['@nf-internal/chunk-X', ['main.js']],
     ]);
+    expect(result[0]!.reason).toContain('No exposed module or shared record lists this chunk');
+    expect(result[0]!.reason).toContain('Report this to your build adapter');
   });
 
   it('ignores relative, absolute, URL and computed specifiers', () => {
@@ -622,8 +624,101 @@ describe('validateBareImports', () => {
     expect(() =>
       validateBareImports(config, fedOptions, fedInfo, browser('a.js', 'b.js'), FULL)
     ).toThrow(
-      /^1 bare import\(s\) cannot be resolved from remoteEntry.json and 1 file\(s\) could not be scanned/
+      /^1 bare import\(s\) cannot be resolved from remoteEntry.json \(features.strictImports\) and 1 file\(s\) could not be scanned \(features.strictImports\)\. See the errors above\.$/
     );
+  });
+
+  // W4: an `@nf-internal` name no owner map lists has no import map key, so it can never load.
+  describe('an unlisted chunk', () => {
+    function withUnlistedChunk(strictImports: boolean) {
+      const setupResult = setup(strictImports);
+      const dist = path.join(setupResult.fedOptions.workspaceRoot, 'dist');
+      fs.writeFileSync(path.join(dist, 'a.js'), `import "@nf-internal/chunk-X";`);
+      fs.writeFileSync(path.join(dist, 'chunk-X.js'), `export {};`);
+      return { ...setupResult, files: browser('a.js', 'chunk-X.js') };
+    }
+
+    it('fails a full build without strictImports', () => {
+      const error = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+      const { config, fedOptions, fedInfo, files } = withUnlistedChunk(false);
+
+      expect(() => validateBareImports(config, fedOptions, fedInfo, files, FULL)).toThrow(
+        /^1 chunk\(s\) are listed by no exposed module or shared record\. See the errors above\.$/
+      );
+      expect(error).toHaveBeenCalledWith(
+        expect.stringContaining("'@nf-internal/chunk-X' will not resolve (imported by 'a.js')")
+      );
+    });
+
+    it('fails a full build with strictImports', () => {
+      vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+      const { config, fedOptions, fedInfo, files } = withUnlistedChunk(true);
+
+      // The chunk fails without strictImports too, so the message does not blame it.
+      expect(() => validateBareImports(config, fedOptions, fedInfo, files, FULL)).toThrow(
+        /^1 chunk\(s\) are listed by no exposed module or shared record\. See the errors above\.$/
+      );
+    });
+
+    // Without strictImports a rebuild only warns, so here strictImports is the reason it fails.
+    it('fails a strict rebuild and names strictImports', () => {
+      vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+      const { config, fedOptions, fedInfo, files } = withUnlistedChunk(true);
+
+      expect(() => validateBareImports(config, fedOptions, fedInfo, files, REBUILD)).toThrow(
+        /^1 chunk\(s\) are listed by no exposed module or shared record \(features.strictImports\)\. /
+      );
+    });
+
+    it('names strictImports only on the unresolved import in a strict full build', () => {
+      vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+      const { config, fedOptions, fedInfo, files } = withUnlistedChunk(true);
+      fs.writeFileSync(
+        path.join(fedOptions.workspaceRoot, 'dist', 'a.js'),
+        `import "@nf-internal/chunk-X"; import "@angular/common/http";`
+      );
+
+      expect(() => validateBareImports(config, fedOptions, fedInfo, files, FULL)).toThrow(
+        /^1 bare import\(s\) cannot be resolved from remoteEntry.json \(features.strictImports\) and 1 chunk\(s\) are listed by no exposed module or shared record\. See the errors above\.$/
+      );
+    });
+
+    // W10: watch mode keeps running; the chunk takes part in the suppression key like any other
+    // specifier, so an unchanged one is only noted.
+    it('warns on a rebuild, is noted when unchanged, and fails the next full build', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const notice = vi.spyOn(logger, 'notice').mockImplementation(() => undefined);
+      vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+      const { config, fedOptions, fedInfo, files } = withUnlistedChunk(false);
+
+      expect(() => validateBareImports(config, fedOptions, fedInfo, files, REBUILD)).not.toThrow();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("'@nf-internal/chunk-X'"));
+
+      expect(() => validateBareImports(config, fedOptions, fedInfo, files, REBUILD)).not.toThrow();
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(notice).toHaveBeenCalledWith('1 finding(s) unchanged since the last build.');
+
+      expect(() => validateBareImports(config, fedOptions, fedInfo, files, FULL)).toThrow(
+        /1 chunk\(s\)/
+      );
+    });
+
+    // Control: the rule is about chunks only; an ordinary miss still needs strictImports to fail.
+    it('fails the build alone when an ordinary unresolved import sits next to it', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const error = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+      const { config, fedOptions, fedInfo, files } = withUnlistedChunk(false);
+      fs.writeFileSync(
+        path.join(fedOptions.workspaceRoot, 'dist', 'a.js'),
+        `import "@nf-internal/chunk-X"; import "@angular/common/http";`
+      );
+
+      expect(() => validateBareImports(config, fedOptions, fedInfo, files, FULL)).toThrow(
+        /^1 chunk\(s\) are listed by no exposed module or shared record\. /
+      );
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("'@angular/common/http'"));
+      expect(error).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('on a rebuild', () => {
@@ -643,9 +738,7 @@ describe('validateBareImports', () => {
       validateBareImports(config, fedOptions, fedInfo, files, REBUILD);
 
       expect(warn).toHaveBeenCalledTimes(1);
-      expect(notice).toHaveBeenCalledWith(
-        '1 unresolved bare import(s), unchanged since the last build.'
-      );
+      expect(notice).toHaveBeenCalledWith('1 finding(s) unchanged since the last build.');
     });
 
     // Chunks are named after their content, so an edit renames the importer.
@@ -687,6 +780,19 @@ describe('validateBareImports', () => {
       writeDist(fedOptions.workspaceRoot, 'a.js', `import "@angular/common/http";`);
       validateBareImports(config, fedOptions, fedInfo, files, REBUILD);
       expect(warn).toHaveBeenCalledTimes(2);
+    });
+
+    // An unscanned file has no specifier, so the key is empty, yet not everything resolves.
+    it('does not say everything resolves when only a file it could not scan is left', () => {
+      const { warn, info } = quiet();
+      const { config, fedOptions, fedInfo, files } = setup(false);
+
+      validateBareImports(config, fedOptions, fedInfo, files, FULL);
+      writeDist(fedOptions.workspaceRoot, 'a.js', 'import "x"; )');
+      validateBareImports(config, fedOptions, fedInfo, files, REBUILD);
+
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("Could not scan 'a.js'"));
+      expect(info).not.toHaveBeenCalledWith('All bare imports resolve.');
     });
 
     it('still reports in full on a full build', () => {

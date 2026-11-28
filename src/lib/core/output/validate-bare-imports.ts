@@ -6,6 +6,7 @@ import type { NormalizedFederationOptions } from '../../domain/core/federation-o
 import type { FileReaderPort } from '../../domain/utils/io-port.contract.js';
 import type { FederationCache } from '../../domain/core/federation-cache.contract.js';
 import type { DenseFederationInfo } from './densify-externals.js';
+import { CHUNK_PREFIX } from '../../domain/core/chunk.js';
 import { isScript } from '../../utils/script-file.js';
 import { isInSkipList } from '../../config/default-skip-list.js';
 import { inferPackageFromSecondary } from '../../utils/normalize.js';
@@ -17,6 +18,7 @@ import { logger } from '../../utils/logger.js';
 import { formatList } from '../../utils/format-list.js';
 
 interface UnresolvedImport {
+  kind: 'unresolved' | 'unlisted-chunk';
   specifier: string;
   importers: string[];
   reason: string;
@@ -27,7 +29,7 @@ export interface BareImportScan {
   unparsable: { fileName: string; error: string }[];
 }
 
-type FindingKind = 'unresolved' | 'unparsable';
+type FindingKind = UnresolvedImport['kind'] | 'unparsable';
 
 interface Finding {
   kind: FindingKind;
@@ -51,7 +53,10 @@ export function validateBareImports(
   logger.measure(start, 'Validated the bare imports of the published files.');
 
   const strict = config.features.strictImports;
-  const fails = (_kind: FindingKind) => strict;
+  // An unlisted chunk is broken whatever the config says, but a watch rebuild only warns so the dev
+  // loop keeps running; the next full build fails.
+  const failsAnyway = (kind: FindingKind) => fullReport && kind === 'unlisted-chunk';
+  const fails = (kind: FindingKind) => strict || failsAnyway(kind);
 
   // A watch rebuild repeating unchanged warnings buries new ones. Only the specifiers are compared:
   // chunks are named after their content, so an edit renames the importers.
@@ -68,21 +73,23 @@ export function validateBareImports(
     else logger.warn(finding.message);
   }
   if (quieted > 0) {
-    logger.notice(`${quieted} unresolved bare import(s), unchanged since the last build.`);
+    logger.notice(`${quieted} finding(s) unchanged since the last build.`);
   }
-  if (!fullReport && previous && !key) logger.info('All bare imports resolve.');
+  if (!fullReport && previous && findings.length === 0) logger.info('All bare imports resolve.');
 
   const problems = (Object.keys(PROBLEM) as FindingKind[]).flatMap(kind => {
     const count = findings.filter(f => f.kind === kind && fails(kind)).length;
-    return count > 0 ? [PROBLEM[kind](count)] : [];
+    const tag = failsAnyway(kind) ? '' : ' (features.strictImports)';
+    return count > 0 ? [PROBLEM[kind](count) + tag] : [];
   });
   if (problems.length > 0) {
-    throw new Error(`${problems.join(' and ')} (features.strictImports). See the errors above.`);
+    throw new Error(`${problems.join(' and ')}. See the errors above.`);
   }
 }
 
 const PROBLEM: Record<FindingKind, (count: number) => string> = {
   unresolved: n => `${n} bare import(s) cannot be resolved from remoteEntry.json`,
+  'unlisted-chunk': n => `${n} chunk(s) are listed by no exposed module or shared record`,
   unparsable: n => `${n} file(s) could not be scanned`,
 };
 
@@ -92,8 +99,8 @@ function toFindings({ unresolved, unparsable }: BareImportScan): Finding[] {
       kind: 'unparsable' as const,
       message: `Could not scan '${fileName}': ${error}`,
     })),
-    ...unresolved.map(({ specifier, importers, reason }) => ({
-      kind: 'unresolved' as const,
+    ...unresolved.map(({ kind, specifier, importers, reason }) => ({
+      kind,
       specifier,
       message: `'${specifier}' will not resolve (imported by ${formatList(importers, 3)}). ${reason}`,
     })),
@@ -138,11 +145,10 @@ export function findUnresolvedImportsCore(
 
   const unresolved = [...importersBySpecifier]
     .sort(([a], [b]) => (a < b ? -1 : 1))
-    .map(([specifier, importers]) => ({
-      specifier,
-      importers,
-      reason: explain(specifier, config, declared),
-    }));
+    .map(([specifier, importers]): UnresolvedImport => {
+      const kind = specifier.startsWith(CHUNK_PREFIX + '/') ? 'unlisted-chunk' : 'unresolved';
+      return { kind, specifier, importers, reason: explain(specifier, kind, config, declared) };
+    });
   return { unresolved, unparsable };
 }
 
@@ -161,9 +167,17 @@ function declaredSpecifiers(federationInfo: DenseFederationInfo): Set<string> {
 // a built-in.
 function explain(
   specifier: string,
+  kind: UnresolvedImport['kind'],
   config: NormalizedFederationConfig,
   declared: ReadonlySet<string>
 ): string {
+  if (kind === 'unlisted-chunk') {
+    return (
+      'No exposed module or shared record lists this chunk, so the import map has no key for it. ' +
+      'Report this to your build adapter: it must return every file it wrote, chunks included.'
+    );
+  }
+
   const mapping = Object.values(config.sharedMappings).find(m => specifier.startsWith(m + '/'));
   if (mapping) {
     return `Import the shared mapping '${mapping}' itself, not a subpath.`;
