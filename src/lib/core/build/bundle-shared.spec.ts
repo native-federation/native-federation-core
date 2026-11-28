@@ -541,6 +541,59 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     expect(result.externals[0]).not.toHaveProperty('preload');
   });
 
+  // Node built-ins are added only where pruning is off, since then every secondary of a package is
+  // bundled, used or not, and one of them may import 'fs'.
+  it.each([
+    {
+      title: 'a browser bundle that keeps unused deps gets the Node built-ins',
+      platform: 'browser' as const,
+      ignoreUnusedDeps: false,
+      builtIns: true,
+    },
+    {
+      title: 'D8: a browser bundle that prunes unused deps gets no Node built-ins',
+      platform: 'browser' as const,
+      ignoreUnusedDeps: true,
+      builtIns: false,
+    },
+    {
+      title: 'a node bundle gets no Node built-ins',
+      platform: 'node' as const,
+      ignoreUnusedDeps: false,
+      builtIns: false,
+    },
+  ])('$title', async ({ platform, ignoreUnusedDeps, builtIns }) => {
+    const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+    const adapter = createFakeBuildAdapter({ io: mem });
+    const config = makeConfig();
+    config.features.ignoreUnusedDeps = ignoreUnusedDeps;
+
+    await bundleSharedCore(
+      { io: mem, repo: emptyRepo, adapter },
+      {
+        foo: {
+          singleton: true,
+          strictVersion: false,
+          requiredVersion: '^1.0.0',
+          version: '1.0.0',
+          platform,
+          build: 'default',
+          packageInfo: { entryPoint: 'foo/index.js', version: '1.0.0', esm: true },
+        },
+      },
+      config,
+      makeFedOptions(),
+      ['rxjs'],
+      { ...BUILD_OPTIONS, platform }
+    );
+
+    const external = adapter.calls.setup[0]!.options.external;
+    expect(external).toContain('rxjs');
+    for (const builtIn of ['fs', 'node:fs', 'path', 'node:path']) {
+      expect(external.includes(builtIn)).toBe(builtIns);
+    }
+  });
+
   it('resolves an inferred package through the injected repository', async () => {
     const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
     const adapter = createFakeBuildAdapter({ io: mem });
