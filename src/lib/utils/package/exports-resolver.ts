@@ -5,6 +5,7 @@ import type { ExportEntry, PackageInfo } from '../../domain/utils/package-json.c
 export function replaceGlob(target: ExportEntry, replacement: string): ExportEntry {
   if (!target) return undefined;
   if (typeof target === 'string') return target.split('*').join(replacement);
+  if (Array.isArray(target)) return target.map(t => replaceGlob(t, replacement));
   return Object.entries(target).reduce(
     (a, [k, v]) => ({
       ...a,
@@ -32,7 +33,14 @@ export function findOptimalExport(
     };
   }
   if (!target) return undefined;
-  if (Array.isArray(target)) return findOptimalExport(target[0], info, isESM);
+  if (Array.isArray(target)) {
+    for (const candidate of target) {
+      if (typeof candidate === 'string' && !isValidTarget(candidate)) continue;
+      const result = findOptimalExport(candidate, info, isESM);
+      if (result) return result;
+    }
+    return undefined;
+  }
 
   const exportTypes = Object.keys(target);
 
@@ -50,6 +58,19 @@ export function findOptimalExport(
   const secondBestExport: ExportEntry = target[secondBestEntry!];
 
   return findOptimalExport(secondBestExport, info, isESM ?? isESMExport(secondBestEntry!));
+}
+
+// Node's definition of a valid target: package-relative, never leaving the package.
+function isValidTarget(target: string): boolean {
+  return (
+    target.startsWith('./') &&
+    !target
+      .slice(2)
+      .split(/[\\/]/)
+      .some(
+        segment => segment === '.' || segment === '..' || segment.toLowerCase() === 'node_modules'
+      )
+  );
 }
 
 // Node's PACKAGE_EXPORTS_RESOLVE key order: an exact key, else the pattern with the longest text

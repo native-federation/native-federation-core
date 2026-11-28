@@ -14,6 +14,10 @@ describe('replaceGlob', () => {
     expect(replaceGlob('./*/dist/*.js', 'sub')).toBe('./sub/dist/sub.js');
   });
 
+  it('keeps an array target an array', () => {
+    expect(replaceGlob(['./esm/*.js', './cjs/*.js'], 'a')).toEqual(['./esm/a.js', './cjs/a.js']);
+  });
+
   it('recurses into condition objects', () => {
     expect(replaceGlob({ import: './esm/*.js', require: './cjs/*.js' }, 'a')).toEqual({
       import: './esm/a.js',
@@ -68,6 +72,32 @@ describe('findOptimalExport', () => {
   it('resolves the first element of an array target', () => {
     const result = findOptimalExport(['./first.js', './second.js'], info);
     expect(result?.entryPoint).toBe(path.join('/pkg', './first.js'));
+  });
+});
+
+describe('findOptimalExport with an array target', () => {
+  it.each([
+    ['a bare specifier', 'other-pkg/index.js'],
+    ['an absolute path', '/abs/index.js'],
+    ['a parent segment', './dist/../../index.js'],
+    ['a node_modules segment', './node_modules/dep/index.js'],
+    ['a node_modules segment in another case', './NODE_MODULES/dep/index.js'],
+    ['a . segment', './dist/./index.js'],
+    ['a parent segment after a backslash', './dist\\..\\..\\index.js'],
+    ['a URL', 'https://example.com/index.js'],
+  ])('skips %s to the next valid target', (_, invalid) => {
+    const result = findOptimalExport([invalid, './valid.js'], info);
+    expect(result?.entryPoint).toBe(path.join('/pkg', './valid.js'));
+  });
+
+  it('skips a conditions object that resolves nothing', () => {
+    const result = findOptimalExport([{ types: './t.d.ts' }, './valid.js'], info);
+    expect(result?.entryPoint).toBe(path.join('/pkg', './valid.js'));
+  });
+
+  it('resolves nothing when no element is a valid target', () => {
+    expect(findOptimalExport(['../outside.js'], info)).toBeUndefined();
+    expect(findOptimalExport([], info)).toBeUndefined();
   });
 });
 
