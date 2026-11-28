@@ -3,11 +3,7 @@ import { fileURLToPath } from 'url';
 import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { ExternalsCacheKey } from '../../domain/core/build-adapter.contract.js';
-import type {
-  ChunkInfo,
-  IntegrityMap,
-  SharedInfo,
-} from '../../domain/core/federation-info.contract.js';
+import type { IntegrityMap, SharedInfo } from '../../domain/core/federation-info.contract.js';
 import type {
   FileReaderPort,
   FileWriterPort,
@@ -113,7 +109,7 @@ export const getChecksumCore = (
   // The bundle's `chunks`: it decides which files a cached bundle holds (core#216).
   chunks?: boolean
 ): string => {
-  const denseExternals = Object.keys(shared)
+  const depsState = Object.keys(shared)
     .sort()
     .reduce((clean, external) => {
       const installed = resolvedVersions[external];
@@ -135,7 +131,7 @@ export const getChecksumCore = (
   return hash
     .hash(
       'sha256',
-      denseExternals +
+      depsState +
         `:dev=${dev}:builder=${builderVersion}:features=${featureState(features)}` +
         adapterState(adapterKey) +
         externalsState(externals) +
@@ -147,7 +143,6 @@ export const getChecksumCore = (
 export type CacheMetadata = {
   checksum: string;
   externals: SharedInfo[];
-  chunks?: ChunkInfo;
   integrity?: IntegrityMap;
   files: string[];
   // Checked on a hit against the current plan (cache-validity.ts).
@@ -205,7 +200,7 @@ export const cacheEntryCore = (
 
 const STAMP_FILE = '.nf-cache.json';
 // Bump when the on-disk layout changes within a minor.
-const CACHE_LAYOUT = 2;
+const CACHE_LAYOUT = 3;
 
 type CacheStamp = { layout: number; version: string };
 

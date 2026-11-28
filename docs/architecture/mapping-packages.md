@@ -9,6 +9,10 @@
   under the prefix belongs to it, and the longest prefix wins.
 - Without a declaration, the npm-style name (`@scope/name`) decides.
 - A declaration is identity only: it does not change how or where the mappings are bundled.
+- A mapping record is an ordinary shared record, with `entries` and its own `chunks`
+  (see [Chunks](chunks.md)).
+- Mappings built in different bundles that split publish separate records, even under one package
+  name. The bundle name only groups them; it is never published.
 - Packages that hold shared state and depend on each other are coupled explicitly with `pool`;
   core never infers coupling.
 - The entry points of one package agree on their version; a mismatch fails the build before
@@ -29,12 +33,16 @@
 
 ## Limits
 
+- Splitting mapping records by bundle is kept from 4.x as it is. Shared packages built in two
+  bundles already publish one record, so the two kinds of record group differently for now.
 - Declarations belong in one module that every remote's config imports. Remotes that declare the
   same library differently publish it differently, and core cannot detect that.
 - A mapping name that is not npm-style warns, unless a declaration covers it; it never fails the
   build.
 
-Enforced by: `src/lib/config/mapping-utils.spec.ts`, `src/lib/core/output/densify-externals.spec.ts`
+Enforced by: `src/lib/config/mapping-utils.spec.ts`, `src/lib/core/output/densify-externals.spec.ts`,
+`src/lib/core/build/mapping-bundle-plan.spec.ts`,
+`src/lib/core/build/bundle-exposed-and-mappings.spec.ts`
 Issues: core#198, core#213, core#214, core#215
 History: core#206 per-mapping package field (closed) → core#208 `build: 'paths'` (4.9.0-next.1 only)
 → core#214 `.package(prefix, cfg)` → core#215 identity only, no own bundle

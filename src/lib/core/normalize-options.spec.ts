@@ -168,12 +168,10 @@ describe('normalizeFederationOptionsCore', () => {
 
       addExternalsToCache(result.options.federationCache, 'browser-shared', {
         externals: [{ packageName: 'a', outFileName: 'a.js' } as SharedInfo],
-        chunks: { 'browser-shared': ['chunk-a.js'] },
         outputFiles: [{ fileName: 'a.js', platform: 'browser' }],
       });
 
       expect(supplied.externals).toEqual([]);
-      expect(supplied.chunks).toBeUndefined();
       expect(supplied.externalFiles).toBeUndefined();
     });
 

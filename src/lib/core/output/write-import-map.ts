@@ -1,9 +1,5 @@
 import * as path from 'path';
-import type {
-  ChunkInfo,
-  IntegrityMap,
-  SharedInfo,
-} from '../../domain/core/federation-info.contract.js';
+import type { IntegrityMap, SharedInfo } from '../../domain/core/federation-info.contract.js';
 import type { FileWriterPort } from '../../domain/utils/io-port.contract.js';
 import type { FederationOptions } from '../../domain/core/federation-options.contract.js';
 import { toChunkImport } from '../../domain/core/chunk.js';
@@ -12,7 +8,7 @@ import { resolveOutputPath } from '../../utils/output-path.js';
 
 export function writeImportMapCore(
   io: FileWriterPort,
-  sharedInfo: { externals: SharedInfo[]; chunks?: ChunkInfo },
+  sharedInfo: { externals: SharedInfo[]; chunks?: string[] },
   fedOption: FederationOptions,
   fileIntegrity?: IntegrityMap
 ) {
@@ -25,13 +21,8 @@ export function writeImportMapCore(
     },
     {} as Record<string, string>
   );
-  if (sharedInfo.chunks) {
-    Object.values(sharedInfo.chunks).forEach(c => {
-      c.forEach(e => {
-        const key: string = toChunkImport(e);
-        imports[key] = e;
-      });
-    });
+  for (const file of sharedInfo.chunks ?? []) {
+    imports[toChunkImport(file)] = file;
   }
 
   const importMap: { imports: Record<string, string>; integrity?: IntegrityMap } = { imports };
@@ -52,7 +43,7 @@ export function writeImportMapCore(
 }
 
 export function writeImportMap(
-  sharedInfo: { externals: SharedInfo[]; chunks?: ChunkInfo },
+  sharedInfo: { externals: SharedInfo[]; chunks?: string[] },
   fedOption: FederationOptions,
   fileIntegrity?: IntegrityMap
 ) {

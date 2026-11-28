@@ -170,7 +170,6 @@ function normalizeShared(
   );
   warnChunksConflicts(result);
   result = withPackagePreload(result);
-  warnPreloadInSharedBundle(result);
 
   return result;
 }
@@ -183,8 +182,6 @@ const preloadedPackages = (shared: NormalizedSharedExternalsConfig) => [
   ),
 ];
 
-const listed = (packages: string[]) => packages.map(p => `'${p}'`).join(', ');
-
 // A package publishes one record, and densifying splits one whose entry points disagree on preload.
 function withPackagePreload(
   shared: NormalizedSharedExternalsConfig
@@ -196,20 +193,6 @@ function withPackagePreload(
       key,
       packages.has(inferPackageFromSecondary(key)) ? { ...cfg, preload: true as const } : cfg,
     ])
-  );
-}
-
-// The runtime preloads every chunk of the bundle a preload package is built in.
-function warnPreloadInSharedBundle(shared: NormalizedSharedExternalsConfig): void {
-  // Keys, not packages: an entry point inherits preload but keeps its own build.
-  const keys = Object.entries(shared)
-    .filter(([, cfg]) => cfg.preload && (cfg.build === 'default' || cfg.build === 'pool'))
-    .map(([key]) => key);
-  if (keys.length === 0) return;
-  logger.warn(
-    `Shared externals ${listed(keys)} set preload, but are built in a bundle with other ` +
-      `packages (the combined shared bundle or a pool), so the runtime preloads the chunks of ` +
-      `every package in it. Give them a bundle of their own with build: 'package'.`
   );
 }
 

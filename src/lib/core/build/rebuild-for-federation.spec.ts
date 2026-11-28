@@ -337,4 +337,36 @@ describe('rebuildForFederation — exposed chunk closures', () => {
       '@nf-internal/chunk-NEW': { file: 'chunk-NEW.js', initial: true },
     });
   });
+
+  // A shared record whose bundle the rebuild kept still gets its map, read from the files on disk;
+  // a mapping record's map follows its rebuilt entry like an exposed module's.
+  it('lists the chunks of shared and mapping records on every rebuild', async () => {
+    const options = fedOptions([{ packageName: 'a', outFileName: 'a.js' } as SharedInfo], {
+      workspaceRoot,
+    });
+    options.federationCache.externalFiles = {
+      'browser-shared': [
+        { fileName: 'a.js', platform: 'browser' },
+        { fileName: 'chunk-A.js', platform: 'browser' },
+      ],
+    };
+    fs.writeFileSync(path.join(workspaceRoot, 'dist', 'a.js'), `import '@nf-internal/chunk-A';`);
+    fs.writeFileSync(path.join(workspaceRoot, 'dist', 'chunk-A.js'), '');
+    const files = { 'lib.js': `import './chunk-L.js';`, 'chunk-L.js': '' };
+    for (const [name, code] of Object.entries(files)) {
+      fs.writeFileSync(path.join(workspaceRoot, 'dist', name), code);
+    }
+    vi.mocked(bundleExposedAndMappings).mockResolvedValueOnce({
+      mappings: [{ packageName: 'lib', outFileName: 'lib.js' } as SharedInfo],
+      exposes: [],
+      outputFiles: Object.keys(files).map(fileName => ({ fileName, platform: 'browser' })),
+    });
+
+    const info = await rebuildForFederation(config(), options, ['a'], ['/src/lib.ts']);
+
+    expect(Object.fromEntries(info.shared.map(s => [s.packageName, s.chunks]))).toEqual({
+      a: { '@nf-internal/chunk-A': { file: 'chunk-A.js', initial: true } },
+      lib: { '@nf-internal/chunk-L': { file: 'chunk-L.js', initial: true } },
+    });
+  });
 });

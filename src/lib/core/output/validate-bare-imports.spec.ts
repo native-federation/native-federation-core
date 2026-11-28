@@ -272,7 +272,7 @@ describe('findUnresolvedImportsCore', () => {
     expect(result).toEqual([]);
   });
 
-  it('accepts the chunks a bundle lists', () => {
+  it('accepts the chunks an owner map lists, whichever owner lists them', () => {
     const io = createMemoryIo()
       .setFile(out('main.js'), `import "@nf-internal/chunk-A"; import "@nf-internal/chunk-B";`)
       .setFile(out('chunk-A.js'), `export {};`)
@@ -284,12 +284,42 @@ describe('findUnresolvedImportsCore', () => {
       browser('main.js', 'chunk-A.js', 'chunk-B.js'),
       makeConfig(),
       info({
-        exposes: [{ key: './main', outFileName: 'main.js' }],
-        chunks: { 'browser-shared': ['chunk-A.js'], 'mapping-or-exposed': ['chunk-B.js'] },
+        exposes: [
+          {
+            key: './main',
+            outFileName: 'main.js',
+            chunks: { '@nf-internal/chunk-B': { file: 'chunk-B.js', initial: true } },
+          },
+        ],
+        shared: [
+          {
+            ...shared('rxjs', 'rxjs.js'),
+            chunks: { '@nf-internal/chunk-A': { file: 'chunk-A.js' } },
+          },
+        ],
       })
     );
 
     expect(result).toEqual([]);
+  });
+
+  // Until unlisted chunks fail on their own, such a name is reported like any other bare import.
+  it('reports a chunk no owner map lists as an unresolved import', () => {
+    const io = createMemoryIo()
+      .setFile(out('main.js'), `import "@nf-internal/chunk-X";`)
+      .setFile(out('chunk-X.js'), `export {};`);
+
+    const result = unresolvedImports(
+      io,
+      OUT,
+      browser('main.js', 'chunk-X.js'),
+      makeConfig(),
+      info({ exposes: [{ key: './main', outFileName: 'main.js' }] })
+    );
+
+    expect(result.map(r => [r.specifier, r.importers])).toEqual([
+      ['@nf-internal/chunk-X', ['main.js']],
+    ]);
   });
 
   it('ignores relative, absolute, URL and computed specifiers', () => {
@@ -326,7 +356,6 @@ describe('findUnresolvedImportsCore', () => {
       config,
       info({
         shared: [shared('browser-lib', 'browser-lib.js'), shared('node-lib', 'node-lib.js')],
-        chunks: { 'node-node_lib': ['node-chunk.js'] },
       })
     );
 

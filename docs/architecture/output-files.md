@@ -12,7 +12,7 @@
   a later bundle that deletes an earlier one's files is caught before anything is published.
 - Adapters post-process from `outputFiles`, not from a glob or from `remoteEntry.json`.
 - `importmap.json` maps every specifier `remoteEntry.json` publishes, one entry each: shared
-  packages, shared mappings, and the chunks of every bundle, exposed and mapping bundles included.
+  packages, shared mappings, and every chunk an exposed module or shared record lists.
   A host without the runtime loads an exposed module with this map alone.
 
 ## Why
@@ -29,7 +29,8 @@
 
 ## Rejected
 
-- Listing the files in the published `chunks` field: the runtime gives that field meaning.
+- Listing the files in the published `chunks` maps of exposed modules and shared records: the
+  runtime gives those maps meaning, and they hold only the scripts an owner reaches.
 
 ## Limits
 

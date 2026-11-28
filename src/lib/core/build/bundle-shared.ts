@@ -3,7 +3,6 @@ import type { NormalizedFederationConfig } from '../../domain/config/federation-
 import { sharedPackageJsonRepository, type PackageInfo } from '../../utils/package/package-info.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
 import type {
-  ChunkInfo,
   IntegrityMap,
   OutputFile,
   SharedInfo,
@@ -53,7 +52,6 @@ import { inferPackageFromSecondary } from '../../utils/normalize.js';
 
 export interface SharedBundleResult {
   externals: SharedInfo[];
-  chunks?: ChunkInfo;
   integrity?: IntegrityMap;
   outputFiles: OutputFile[];
   adapterData?: unknown;
@@ -166,7 +164,6 @@ export async function bundleSharedCore(
       }
       return {
         externals: cacheMetadata.externals,
-        chunks: cacheMetadata.chunks,
         integrity,
         outputFiles: toOutputFiles(cacheMetadata.files, buildOptions.platform),
         adapterData: deps.adapter.cacheData ? deepFreeze(cacheMetadata.adapterData) : undefined,
@@ -269,7 +266,7 @@ export async function bundleSharedCore(
   const hashEntries = fedOptions.dev
     ? new Set<string>()
     : new Set(entryPoints.map(ep => ep.outName));
-  const { renamed, chunks } = finalizeSharedOutputs(
+  const renamed = finalizeSharedOutputs(
     deps.io,
     cachedFiles,
     bundleCache.dir,
@@ -282,21 +279,6 @@ export async function bundleSharedCore(
 
   const result = buildResult(packageInfos, sharedBundles, outFileNames);
 
-  /**
-   * Chunking
-   */
-  let exportedChunks: ChunkInfo | undefined = undefined;
-  // Imports of a chunk are rewritten to `@nf-internal/*` even in a bundle told not to split, so
-  // any chunk it still emits is published.
-  if (buildOptions.chunks || chunks.length > 0) {
-    result.forEach(external => {
-      external.bundle = buildOptions.bundleName;
-    });
-    if (chunks.length > 0) {
-      exportedChunks = { [buildOptions.bundleName]: chunks };
-    }
-  }
-
   const persistedFiles = bundleResult.map(r => r.fileName.split(path.sep).pop() ?? r.fileName);
 
   // Must run after finalizeSharedOutputs so SRI matches the bytes copied to dist.
@@ -308,7 +290,6 @@ export async function bundleSharedCore(
     checksum,
     externals: result,
     files: persistedFiles,
-    chunks: exportedChunks,
     integrity,
     builtExternals: external,
     externalImports: fedOptions.cacheExternalArtifacts
@@ -321,7 +302,6 @@ export async function bundleSharedCore(
 
   return {
     externals: result,
-    chunks: exportedChunks,
     integrity,
     outputFiles: toOutputFiles(persistedFiles, buildOptions.platform),
     adapterData,
@@ -415,7 +395,7 @@ function finalizeSharedOutputs(
   bundleDir: string,
   entries: Set<string>,
   hashEntries: Set<string>
-): { renamed: Map<string, string>; chunks: string[] } {
+): Map<string, string> {
   const sourceFiles = cachedFiles.filter(isScript);
   const chunks = sourceFiles.filter(file => !entries.has(file));
   const chunkNames = new Set(chunks);
@@ -459,7 +439,7 @@ function finalizeSharedOutputs(
     }
   }
 
-  return { renamed, chunks: chunks.map(chunk => renamed.get(chunk) ?? chunk) };
+  return renamed;
 }
 
 function applyRenames(

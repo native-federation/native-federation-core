@@ -2,7 +2,6 @@ import path from 'path';
 
 import type {
   ArtifactInfo,
-  ChunkInfo,
   ExposesInfo,
   IntegrityMap,
   SharedInfo,
@@ -156,22 +155,20 @@ export async function bundleExposedAndMappingsCore(
     );
   };
 
-  const exportedChunks: ChunkInfo = {};
   const written: string[] = [];
 
   // Renamed before the next build runs, so the two never hold the bundler's names at once.
   const collectBundleOutputs = (
-    bundleName: string,
     resultMap: Record<string, string>,
     entries: string[],
     splits: boolean
   ) => {
-    const { files, chunks } = finalizeBundleOutputs(io, resultMap, entries, {
-      splits,
-      outdir: resolveOutputPath(fedOptions),
-    });
-    written.push(...files);
-    if (chunks) exportedChunks[bundleName] = chunks;
+    written.push(
+      ...finalizeBundleOutputs(io, resultMap, entries, {
+        splits,
+        outdir: resolveOutputPath(fedOptions),
+      })
+    );
   };
 
   const sharedResult: Array<SharedInfo> = [];
@@ -192,12 +189,11 @@ export async function bundleExposedAndMappingsCore(
         records.get(item.fileName)!,
         fedOptions
       );
-      if (plan.chunks) mapping.bundle = plan.bundleName;
       sharedResult.push(mapping);
       files.push(distEntryFile);
     }
 
-    collectBundleOutputs(plan.bundleName, results, files, plan.chunks);
+    collectBundleOutputs(results, files, plan.chunks);
     logger.measure(start, `Bundling '${plan.bundleName}' shared mappings`);
   }
 
@@ -225,7 +221,7 @@ export async function bundleExposedAndMappingsCore(
     exposedFiles.push(distEntryFile);
   }
 
-  collectBundleOutputs(EXPOSED_BUNDLE, exposedResults, exposedFiles, config.chunks);
+  collectBundleOutputs(exposedResults, exposedFiles, config.chunks);
   if (exposes.length > 0) logger.measure(exposedStart, 'Bundling exposed modules');
 
   const outputPaths = [...new Set(written)];
@@ -237,7 +233,6 @@ export async function bundleExposedAndMappingsCore(
   return {
     mappings: sharedResult,
     exposes: exposedResult,
-    chunks: Object.keys(exportedChunks).length > 0 ? exportedChunks : undefined,
     integrity,
     outputFiles: toOutputFiles(outputPaths, 'browser'),
   };
@@ -284,19 +279,16 @@ function finalizeBundleOutputs(
   resultMap: Record<string, string>,
   entries: string[],
   { splits, outdir }: { splits: boolean; outdir: string }
-): { files: string[]; chunks?: string[] } {
+): string[] {
   const outputs = Object.values(resultMap);
-  if (!splits || entries.length === 0) return { files: [...entries, ...outputs] };
+  if (!splits || entries.length === 0) return [...entries, ...outputs];
 
   const chunks = outputs.filter(file => isScript(file));
   assertWrittenToOutdir(io, [...entries, ...chunks], outdir);
   const chunkNames = new Set(chunks.map(chunk => path.basename(chunk)));
   for (const entryFile of entries) rewriteChunkImportsCore(io, entryFile, chunkNames);
   const renamed = renameChunks(io, chunks, entries);
-  return {
-    files: [...entries, ...outputs.map(file => renamedPath(file, renamed))],
-    chunks: chunks.map(chunk => path.basename(renamedPath(chunk, renamed))),
-  };
+  return [...entries, ...outputs.map(file => renamedPath(file, renamed))];
 }
 
 // A renamed chunk's source map moves with it to `<target>.map`.

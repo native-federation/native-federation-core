@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { planMappingBundles } from './mapping-bundle-plan.js';
+import { mappingBundleByImport, planMappingBundles } from './mapping-bundle-plan.js';
 import type {
   NormalizedFederationConfig,
   NormalizedMappingConfig,
@@ -210,5 +210,30 @@ describe('planMappingBundles', () => {
 
   it('plans nothing when there are no mappings', () => {
     expect(planMappingBundles(config({}))).toEqual([]);
+  });
+});
+
+describe('mappingBundleByImport', () => {
+  it('names the bundle of each mapping built with chunks', () => {
+    const map = mappingBundleByImport(
+      config(
+        { './libs/ui/button': '@org/ui/button', './libs/b': '@org/b' },
+        { '@org/ui/*': mappingCfg({ build: 'separate' }) }
+      )
+    );
+
+    expect([...map]).toEqual([
+      ['@org/ui/button', 'mapping-org_ui_button'],
+      ['@org/b', 'mapping-bundle'],
+    ]);
+  });
+
+  // Without chunks the mappings were never told apart by bundle, so they keep merging.
+  it('leaves out bundles built without chunks', () => {
+    const map = mappingBundleByImport(
+      config({ './libs/a': '@org/a' }, { '@org/a': mappingCfg({ build: 'separate' }) }, false)
+    );
+
+    expect(map.size).toBe(0);
   });
 });

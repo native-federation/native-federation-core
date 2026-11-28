@@ -697,7 +697,7 @@ describe('characterisation: config forms', () => {
   // C8's warnings are D29 and D30, so a change to one edits only its own row.
   it('C8: fromPackageJson defaults give every package a bundle; a pool shares one', async () => {
     const { warnings, ...projection } = projected(await characterise(preloadedPool()));
-    expect(warnings).toHaveLength(1);
+    expect(warnings).toEqual([]);
     expect(projection).toMatchSnapshot();
   });
 
@@ -707,13 +707,15 @@ describe('characterisation: config forms', () => {
     expect(warnings).not.toContainEqual(expect.stringContaining('entry files'));
   });
 
-  intended('D30', 'C8, preload in a pool warns that the whole bundle preloads', async () => {
-    const { warnings } = projected(await characterise(preloadedPool()));
+  intended(
+    'D30',
+    'C8, preload in a pool no longer warns that the whole bundle preloads',
+    async () => {
+      const { warnings } = projected(await characterise(preloadedPool()));
 
-    expect(warnings).toContain(
-      "Shared externals 'b', 'c' set preload, but are built in a bundle with other packages (the combined shared bundle or a pool), so the runtime preloads the chunks of every package in it. Give them a bundle of their own with build: 'package'."
-    );
-  });
+      expect(warnings).not.toContainEqual(expect.stringContaining('every package in it'));
+    }
+  );
 });
 
 describe('characterisation: entry points scanned', () => {

@@ -5,7 +5,7 @@ import type {
 } from '../../domain/core/federation-info.contract.js';
 import { inferPackageFromSecondary } from '../../utils/normalize.js';
 
-export type DenseFederationInfo = FederationInfo & { shared: DenseSharedInfo[] };
+export type DenseFederationInfo = Omit<FederationInfo, 'shared'> & { shared: DenseSharedInfo[] };
 
 function isDense(entry: SharedInfo | DenseSharedInfo): entry is DenseSharedInfo {
   return 'entries' in entry;
@@ -19,7 +19,9 @@ function isDense(entry: SharedInfo | DenseSharedInfo): entry is DenseSharedInfo 
  */
 export function densifyExternals(
   shared: Array<SharedInfo | DenseSharedInfo>,
-  declaredPackages: ReadonlyMap<string, string>
+  declaredPackages: ReadonlyMap<string, string>,
+  // An extra grouping key per import name; it splits records but is never written.
+  groupKeys: ReadonlyMap<string, string> = new Map()
 ): DenseSharedInfo[] {
   const result: DenseSharedInfo[] = [];
   const groupIndex = new Map<string, number>();
@@ -36,7 +38,7 @@ export function densifyExternals(
     // Denylist, so a field added to SharedInfo later splits groups instead of being dropped.
     const sig = JSON.stringify(meta, Object.keys(meta).sort());
 
-    const key = parent + ' ' + sig;
+    const key = parent + ' ' + (groupKeys.get(packageName) ?? '') + ' ' + sig;
 
     const existing = groupIndex.get(key);
     if (existing === undefined) {
