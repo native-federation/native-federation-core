@@ -35,6 +35,14 @@ describe('findOptimalExport', () => {
     expect(result?.entryPoint).toBe(path.join('/pkg', './d.js'));
   });
 
+  it('falls back to the first non-types key without an ESM key or default', () => {
+    const result = findOptimalExport(
+      { types: './t.d.ts', node: './n.js', browser: './b.js' },
+      info
+    );
+    expect(result?.entryPoint).toBe(path.join('/pkg', './n.js'));
+  });
+
   it('resolves the first element of an array target', () => {
     const result = findOptimalExport(['./first.js', './second.js'], info);
     expect(result?.entryPoint).toBe(path.join('/pkg', './first.js'));
@@ -48,6 +56,25 @@ describe('resolveExportsEntry', () => {
 
   it('expands a trailing-asterisk subpath pattern', () => {
     expect(resolveExportsEntry({ './*': './dist/*.js' }, './feature')).toBe('./dist/feature.js');
+  });
+
+  it('matches an exact key listed before a pattern', () => {
+    expect(resolveExportsEntry({ './sub': './sub.js', './*': './dist/*.js' }, './sub')).toBe(
+      './sub.js'
+    );
+  });
+
+  it('expands a pattern into every condition of its target', () => {
+    expect(
+      resolveExportsEntry(
+        { './features/*': { import: './esm/*.js', default: './cjs/*.js' } },
+        './features/a'
+      )
+    ).toEqual({ import: './esm/a.js', default: './cjs/a.js' });
+  });
+
+  it('returns undefined without exports', () => {
+    expect(resolveExportsEntry(undefined, './sub')).toBeUndefined();
   });
 
   it('returns undefined when no key matches', () => {
