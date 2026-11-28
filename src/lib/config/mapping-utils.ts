@@ -158,14 +158,14 @@ export function declaredPackageOf(
   return best;
 }
 
+// Only a .package() declaration groups mappings; every other mapping is a package of its own.
 export function mappingPackageByImport(
   config: NormalizedFederationConfig
 ): ReadonlyMap<string, string> {
   const prefixes = Object.keys(config.sharedMappingPackages ?? {});
   const packages = new Map<string, string>();
   for (const mappedImport of Object.values(config.sharedMappings)) {
-    const declared = declaredPackageOf(mappedImport, prefixes);
-    if (declared !== undefined) packages.set(mappedImport, declared);
+    packages.set(mappedImport, declaredPackageOf(mappedImport, prefixes) ?? mappedImport);
   }
   return packages;
 }

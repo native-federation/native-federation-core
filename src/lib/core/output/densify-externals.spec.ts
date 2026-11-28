@@ -208,7 +208,7 @@ describe('densifyExternals', () => {
     ]);
   });
 
-  it('keeps the name rule for everything the declared packages do not list', () => {
+  it('groups a name the mapping packages do not list under its npm package', () => {
     const result = densifyExternals(
       [flat('@angular/common', 'common.js'), flat('@angular/common/http', 'http.js')],
       new Map([['@shared/table', '@shared/table']])

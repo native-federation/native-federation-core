@@ -19,7 +19,8 @@ function isDense(entry: SharedInfo | DenseSharedInfo): entry is DenseSharedInfo 
  */
 export function densifyExternals(
   shared: Array<SharedInfo | DenseSharedInfo>,
-  declaredPackages: ReadonlyMap<string, string>,
+  // The package of each mapping import; any other name is grouped under its npm package.
+  mappingPackages: ReadonlyMap<string, string>,
   // An extra grouping key per import name; it splits records but is never written.
   groupKeys: ReadonlyMap<string, string> = new Map()
 ): DenseSharedInfo[] {
@@ -34,7 +35,7 @@ export function densifyExternals(
 
     const { outFileName, packageName, dev, ...meta } = entry;
     // A declared package publishes one record: its entry points agree, checked before bundling.
-    const parent = declaredPackages.get(packageName) ?? inferPackageFromSecondary(packageName);
+    const parent = mappingPackages.get(packageName) ?? inferPackageFromSecondary(packageName);
     // Denylist, so a field added to SharedInfo later splits groups instead of being dropped.
     const sig = JSON.stringify(meta, Object.keys(meta).sort());
 

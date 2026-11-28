@@ -1080,9 +1080,9 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
 // must keep these bundles, `bundle` fields and published records.
 describe('mapping output without declared packages', () => {
   const cfg = { singleton: true, strictVersion: false };
-  // Shaped like discussion #176: domain-named libraries that the name rule groups by their first
-  // two segments, a library next to its own secondary, one mapping in each other build mode, and a
-  // package whose entries land in two bundles (`@org/b` on its own, `@org/b/extra` in the default).
+  // Shaped like discussion #176: domain-named libraries, a library next to its own secondary, one
+  // mapping in each other build mode, and a library whose entries land in two bundles (`@org/b` on
+  // its own, `@org/b/extra` in the default).
   const config = () =>
     makeConfig({
       chunks: true,
@@ -1142,19 +1142,84 @@ describe('mapping output without declared packages', () => {
     ]);
   });
 
-  // A mapping package built in two chunked bundles publishes two records under one name, while the
-  // bundle that splits them stays off the wire.
-  it('splits dense records by bundle', async () => {
+  // Without a declaration every mapping is a package of its own, whatever its name or bundle, and
+  // the bundle stays off the wire.
+  it('publishes one record per mapping', async () => {
     const { info } = await build();
 
     expect(info.shared.map(s => [s.packageName, Object.keys(s.entries)])).toEqual([
-      ['@shared/components', ['@shared/components/table', '@shared/components/collapse']],
-      ['@org/lib', ['@org/lib', '@org/lib/testing']],
-      ['@org/b', ['@org/b/extra']],
+      ['@shared/components/table', ['@shared/components/table']],
+      ['@shared/components/collapse', ['@shared/components/collapse']],
+      ['@org/lib', ['@org/lib']],
+      ['@org/lib/testing', ['@org/lib/testing']],
+      ['@org/b/extra', ['@org/b/extra']],
       ['@org/b', ['@org/b']],
-      ['@org/c', ['@org/c/x', '@org/c/y']],
+      ['@org/c/x', ['@org/c/x']],
+      ['@org/c/y', ['@org/c/y']],
     ]);
     for (const record of info.shared) expect(record).not.toHaveProperty('bundle');
+  });
+});
+
+// sharing/06: without a .package() declaration every mapping is a package of its own, so mappings
+// that share an npm-style name never take each other's config or version.
+describe('mapping output for undeclared mappings that differ', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  async function build(cfg: NormalizedFederationConfig, io = createMemoryIo()) {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const adapter = createFakeBuildAdapter({ io });
+    const fedOptions = makeFedOptions({ dev: false, workspaceRoot: '/ws' });
+    const artifactInfo = await bundleExposedAndMappingsCore({ adapter, io }, cfg, fedOptions, []);
+    const info = assembleFederationInfo(cfg, fedOptions, artifactInfo);
+    return { info, warn };
+  }
+
+  it('publishes each with its own config, without a warning', async () => {
+    const { info, warn } = await build(
+      makeConfig({
+        sharedMappings: {
+          './libs/ui/table': '@org/ui/table',
+          './libs/ui/button': '@org/ui/button',
+        },
+        sharedMappingsConfig: {
+          '@org/ui/button': { singleton: false, strictVersion: false, pool: 'b' },
+          '*': { singleton: true, strictVersion: false, pool: 'a' },
+        },
+      })
+    );
+
+    expect(
+      info.shared.map(s => [s.packageName, s.singleton, s.pool, Object.keys(s.entries)])
+    ).toEqual([
+      ['@org/ui/table', true, 'a', ['@org/ui/table']],
+      ['@org/ui/button', false, 'b', ['@org/ui/button']],
+    ]);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('publishes each at the version of its own library', async () => {
+    const io = createMemoryIo()
+      .setFile('/ws/libs/ui/table/package.json', JSON.stringify({ version: '1.2.3' }))
+      .setFile('/ws/libs/ui/table/index.ts', '')
+      .setFile('/ws/libs/ui/button/package.json', JSON.stringify({ version: '2.0.0' }))
+      .setFile('/ws/libs/ui/button/index.ts', '');
+    const { info, warn } = await build(
+      makeConfig({
+        sharedMappings: {
+          '/ws/libs/ui/table/index.ts': '@org/ui/table',
+          '/ws/libs/ui/button/index.ts': '@org/ui/button',
+        },
+        features: { ...makeConfig().features, mappingVersion: true },
+      }),
+      io
+    );
+
+    expect(info.shared.map(s => [s.packageName, s.version, Object.keys(s.entries)])).toEqual([
+      ['@org/ui/table', '1.2.3', ['@org/ui/table']],
+      ['@org/ui/button', '2.0.0', ['@org/ui/button']],
+    ]);
+    expect(warn).not.toHaveBeenCalled();
   });
 });
 

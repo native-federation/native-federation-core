@@ -261,7 +261,7 @@ describe('declaredPackageOf', () => {
 });
 
 describe('mappingPackageByImport', () => {
-  it('maps only the mappings under a declared package', () => {
+  it('maps a mapping under a declared package to it and every other mapping to itself', () => {
     const config = {
       sharedMappings: {
         '/libs/lib/index.ts': '@org/lib',
@@ -275,6 +275,7 @@ describe('mappingPackageByImport', () => {
       new Map([
         ['@org/lib', '@org/lib'],
         ['@org/lib/testing', '@org/lib'],
+        ['@org/library', '@org/library'],
       ])
     );
   });
