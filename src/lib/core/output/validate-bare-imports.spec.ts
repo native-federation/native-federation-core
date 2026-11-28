@@ -588,18 +588,52 @@ describe('validateBareImports', () => {
     );
   });
 
-  it('warns about a file it could not scan, and fails the build on it with strictImports', () => {
+  // W11: the scan is the only way an edge goes unseen, so a file it cannot read is never passed.
+  it('fails a full build on a file it could not scan, with or without strictImports', () => {
+    const error = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    const { config, fedOptions, fedInfo, files } = setup(false);
+    fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'a.js'), 'import "x"; )');
+
+    expect(() => validateBareImports(config, fedOptions, fedInfo, files, FULL)).toThrow(
+      /^1 file\(s\) could not be scanned\. See the errors above\.$/
+    );
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("Could not scan 'a.js'"));
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining('Core reads only ESM; report this to your build adapter.')
+    );
+
+    // It fails without strictImports too, so the message does not blame it.
+    config.features.strictImports = true;
+    expect(() => validateBareImports(config, fedOptions, fedInfo, files, FULL)).toThrow(
+      /^1 file\(s\) could not be scanned\. See the errors above\.$/
+    );
+  });
+
+  // Without strictImports a rebuild only warns, so here strictImports is the reason it fails.
+  it('fails a strict rebuild on a file it could not scan and names strictImports', () => {
+    vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    const { config, fedOptions, fedInfo, files } = setup(true);
+    fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'a.js'), 'import "x"; )');
+
+    expect(() => validateBareImports(config, fedOptions, fedInfo, files, REBUILD)).toThrow(
+      /^1 file\(s\) could not be scanned \(features.strictImports\)\. /
+    );
+  });
+
+  // W10 for W11: an unscanned file has no specifier, so it is never suppressed as unchanged.
+  it('warns about a file it could not scan on every rebuild, and fails the next full build', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     vi.spyOn(logger, 'error').mockImplementation(() => undefined);
     const { config, fedOptions, fedInfo, files } = setup(false);
     fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'a.js'), 'import "x"; )');
 
-    expect(() => validateBareImports(config, fedOptions, fedInfo, files, FULL)).not.toThrow();
+    expect(() => validateBareImports(config, fedOptions, fedInfo, files, REBUILD)).not.toThrow();
+    expect(() => validateBareImports(config, fedOptions, fedInfo, files, REBUILD)).not.toThrow();
+    expect(warn).toHaveBeenCalledTimes(2);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("Could not scan 'a.js'"));
 
-    config.features.strictImports = true;
     expect(() => validateBareImports(config, fedOptions, fedInfo, files, FULL)).toThrow(
-      /^1 file\(s\) could not be scanned \(features.strictImports\)/
+      /could not be scanned/
     );
   });
 
@@ -610,7 +644,7 @@ describe('validateBareImports', () => {
     fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'a.js'), 'import "x"; )');
 
     expect(() => validateBareImports(config, fedOptions, fedInfo, files, FULL)).toThrow(
-      /strictImports/
+      /could not be scanned/
     );
     expect(error).toHaveBeenCalledWith(expect.stringContaining("Could not scan 'a.js'"));
     expect(warn).not.toHaveBeenCalled();
@@ -624,7 +658,7 @@ describe('validateBareImports', () => {
     expect(() =>
       validateBareImports(config, fedOptions, fedInfo, browser('a.js', 'b.js'), FULL)
     ).toThrow(
-      /^1 bare import\(s\) cannot be resolved from remoteEntry.json \(features.strictImports\) and 1 file\(s\) could not be scanned \(features.strictImports\)\. See the errors above\.$/
+      /^1 bare import\(s\) cannot be resolved from remoteEntry.json \(features.strictImports\) and 1 file\(s\) could not be scanned\. See the errors above\.$/
     );
   });
 
@@ -704,7 +738,7 @@ describe('validateBareImports', () => {
     });
 
     // Control: the rule is about chunks only; an ordinary miss still needs strictImports to fail.
-    it('fails the build alone when an ordinary unresolved import sits next to it', () => {
+    it('fails on the chunk alone when an ordinary unresolved import sits next to it', () => {
       const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
       const error = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
       const { config, fedOptions, fedInfo, files } = withUnlistedChunk(false);

@@ -53,9 +53,9 @@ export function validateBareImports(
   logger.measure(start, 'Validated the bare imports of the published files.');
 
   const strict = config.features.strictImports;
-  // An unlisted chunk is broken whatever the config says, but a watch rebuild only warns so the dev
-  // loop keeps running; the next full build fails.
-  const failsAnyway = (kind: FindingKind) => fullReport && kind === 'unlisted-chunk';
+  // An unlisted chunk or an unscanned file is broken whatever the config says, but a watch rebuild
+  // only warns so the dev loop keeps running; the next full build fails.
+  const failsAnyway = (kind: FindingKind) => fullReport && kind !== 'unresolved';
   const fails = (kind: FindingKind) => strict || failsAnyway(kind);
 
   // A watch rebuild repeating unchanged warnings buries new ones. Only the specifiers are compared:
@@ -97,7 +97,9 @@ function toFindings({ unresolved, unparsable }: BareImportScan): Finding[] {
   return [
     ...unparsable.map(({ fileName, error }) => ({
       kind: 'unparsable' as const,
-      message: `Could not scan '${fileName}': ${error}`,
+      message:
+        `Could not scan '${fileName}': ${error}. ` +
+        'Core reads only ESM; report this to your build adapter.',
     })),
     ...unresolved.map(({ kind, specifier, importers, reason }) => ({
       kind,
