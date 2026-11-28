@@ -53,8 +53,9 @@ export function findOptimalExport(
 
   const exportTypes = Object.keys(target);
 
+  let esmExport: string | undefined;
   if (typeof isESM === 'undefined') {
-    const esmExport = exportTypes.find(e => isESMExport(e));
+    esmExport = exportTypes.find(e => isESMExport(e));
     if (esmExport) {
       const result = findOptimalExport(target[esmExport], info, platform, true);
       if (result !== undefined) return result;
@@ -65,7 +66,7 @@ export function findOptimalExport(
   const secondBestEntry =
     'default' in target && target['default']
       ? 'default'
-      : exportTypes.filter(e => e !== 'types' && e !== otherPlatform)[0];
+      : exportTypes.filter(e => e !== 'types' && e !== otherPlatform && e !== esmExport)[0];
   const secondBestExport: ExportEntry = target[secondBestEntry!];
 
   const result = findOptimalExport(

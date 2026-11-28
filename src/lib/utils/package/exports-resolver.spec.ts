@@ -87,6 +87,16 @@ describe('findOptimalExport', () => {
     );
   });
 
+  // The ESM key is not tried a second time as the first other key; Node takes './b.js' too.
+  it('moves past an ESM condition that resolves nothing to the next key', () => {
+    const target = { import: { node: './n.mjs' }, browser: './b.js' };
+    expect(findOptimalExport(target, info, 'browser')).toMatchObject({
+      entryPoint: path.join('/pkg', './b.js'),
+      esm: false,
+    });
+    expect(findOptimalExport(target, info, 'node')?.entryPoint).toBe(path.join('/pkg', './n.mjs'));
+  });
+
   it('matches nothing when only the other platform is listed', () => {
     expect(findOptimalExport({ node: './n.js' }, info, 'browser')).toBeUndefined();
     expect(findOptimalExport({ browser: './b.js' }, info, 'node')).toBeUndefined();
