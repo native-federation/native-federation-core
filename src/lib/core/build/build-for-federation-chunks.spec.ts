@@ -33,6 +33,7 @@ let dist: string;
 const CHART = '/pkgs/chart-lib/index.js';
 const CHART_EXTRAS = '/pkgs/chart-lib/extras.js';
 const TSLIB = '/pkgs/tslib/tslib.js';
+const MY_LIB = 'libs/my-lib/index.ts';
 const sourceOf = (file: string) => path.resolve(workspaceRoot, file);
 
 // The bundler's output, per entry source file; chunk names carry an 8-character bundler hash.
@@ -40,6 +41,7 @@ const entryCode = (): Record<string, string> => ({
   [CHART]: `/* chart */ import './chunk-CHARTAAA.js'; export const lazy = () => import('./chunk-LAZYAAAA.js');`,
   [CHART_EXTRAS]: `/* extras */ import 'chart-lib'; import './chunk-EXTRASAA.js';`,
   [TSLIB]: `/* tslib */ import './chunk-TSLIBAAA.js';`,
+  [MY_LIB]: `/* my-lib */ import './chunk-MYLIBAAA.js';`,
   [sourceOf('src/home.ts')]:
     `/* home */ import 'chart-lib'; import './chunk-HOMEAAAA.js'; export const route = () => import('./chunk-ROUTEAAA.js');`,
   [sourceOf('src/cart.ts')]: `/* cart */ import { s } from './chunk-SHAREDAA.js'; export { s };`,
@@ -52,6 +54,9 @@ const chunkCode: Record<string, Record<string, string>> = {
     'chunk-EXTRASAA.js': `/* extras-core */ export {};`,
     'chunk-LAZYAAAA.js': `/* chart-lazy */ export {};`,
     'chunk-TSLIBAAA.js': `/* tslib-core */ export {};`,
+  },
+  'mapping-bundle': {
+    'chunk-MYLIBAAA.js': `/* my-lib-core */ export {};`,
   },
   'mapping-or-exposed': {
     'chunk-HOMEAAAA.js': `/* home-core */ import './chunk-SHAREDAA.js';`,
@@ -110,7 +115,7 @@ function makeConfig(features: { denseChunking: boolean; denseExternals: boolean 
       'chart-lib/extras': shared(CHART_EXTRAS, { preload: true }),
       tslib: shared(TSLIB),
     },
-    sharedMappings: {},
+    sharedMappings: { [MY_LIB]: 'my-lib' },
     sharedMappingsConfig: {},
     skip: prepareSkipList([]),
     chunks: true,
@@ -272,85 +277,78 @@ describe('buildForFederation — published chunk closures', () => {
     expect(chartLib[0]).not.toHaveProperty('chunks');
   });
 
-  // The shape a runtime reads; names are content hashes, so they only move when the bytes do.
-  it('assembles remoteEntry.json', async () => {
+  // The whole wire format a runtime reads: shared packages, a mapping, exposed modules and split
+  // chunks, written out by hand (no snapshot file) so a format change shows up as an edit to this
+  // row. Chunk names are content hashes, so they only move when the fixture's bytes do.
+  it('writes remoteEntry.json', async () => {
     const { published } = await build({ denseChunking: true, denseExternals: true });
 
-    expect(published).toMatchInlineSnapshot(`
-      {
-        "$version": "v4",
-        "chunks": {
-          "browser-shared": [
-            "chunk-QTDORPIU.js",
-            "chunk-3CNQCWNB.js",
-            "chunk-SDY535X5.js",
-            "chunk-OCDHTTJP.js",
-            "chunk-3JS3MFFU.js",
-          ],
-          "mapping-or-exposed": [
-            "chunk-E4LY4AS4.js",
-            "chunk-O4YEPRQO.js",
-            "chunk-MV6JVKWS.js",
-          ],
+    expect(published).toEqual({
+      $version: 'v4',
+      name: 'mfe',
+      chunks: {
+        'browser-shared': [
+          'chunk-QTDORPIU.js',
+          'chunk-3CNQCWNB.js',
+          'chunk-SDY535X5.js',
+          'chunk-OCDHTTJP.js',
+          'chunk-3JS3MFFU.js',
+        ],
+        'mapping-bundle': ['chunk-4A5BQSGU.js'],
+        'mapping-or-exposed': ['chunk-E4LY4AS4.js', 'chunk-O4YEPRQO.js', 'chunk-MV6JVKWS.js'],
+      },
+      exposes: [
+        {
+          key: './Home',
+          outFileName: 'Home.js',
+          chunks: {
+            '@nf-internal/chunk-E4LY4AS4': { file: 'chunk-E4LY4AS4.js', initial: true },
+            '@nf-internal/chunk-O4YEPRQO': { file: 'chunk-O4YEPRQO.js', initial: true },
+            '@nf-internal/chunk-MV6JVKWS': { file: 'chunk-MV6JVKWS.js' },
+          },
         },
-        "exposes": [
-          {
-            "chunks": {
-              "@nf-internal/chunk-E4LY4AS4": {
-                "file": "chunk-E4LY4AS4.js",
-                "initial": true,
-              },
-              "@nf-internal/chunk-MV6JVKWS": {
-                "file": "chunk-MV6JVKWS.js",
-              },
-              "@nf-internal/chunk-O4YEPRQO": {
-                "file": "chunk-O4YEPRQO.js",
-                "initial": true,
-              },
-            },
-            "key": "./Home",
-            "outFileName": "Home.js",
+        {
+          key: './Cart',
+          outFileName: 'Cart.js',
+          chunks: {
+            '@nf-internal/chunk-O4YEPRQO': { file: 'chunk-O4YEPRQO.js', initial: true },
           },
-          {
-            "chunks": {
-              "@nf-internal/chunk-O4YEPRQO": {
-                "file": "chunk-O4YEPRQO.js",
-                "initial": true,
-              },
-            },
-            "key": "./Cart",
-            "outFileName": "Cart.js",
+        },
+      ],
+      shared: [
+        {
+          packageName: 'chart-lib',
+          bundle: 'browser-shared',
+          entries: {
+            'chart-lib': 'chart_lib.D2XIoLh0XZ.js',
+            'chart-lib/extras': 'chart_lib_extras.GeNvxeJbTq.js',
           },
-        ],
-        "name": "mfe",
-        "shared": [
-          {
-            "bundle": "browser-shared",
-            "entries": {
-              "chart-lib": "chart_lib.D2XIoLh0XZ.js",
-              "chart-lib/extras": "chart_lib_extras.GeNvxeJbTq.js",
-            },
-            "packageName": "chart-lib",
-            "preload": true,
-            "requiredVersion": "^1.0.0",
-            "singleton": true,
-            "strictVersion": true,
-            "version": "1.0.0",
-          },
-          {
-            "bundle": "browser-shared",
-            "entries": {
-              "tslib": "tslib.iAWSpLA311.js",
-            },
-            "packageName": "tslib",
-            "requiredVersion": "^1.0.0",
-            "singleton": true,
-            "strictVersion": true,
-            "version": "1.0.0",
-          },
-        ],
-      }
-    `);
+          preload: true,
+          requiredVersion: '^1.0.0',
+          singleton: true,
+          strictVersion: true,
+          version: '1.0.0',
+        },
+        {
+          packageName: 'tslib',
+          bundle: 'browser-shared',
+          entries: { tslib: 'tslib.iAWSpLA311.js' },
+          requiredVersion: '^1.0.0',
+          singleton: true,
+          strictVersion: true,
+          version: '1.0.0',
+        },
+        {
+          packageName: 'my-lib',
+          bundle: 'mapping-bundle',
+          entries: { 'my-lib': 'my_lib.js' },
+          requiredVersion: '',
+          singleton: true,
+          strictVersion: false,
+          version: '',
+        },
+      ],
+    });
   });
 
   it('returns what it publishes', async () => {
