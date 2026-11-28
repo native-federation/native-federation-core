@@ -10,6 +10,10 @@ describe('replaceGlob', () => {
     expect(replaceGlob('./dist/*.js', 'sub')).toBe('./dist/sub.js');
   });
 
+  it('replaces every asterisk in a string leaf', () => {
+    expect(replaceGlob('./*/dist/*.js', 'sub')).toBe('./sub/dist/sub.js');
+  });
+
   it('recurses into condition objects', () => {
     expect(replaceGlob({ import: './esm/*.js', require: './cjs/*.js' }, 'a')).toEqual({
       import: './esm/a.js',

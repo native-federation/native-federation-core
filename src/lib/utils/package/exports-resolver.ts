@@ -7,7 +7,7 @@ import type {
 
 export function replaceGlob(target: ExportEntry, replacement: string): ExportEntry {
   if (!target) return undefined;
-  if (typeof target === 'string') return target.replace('*', replacement);
+  if (typeof target === 'string') return target.split('*').join(replacement);
   return Object.entries(target).reduce(
     (a, [k, v]) => ({
       ...a,
