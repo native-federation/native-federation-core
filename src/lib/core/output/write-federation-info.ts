@@ -11,7 +11,7 @@ export function writeFederationInfoCore(
   fedOptions: FederationOptions
 ) {
   const metaDataPath = path.join(resolveOutputPath(fedOptions), 'remoteEntry.json');
-  io.writeText(metaDataPath, JSON.stringify({ $version: 'v4', ...federationInfo }, null, 2));
+  io.writeText(metaDataPath, JSON.stringify({ $version: 'v5', ...federationInfo }, null, 2));
 }
 
 export function writeFederationInfo(federationInfo: FederationInfo, fedOptions: FederationOptions) {

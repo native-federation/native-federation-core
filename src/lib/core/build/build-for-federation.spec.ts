@@ -85,7 +85,7 @@ function flat(
   };
 }
 
-function makeConfig(denseExternals: boolean): NormalizedFederationConfig {
+function makeConfig(): NormalizedFederationConfig {
   return {
     $type: 'classic',
     name: 'app',
@@ -100,7 +100,7 @@ function makeConfig(denseExternals: boolean): NormalizedFederationConfig {
       mappingVersion: false,
       ignoreUnusedDeps: false,
       denseChunking: true,
-      denseExternals,
+      denseExternals: true,
       integrityHashes: false,
       synthesizeCjsExports: true,
       strictImports: false,
@@ -136,21 +136,13 @@ const seededExternals = (): SharedInfo[] => [
   flat('tslib', 'tslib.js'),
 ];
 
-describe('buildForFederation — denseExternals wiring', () => {
+describe('buildForFederation — dense shared records', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('leaves shared flat and unchanged when the flag is off', async () => {
-    const externals = seededExternals();
-    const info = await buildForFederation(makeConfig(false), makeFedOptions(externals), []);
-
-    expect(info.shared).toEqual(externals);
-    expect(info.shared.every(s => 'outFileName' in s && !('entries' in s))).toBe(true);
-  });
-
-  it('densifies shared when the flag is on', async () => {
-    const info = await buildForFederation(makeConfig(true), makeFedOptions(seededExternals()), []);
+  it('densifies shared', async () => {
+    const info = await buildForFederation(makeConfig(), makeFedOptions(seededExternals()), []);
 
     // @angular/common + secondary collapse into one dense object; tslib into another.
     expect(info.shared).toHaveLength(2);
@@ -164,20 +156,14 @@ describe('buildForFederation — denseExternals wiring', () => {
     expect(info.shared.every(s => 'entries' in s && !('outFileName' in s))).toBe(true);
   });
 
-  it('feeds writeImportMap the flat cache identically whether the flag is on or off', async () => {
-    await buildForFederation(makeConfig(false), makeFedOptions(seededExternals()), []);
-    const offArg = vi.mocked(writeImportMap).mock.calls[0]![0];
+  it('feeds writeImportMap the flat cache', async () => {
+    await buildForFederation(makeConfig(), makeFedOptions(seededExternals()), []);
+    const arg = vi.mocked(writeImportMap).mock.calls[0]![0];
 
-    vi.clearAllMocks();
-
-    await buildForFederation(makeConfig(true), makeFedOptions(seededExternals()), []);
-    const onArg = vi.mocked(writeImportMap).mock.calls[0]![0];
-
-    // The import map is built from the flat federationCache, never from the (possibly dense)
-    // federationInfo.shared — so its input is byte-identical regardless of denseExternals.
-    expect(onArg.externals).toEqual(offArg.externals);
-    expect(onArg.externals).toEqual(seededExternals());
-    expect(onArg.externals.every(s => 'outFileName' in s && !('entries' in s))).toBe(true);
+    // The import map is built from the flat federationCache, never from the dense
+    // federationInfo.shared.
+    expect(arg.externals).toEqual(seededExternals());
+    expect(arg.externals.every(s => 'outFileName' in s && !('entries' in s))).toBe(true);
   });
 });
 
@@ -188,7 +174,7 @@ describe('buildForFederation — build notification endpoint', () => {
   // decides whether a consuming browser opens an event stream at all.
   async function buildWith(overrides: Partial<NormalizedFederationOptions>) {
     const info = await buildForFederation(
-      makeConfig(true),
+      makeConfig(),
       makeFedOptions(seededExternals(), overrides),
       []
     );
@@ -229,7 +215,7 @@ describe('buildForFederation — unwatched linked deps hint', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('hints once per build, with the config and options it was given', async () => {
-    const config = makeConfig(true);
+    const config = makeConfig();
     const fedOptions = makeFedOptions(seededExternals(), { watch: true });
 
     await buildForFederation(config, fedOptions, []);
@@ -262,7 +248,7 @@ describe('buildForFederation — output files (core#177)', () => {
       exposes: [],
       outputFiles: artifacts,
     });
-    const config = makeConfig(true);
+    const config = makeConfig();
     const fedOptions = makeFedOptions([]);
     bundled = {
       'browser-shared': { externals: [], outputFiles: [external[0]!] },
@@ -295,7 +281,7 @@ describe('buildForFederation — output files (core#177)', () => {
       exposes: [],
       outputFiles: [{ fileName: 'Comp.js', platform: 'browser' }],
     });
-    const config = makeConfig(true);
+    const config = makeConfig();
     config.features.strictImports = true;
 
     await expect(
@@ -327,7 +313,7 @@ describe('buildForFederation — output files (core#177)', () => {
       },
     };
 
-    await expect(buildForFederation(makeConfig(true), fedOptions, [])).rejects.toThrow(
+    await expect(buildForFederation(makeConfig(), fedOptions, [])).rejects.toThrow(
       "remoteEntry.json names 'rxjs.js', missing from"
     );
     expect(writeFederationInfo).not.toHaveBeenCalled();
@@ -339,7 +325,7 @@ describe('buildForFederation — an aborted build', () => {
 
   it('keeps the externals of the last complete build', async () => {
     const fedOptions = makeFedOptions([flat('react', 'react.js')]);
-    await buildForFederation(makeConfig(true), fedOptions, []);
+    await buildForFederation(makeConfig(), fedOptions, []);
 
     bundled = {
       'browser-shared': { externals: [flat('vue', 'vue.js')], outputFiles: [] },
@@ -348,7 +334,7 @@ describe('buildForFederation — an aborted build', () => {
     const controller = new AbortController();
     controller.abort();
     await expect(
-      buildForFederation(makeConfig(true), fedOptions, [], controller.signal)
+      buildForFederation(makeConfig(), fedOptions, [], controller.signal)
     ).rejects.toThrow(/After browser-shared bundle/);
 
     expect(fedOptions.federationCache.externals).toEqual([flat('react', 'react.js')]);
@@ -370,9 +356,7 @@ describe('buildForFederation — an aborted build', () => {
       },
     };
 
-    await expect(buildForFederation(makeConfig(true), fedOptions, [])).rejects.toThrow(
-      'bundle failed'
-    );
+    await expect(buildForFederation(makeConfig(), fedOptions, [])).rejects.toThrow('bundle failed');
 
     expect(slowFinished).toBe(true);
     expect(fedOptions.federationCache.sharedRunIncomplete).toBe(true);
@@ -382,10 +366,10 @@ describe('buildForFederation — an aborted build', () => {
   it('clears the incomplete mark once a run completes', async () => {
     const fedOptions = makeFedOptions([]);
     bundled = { 'separate-fails': async () => Promise.reject(new Error('bundle failed')) };
-    await expect(buildForFederation(makeConfig(true), fedOptions, [])).rejects.toThrow();
+    await expect(buildForFederation(makeConfig(), fedOptions, [])).rejects.toThrow();
 
     bundled = { 'browser-shared': { externals: [flat('react', 'react.js')], outputFiles: [] } };
-    await buildForFederation(makeConfig(true), fedOptions, []);
+    await buildForFederation(makeConfig(), fedOptions, []);
 
     expect(fedOptions.federationCache.sharedRunIncomplete).toBe(false);
     expect(fedOptions.federationCache.externals).toEqual([flat('react', 'react.js')]);

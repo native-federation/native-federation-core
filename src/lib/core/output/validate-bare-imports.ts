@@ -1,11 +1,12 @@
 import * as path from 'path';
 import { isBuiltin } from 'module';
-import type { FederationInfo, OutputFile } from '../../domain/core/federation-info.contract.js';
+import type { OutputFile } from '../../domain/core/federation-info.contract.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
 import type { FileReaderPort } from '../../domain/utils/io-port.contract.js';
 import type { FederationCache } from '../../domain/core/federation-cache.contract.js';
 import { toChunkImport } from '../../domain/core/chunk.js';
+import type { DenseFederationInfo } from './densify-externals.js';
 import { isScript } from '../../utils/script-file.js';
 import { isInSkipList } from '../../config/default-skip-list.js';
 import { inferPackageFromSecondary } from '../../utils/normalize.js';
@@ -32,7 +33,7 @@ const reportedSpecifiers = new WeakMap<FederationCache, string>();
 export function validateBareImports(
   config: NormalizedFederationConfig,
   fedOptions: NormalizedFederationOptions,
-  federationInfo: FederationInfo,
+  federationInfo: DenseFederationInfo,
   files: OutputFile[],
   { fullReport }: { fullReport: boolean }
 ): void {
@@ -91,7 +92,7 @@ export function findUnresolvedImportsCore(
   outputDir: string,
   files: OutputFile[],
   config: NormalizedFederationConfig,
-  federationInfo: FederationInfo
+  federationInfo: DenseFederationInfo
 ): BareImportScan {
   const declared = declaredSpecifiers(federationInfo);
   const importersBySpecifier = new Map<string, string[]>();
@@ -130,11 +131,10 @@ export function findUnresolvedImportsCore(
   return { unresolved, unparsable };
 }
 
-function declaredSpecifiers(federationInfo: FederationInfo): Set<string> {
+function declaredSpecifiers(federationInfo: DenseFederationInfo): Set<string> {
   const declared = new Set<string>();
   for (const shared of federationInfo.shared) {
-    if ('entries' in shared) Object.keys(shared.entries).forEach(key => declared.add(key));
-    else declared.add(shared.packageName);
+    Object.keys(shared.entries).forEach(key => declared.add(key));
   }
   for (const chunks of Object.values(federationInfo.chunks ?? {})) {
     chunks.forEach(chunk => declared.add(toChunkImport(chunk)));

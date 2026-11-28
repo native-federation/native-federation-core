@@ -272,7 +272,7 @@ describe('findUnresolvedImportsCore', () => {
     expect(result).toEqual([]);
   });
 
-  it('accepts dense chunks and chunks published as externals', () => {
+  it('accepts the chunks a bundle lists', () => {
     const io = createMemoryIo()
       .setFile(out('main.js'), `import "@nf-internal/chunk-A"; import "@nf-internal/chunk-B";`)
       .setFile(out('chunk-A.js'), `export {};`)
@@ -284,9 +284,8 @@ describe('findUnresolvedImportsCore', () => {
       browser('main.js', 'chunk-A.js', 'chunk-B.js'),
       makeConfig(),
       info({
-        shared: [shared('@nf-internal/chunk-B', 'chunk-B.js')],
         exposes: [{ key: './main', outFileName: 'main.js' }],
-        chunks: { 'browser-shared': ['chunk-A.js'] },
+        chunks: { 'browser-shared': ['chunk-A.js'], 'mapping-or-exposed': ['chunk-B.js'] },
       })
     );
 
@@ -338,9 +337,9 @@ describe('findUnresolvedImportsCore', () => {
     expect(result[0]!.reason).toContain('Node.js built-in');
   });
 
-  // core#177: without denseChunking a mapping's chunk is imported relatively, so remoteEntry.json
-  // never names it. It is scanned because the build reported writing it.
-  it('scans a non-dense mapping chunk that remoteEntry.json does not name', () => {
+  // core#177: a chunk imported relatively may be named nowhere in remoteEntry.json. It is scanned
+  // because the build reported writing it.
+  it('scans a mapping chunk that remoteEntry.json does not name', () => {
     const io = createMemoryIo()
       .setFile(out('_my_org_ui.js'), `export * from "./chunk-UI.js";`)
       .setFile(out('chunk-UI.js'), `import "@angular/cdk/overlay";`);
@@ -528,7 +527,7 @@ describe('validateBareImports', () => {
     expect(error).toHaveBeenCalledWith(expect.stringContaining('@angular/common/http'));
   });
 
-  it('fails the build on an import that only a non-dense chunk makes', () => {
+  it('fails the build on an import that only an unnamed chunk makes', () => {
     vi.spyOn(logger, 'error').mockImplementation(() => undefined);
     const { config, fedOptions, files } = setup(true);
     const dist = path.join(fedOptions.workspaceRoot, 'dist');

@@ -17,7 +17,6 @@ import { buildResult, resolveSharedVersions, sharedPackageInfos } from './shared
 import { rewriteChunkImportsCore, SOURCE_MAP_COMMENT } from './rewrite-chunk-imports.js';
 import { renameChunksByContentCore } from './rename-chunks-by-content.js';
 import { hashBuildMetadata, hashEntryContent } from '../../utils/hash.js';
-import { toChunkImport } from '../../domain/core/chunk.js';
 import {
   cacheEntryCore,
   getChecksumCore,
@@ -287,15 +286,15 @@ export async function bundleSharedCore(
    * Chunking
    */
   let exportedChunks: ChunkInfo | undefined = undefined;
-  if (buildOptions.chunks && config.features.denseChunking) {
+  // Imports of a chunk are rewritten to `@nf-internal/*` even in a bundle told not to split, so
+  // any chunk it still emits is published.
+  if (buildOptions.chunks || chunks.length > 0) {
     result.forEach(external => {
       external.bundle = buildOptions.bundleName;
     });
     if (chunks.length > 0) {
       exportedChunks = { [buildOptions.bundleName]: chunks };
     }
-  } else {
-    addChunksToResult(chunks, result);
   }
 
   const persistedFiles = bundleResult.map(r => r.fileName.split(path.sep).pop() ?? r.fileName);
@@ -500,20 +499,4 @@ function createOutName(
 
   const outName = fedOptions.dev ? `${encName}.${hash}-dev.js` : `${encName}.${hash}.js`;
   return outName;
-}
-
-// Never a singleton: a chunk belongs to a build, not to a dependency, so nothing downstream can
-// tell whether the external it was split out of asked for `singleton: false` or a share scope.
-// Its name says what its bytes are, but a name is not enough to share state on.
-function addChunksToResult(chunks: string[], result: SharedInfo[]) {
-  for (const fileName of chunks) {
-    result.push({
-      singleton: false,
-      strictVersion: false,
-      version: '0.0.0',
-      requiredVersion: '0.0.0',
-      packageName: toChunkImport(fileName),
-      outFileName: fileName,
-    });
-  }
 }

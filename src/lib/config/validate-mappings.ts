@@ -63,7 +63,7 @@ export function isNpmStylePackage(importName: string): boolean {
   return NPM_NAME.test(inferPackageFromSecondary(importName.replace(/\*/g, 'x')));
 }
 
-// A mapping is published and grouped (`build: 'package'`, pruning, denseExternals) by the package
+// A mapping is published and grouped (`build: 'package'`, pruning, dense records) by the package
 // its import name implies, so a name like '@shared' or '~app/utils' has no sound package to
 // group under. A `.package()` declaration names the package itself, so its mappings are exempt.
 export function warnNonNpmMappingNames(

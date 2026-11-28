@@ -697,16 +697,14 @@ describe('characterisation: config forms', () => {
   // C8's warnings are D29 and D30, so a change to one edits only its own row.
   it('C8: fromPackageJson defaults give every package a bundle; a pool shares one', async () => {
     const { warnings, ...projection } = projected(await characterise(preloadedPool()));
-    expect(warnings).toHaveLength(2);
+    expect(warnings).toHaveLength(1);
     expect(projection).toMatchSnapshot();
   });
 
-  intended('D29', 'C8, preload without features.denseChunking warns', async () => {
+  intended('D29', 'C8, preload no longer warns that only entry files preload', async () => {
     const { warnings } = projected(await characterise(preloadedPool()));
 
-    expect(warnings).toContain(
-      "Shared externals 'b', 'c' set preload, but without features.denseChunking the runtime preloads only their entry files, not their chunks. Enable features.denseChunking to preload those too."
-    );
+    expect(warnings).not.toContainEqual(expect.stringContaining('entry files'));
   });
 
   intended('D30', 'C8, preload in a pool warns that the whole bundle preloads', async () => {

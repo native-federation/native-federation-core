@@ -34,14 +34,14 @@ describe('writeFederationInfoCore', () => {
     const federationInfo = info();
     writeFederationInfoCore(io, federationInfo, opts());
     const written = io.readText('/ws/dist/remoteEntry.json');
-    expect(JSON.parse(written)).toEqual({ $version: 'v4', ...federationInfo });
+    expect(JSON.parse(written)).toEqual({ $version: 'v5', ...federationInfo });
     expect(written).toContain('\n  '); // 2-space indentation
   });
 
-  it('adds a $version of v4 to the remoteEntry', () => {
+  it('adds a $version of v5 to the remoteEntry', () => {
     const io = createMemoryIo();
     writeFederationInfoCore(io, info(), opts());
     const written = io.readText('/ws/dist/remoteEntry.json');
-    expect(JSON.parse(written).$version).toBe('v4');
+    expect(JSON.parse(written).$version).toBe('v5');
   });
 });

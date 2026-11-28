@@ -70,8 +70,6 @@ export interface FederationConfig {
   features?: {
     mappingVersion?: boolean;
     ignoreUnusedDeps?: boolean;
-    denseChunking?: boolean;
-    denseExternals?: boolean;
     integrityHashes?: boolean;
     synthesizeCjsExports?: boolean;
     strictImports?: boolean;
@@ -97,6 +95,7 @@ export interface NormalizedFederationConfig {
   features: {
     mappingVersion: boolean;
     ignoreUnusedDeps: boolean;
+    // Always true: remoteEntry.json is dense only. Kept for readers of the normalized config.
     denseChunking: boolean;
     denseExternals: boolean;
     integrityHashes: boolean;

@@ -1,11 +1,7 @@
-import type {
-  ArtifactInfo,
-  FederationInfo,
-  SharedInfo,
-} from '../../domain/core/federation-info.contract.js';
+import type { ArtifactInfo, SharedInfo } from '../../domain/core/federation-info.contract.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
-import { densifyExternals } from '../output/densify-externals.js';
+import { type DenseFederationInfo, densifyExternals } from '../output/densify-externals.js';
 import { mappingPackageByImport } from '../../config/mapping-utils.js';
 
 /**
@@ -16,7 +12,7 @@ export function assembleFederationInfo(
   config: NormalizedFederationConfig,
   fedOptions: NormalizedFederationOptions,
   artifactInfo: ArtifactInfo
-): FederationInfo {
+): DenseFederationInfo {
   const federationCache = fedOptions.federationCache;
 
   // Scope before densify: shareScope is part of the grouping signature, so an entry inheriting the
@@ -26,11 +22,9 @@ export function assembleFederationInfo(
     config.shareScope
   );
 
-  const federationInfo: FederationInfo = {
+  const federationInfo: DenseFederationInfo = {
     name: config.name,
-    shared: config.features.denseExternals
-      ? densifyExternals(sharedExternals, mappingPackageByImport(config))
-      : sharedExternals,
+    shared: densifyExternals(sharedExternals, mappingPackageByImport(config)),
     exposes: artifactInfo.exposes,
     buildNotificationsEndpoint:
       fedOptions.buildNotifications?.enable && fedOptions.dev

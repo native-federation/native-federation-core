@@ -70,8 +70,8 @@ describe('writeFederationOutputs', () => {
     );
   });
 
-  // core#248: with denseChunking an exposed bundle imports its chunks as `@nf-internal/...`. Those
-  // live in the artifact's chunks, which only the assembled federation info merges with the cache's.
+  // core#248: an exposed bundle imports its chunks as `@nf-internal/...`. Those live in the
+  // artifact's chunks, which only the assembled federation info merges with the cache's.
   it('takes the chunks from the federation info, exposed and mapping bundles included', () => {
     const options = fedOptions([]);
     const chunks = {
