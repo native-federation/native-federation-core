@@ -109,6 +109,13 @@ describe('resolveExportsEntry', () => {
     expect(resolveExportsEntry({ './a/*': './a/*.js' }, './a/')).toBeUndefined();
   });
 
+  it('reads a string, an array or a conditions-only object as the root entry', () => {
+    expect(resolveExportsEntry('./index.js', '.')).toBe('./index.js');
+    expect(resolveExportsEntry(['./a.js', './b.js'], '.')).toEqual(['./a.js', './b.js']);
+    expect(resolveExportsEntry({ import: './esm.js' }, '.')).toEqual({ import: './esm.js' });
+    expect(resolveExportsEntry('./index.js', './sub')).toBeUndefined();
+  });
+
   it('returns undefined without exports', () => {
     expect(resolveExportsEntry(undefined, './sub')).toBeUndefined();
   });

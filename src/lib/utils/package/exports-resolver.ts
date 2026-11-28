@@ -1,9 +1,6 @@
 import * as path from 'path';
 import { isESMExport } from './esm-detection.js';
-import type {
-  ExportEntry,
-  PackageInfo,
-} from '../../domain/utils/package-json.contract.js';
+import type { ExportEntry, PackageInfo } from '../../domain/utils/package-json.contract.js';
 
 export function replaceGlob(target: ExportEntry, replacement: string): ExportEntry {
   if (!target) return undefined;
@@ -57,11 +54,12 @@ export function findOptimalExport(
 
 // Node's PACKAGE_EXPORTS_RESOLVE key order: an exact key, else the pattern with the longest text
 // before `*`, ties to the longer key.
-export function resolveExportsEntry(
-  exports: Record<string, ExportEntry> | undefined,
-  relSecondaryPath: string
-): ExportEntry {
+export function resolveExportsEntry(exports: ExportEntry, relSecondaryPath: string): ExportEntry {
   if (!exports) return undefined;
+  // A string, an array or an object without subpath keys is the package root's entry.
+  if (typeof exports === 'string' || Array.isArray(exports) || !hasSubpathKeys(exports)) {
+    exports = { '.': exports };
+  }
   if (relSecondaryPath in exports) return exports[relSecondaryPath];
 
   let bestKey: string | undefined;
@@ -78,6 +76,10 @@ export function resolveExportsEntry(
     exports[bestKey],
     relSecondaryPath.slice(star, relSecondaryPath.length - suffixLength)
   );
+}
+
+function hasSubpathKeys(exports: object): boolean {
+  return Object.keys(exports).some(key => key.startsWith('.'));
 }
 
 // The matched part is never empty, hence the length check.

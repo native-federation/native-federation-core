@@ -31,6 +31,12 @@ describe('resolvePackageInfo', () => {
     });
   });
 
+  it('reads a string exports field as the root entry', () => {
+    const repo = repoWith({ version: '1.0.0', exports: './esm/index.js', main: './cjs/index.js' });
+    const info = resolvePackageInfo(repo, 'pkg', WS);
+    expect(info?.entryPoint).toBe(path.join(nm('pkg'), './esm/index.js'));
+  });
+
   it('falls back to the top-level module field', () => {
     const repo = repoWith({ version: '2.0.0', module: './dist/index.mjs' });
     const info = resolvePackageInfo(repo, 'pkg', WS);
