@@ -3,10 +3,10 @@
 //
 // Rules for changing this file:
 // - A snapshot change cites an INTENDED_DIFFS id in its PR, or it is a bug.
-// - A row an intended diff flips is an explicit assertion named after that id (`D2: ...`), not a
-//   snapshot, so the PR that flips it edits the assertion in view. It drops the obsolete snapshot
+// - A row an intended diff covers is an explicit assertion named after that id (`D2: ...`), not a
+//   snapshot, so the PR that changes it edits the assertion in view. It drops the obsolete snapshot
 //   entry in the same change.
-// - Rows keep their inputs as written today; a PR that removes a config form rewrites the inputs of
+// - Rows keep their inputs as written today; a PR that changes a config form rewrites the inputs of
 //   the rows using it, and leaves their expectations alone unless it cites a diff id.
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
@@ -694,7 +694,7 @@ describe('characterisation: config forms', () => {
     scan: mainImports('a', 'b', 'c'),
   });
 
-  // C8's warnings are D29 and D30, so the PR that drops one edits only its own row.
+  // C8's warnings are D29 and D30, so a change to one edits only its own row.
   it('C8: fromPackageJson defaults give every package a bundle; a pool shares one', async () => {
     const { warnings, ...projection } = projected(await characterise(preloadedPool()));
     expect(warnings).toHaveLength(2);
