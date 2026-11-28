@@ -16,6 +16,7 @@ import { createFederationCache } from '../cache/federation-cache.js';
 import { createFakeBuildAdapter } from './__test-helpers__/fake-build-adapter.js';
 import { setBuildAdapter } from './build-adapter.js';
 import { buildForFederation } from './build-for-federation.js';
+import { rebuildForFederation } from './rebuild-for-federation.js';
 import { toChunkImport } from '../../domain/core/chunk.js';
 
 // The real build path, unmocked from the plan to remoteEntry.json on disk: only the bundler is
@@ -133,30 +134,29 @@ function makeConfig() {
   return config;
 }
 
-function makeFedOptions(): NormalizedFederationOptions {
+function makeFedOptions(cacheExternalArtifacts = false): NormalizedFederationOptions {
   return {
     workspaceRoot,
     outputPath: 'dist',
     federationConfig: 'federation.config.js',
     projectName: 'mfe',
     entryPoints: [],
-    cacheExternalArtifacts: false,
+    cacheExternalArtifacts,
     watchLinkedDeps: false,
     federationCache: createFederationCache(path.join(workspaceRoot, '.cache')),
   };
 }
 
-async function build() {
-  setBuildAdapter(bundlerAdapter());
-  const returned = await buildForFederation(makeConfig(), makeFedOptions(), [
-    'chart-lib',
-    'chart-lib/extras',
-    'tslib',
-  ]);
-  const published = JSON.parse(
-    fs.readFileSync(path.join(dist, 'remoteEntry.json'), 'utf-8')
-  ) as FederationInfo;
-  return { returned, published };
+const EXTERNALS = ['chart-lib', 'chart-lib/extras', 'tslib'];
+
+const readPublished = () =>
+  JSON.parse(fs.readFileSync(path.join(dist, 'remoteEntry.json'), 'utf-8')) as FederationInfo;
+
+async function build(fedOptions = makeFedOptions()) {
+  const adapter = bundlerAdapter();
+  setBuildAdapter(adapter);
+  const returned = await buildForFederation(makeConfig(), fedOptions, EXTERNALS);
+  return { returned, published: readPublished(), adapter };
 }
 
 // The published name of the one file in dist whose bytes carry `/* marker */`.
@@ -325,6 +325,44 @@ describe('buildForFederation — published chunk closures', () => {
         },
       ],
     });
+  });
+
+  // A cache hit skips the adapter for shared bundles, so everything published about them comes from
+  // the cache entry and the files it copies back.
+  it('publishes the same remoteEntry.json from a warm shared cache', async () => {
+    const cold = await build(makeFedOptions(true));
+    fs.rmSync(dist, { recursive: true });
+    fs.mkdirSync(dist);
+
+    const warm = await build(makeFedOptions(true));
+
+    expect(warm.adapter.calls.setup.map(s => s.name)).not.toContain('browser-shared');
+    expect(warm.published).toEqual(cold.published);
+  });
+
+  // A different layout under the same minor purges the cache, so the next build is cold again.
+  it('publishes the same remoteEntry.json after a cache layout purge', async () => {
+    const cold = await build(makeFedOptions(true));
+    const stampFile = path.join(workspaceRoot, '.cache', '.nf-cache.json');
+    const stamp = JSON.parse(fs.readFileSync(stampFile, 'utf-8'));
+    fs.writeFileSync(stampFile, JSON.stringify({ ...stamp, layout: stamp.layout - 1 }));
+    fs.rmSync(dist, { recursive: true });
+    fs.mkdirSync(dist);
+
+    const purged = await build(makeFedOptions(true));
+
+    expect(purged.adapter.calls.setup.map(s => s.name)).toContain('browser-shared');
+    expect(purged.published).toEqual(cold.published);
+  });
+
+  // A watch rebuild re-runs the exposed and mapping bundles and keeps the shared ones.
+  it('publishes the same remoteEntry.json after a watch rebuild', async () => {
+    const fedOptions = makeFedOptions();
+    const fresh = await build(fedOptions);
+
+    await rebuildForFederation(makeConfig(), fedOptions, EXTERNALS, [sourceOf('src/home.ts')]);
+
+    expect(readPublished()).toEqual(fresh.published);
   });
 
   it('returns what it publishes', async () => {
