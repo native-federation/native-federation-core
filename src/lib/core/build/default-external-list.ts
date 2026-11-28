@@ -27,4 +27,17 @@ const NODE_PACKAGES = [
   'zlib',
 ];
 
-export const DEFAULT_EXTERNAL_LIST = NODE_PACKAGES.flatMap(p => [p, 'node:' + p]);
+const DEFAULT_EXTERNAL_LIST = NODE_PACKAGES.flatMap(p => [p, 'node:' + p]);
+
+export function sharedBundleExternals(
+  platform: 'browser' | 'node',
+  ignoreUnusedDeps: boolean,
+  externals: string[]
+): string[] {
+  // If we build for the browser and don't remove unused deps from the shared config,
+  // we need to exclude typical node libs to avoid compilation issues
+  const useDefaultExternalList = platform === 'browser' && !ignoreUnusedDeps;
+
+  const additionalExternals = useDefaultExternalList ? DEFAULT_EXTERNAL_LIST : [];
+  return [...additionalExternals, ...externals];
+}
