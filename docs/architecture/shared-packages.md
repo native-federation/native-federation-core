@@ -19,6 +19,10 @@
   its `package.json`, the declared value is kept.
 - An override configures the package it names; it never removes another package whose name starts
   with it.
+- An entry point's subpath matches a package's `exports` keys as Node matches them: an exact key
+  wins; otherwise the pattern with the longest text before its `*` wins, a tie going to the longer
+  key. A pattern may have text after its `*`, which the subpath must end with, and the part it
+  matches is never empty. Every `*` in the target is replaced by that part.
 - Secondary entry points core expands from a shared package inherit its settings.
 - With `ignoreUnusedDeps` (the default), only the entry points the build reaches are published.
   A shared package nothing reaches is dropped; `keepAll` keeps every entry point of one that is
@@ -36,6 +40,8 @@
   publishes the entry points of one package at different versions, or with different settings,
   runs its own copy of the whole package next to the shared one, with no error.
 - A record's version names the bytes in its file.
+- The bundler resolves a package's `exports` the way Node does. Matching keys any other way points
+  an entry point at a different file than the one the bundler would pick, or at no file.
 - Publishing every entry point of every dependency makes `remoteEntry.json` and the shared
   bundles far larger than what the app uses.
 - Fetching a package before it is used is speculative, so it is opt-in per package: the remote
@@ -56,7 +62,8 @@
   [Published imports](published-imports.md)).
 
 Enforced by: `src/lib/core/build/bundle-shared.spec.ts`,
-`src/lib/config/remove-unused-deps.spec.ts`, `src/lib/config/share-utils.spec.ts`
+`src/lib/config/remove-unused-deps.spec.ts`, `src/lib/config/share-utils.spec.ts`,
+`src/lib/utils/package/exports-resolver.spec.ts`
 Issues: core#104, core#120, core#169, core#233, core#234
 Related: [Shared mappings](shared-mappings.md), [Shared cache](shared-cache.md),
 [Mapping packages](mapping-packages.md)
