@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ProjectData } from '@softarc/sheriff-core';
+import type { ProjectData } from '@sheriff-arch/sheriff-core';
 import {
   getUsedDependenciesFactoryCore,
   type UsedDependenciesDeps,
