@@ -24,6 +24,7 @@ import type {
   SharedExternalsConfig,
 } from '../domain/config/external-config.contract.js';
 import { logger } from '../utils/logger.js';
+import { alignToPackages, warnIgnoredPackageConfig } from './package-config.js';
 import {
   inferPackageFromSecondary,
   normalizePackageName,
@@ -101,8 +102,6 @@ function normalizeShared(
   skip: PreparedSkipList,
   chunks: boolean
 ): NormalizedSharedExternalsConfig {
-  let result: NormalizedSharedExternalsConfig = {};
-
   const shared =
     fromBuilder<SharedExternalsConfig>(config.shared) ??
     fromBuilder<NormalizedSharedExternalsConfig>(
@@ -114,11 +113,18 @@ function normalizeShared(
       }) as ConfigBuilder<NormalizedSharedExternalsConfig>
     )!;
 
+  const kept = Object.fromEntries(
+    Object.entries(shared)
+      .map(([key, cfg]) => [key.replace(/\\/g, '/'), cfg] as const)
+      .filter(([key]) => !isInSkipList(key, skip))
+  );
+  const { configs, ignored } = alignToPackages(kept, inferPackageFromSecondary);
+  warnIgnoredPackageConfig(ignored);
+
   const ignoredChunks: string[] = [];
 
-  result = Object.keys(shared).reduce<NormalizedSharedExternalsConfig>((acc, cur) => {
-    const key = cur.replace(/\\/g, '/');
-    const sharedConfig = shared[cur]!;
+  const result = Object.keys(configs).reduce<NormalizedSharedExternalsConfig>((acc, key) => {
+    const sharedConfig = configs[key]!;
     const build = sharedConfig.build ?? 'default';
     if (build === 'pool' && !normalizePackageName(sharedConfig.pool ?? '')) {
       throw new Error(
@@ -160,40 +166,10 @@ function normalizeShared(
     };
   }, {});
 
-  result = Object.keys(result)
-    .filter(key => !isInSkipList(key, skip))
-    .reduce((acc, cur) => ({ ...acc, [cur]: result[cur] }), {});
-
-  warnIgnoredChunks(
-    ignoredChunks.filter(key => key in result),
-    chunks
-  );
+  warnIgnoredChunks(ignoredChunks, chunks);
   warnChunksConflicts(result);
-  result = withPackagePreload(result);
 
   return result;
-}
-
-const preloadedPackages = (shared: NormalizedSharedExternalsConfig) => [
-  ...new Set(
-    Object.entries(shared)
-      .filter(([, cfg]) => cfg.preload)
-      .map(([key]) => inferPackageFromSecondary(key))
-  ),
-];
-
-// A package publishes one record, and densifying splits one whose entry points disagree on preload.
-function withPackagePreload(
-  shared: NormalizedSharedExternalsConfig
-): NormalizedSharedExternalsConfig {
-  const packages = new Set(preloadedPackages(shared));
-  if (packages.size === 0) return shared;
-  return Object.fromEntries(
-    Object.entries(shared).map(([key, cfg]) => [
-      key,
-      packages.has(inferPackageFromSecondary(key)) ? { ...cfg, preload: true as const } : cfg,
-    ])
-  );
 }
 
 // Secondaries inherit their package's config, so one setting is reported once per package.
@@ -201,31 +177,34 @@ function warnIgnoredChunks(keys: string[], chunks: boolean): void {
   if (keys.length === 0) return;
   const packages = [...new Set(keys.map(inferPackageFromSecondary))];
   logger.warn(
-    `Shared externals ${packages.map(p => `'${p}'`).join(', ')} set chunks: ${!chunks}, but ` +
+    `Shared externals ${listed(packages)} set chunks: ${!chunks}, but ` +
       `in the shared bundle they are built with the global chunks: ` +
       `${chunks}. Remove chunks, or give the external a bundle of its own with build: ` +
       `'separate', 'package' or 'pool'.`
   );
 }
 
-// Checked here rather than in the planner, which runs again on every watch rebuild.
+const listed = (packages: string[]) => packages.map(p => `'${p}'`).join(', ');
+
+// Checked here rather than in the planner, which runs again on every watch rebuild. A package's
+// entry points share one chunks setting, so only packages of one pool can disagree.
 function warnChunksConflicts(shared: NormalizedSharedExternalsConfig): void {
-  const bundles = new Map<string, Record<string, string[]>>();
+  const bundles = new Map<string, Record<string, Set<string>>>();
   for (const [key, cfg] of Object.entries(shared)) {
     if (cfg.chunks === undefined) continue;
     const { bundleName } = sharedBundleOf(key, cfg);
     const votes = bundles.get(bundleName) ?? {};
-    (votes[String(cfg.chunks)] ??= []).push(key);
+    (votes[String(cfg.chunks)] ??= new Set()).add(inferPackageFromSecondary(key));
     bundles.set(bundleName, votes);
   }
 
   for (const [bundleName, votes] of bundles) {
     if (Object.keys(votes).length < 2) continue;
-    const list = (keys: string[]) => keys.map(k => `'${k}'`).join(', ');
     logger.warn(
-      `Shared externals ${list(votes['true']!)} (chunks: true) and ${list(votes['false']!)} ` +
-        `(chunks: false) are built in one bundle, '${bundleName}', which can only take one ` +
-        `chunks setting, so the first one listed in shared wins. Set the same value on all of them.`
+      `Shared packages ${listed([...votes['true']!])} (chunks: true) and ` +
+        `${listed([...votes['false']!])} (chunks: false) are built in one bundle, ` +
+        `'${bundleName}', which can only take one chunks setting, so the first one listed in ` +
+        `shared wins. Set the same value on all of them.`
     );
   }
 }

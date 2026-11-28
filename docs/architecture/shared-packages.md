@@ -7,8 +7,21 @@
 - A shared package is published as one unit, not entry point by entry point: one `shared` record
   in `remoteEntry.json` (`$version: 'v5'`), with each entry point's file under `entries`. Shared
   mappings are published the same way. The record lists in `chunks` every chunk its entry points
-  reach (see [Chunks](chunks.md)), whichever shared bundles they are built in. Entry points whose
-  metadata differ split into records that share a `packageName`.
+  reach (see [Chunks](chunks.md)), whichever shared bundles they are built in.
+- Config is per package, like an npm package, not per entry point. `requiredVersion`,
+  `singleton`, `strictVersion`, `version`, `build`, `pool`, `chunks`, `shareScope` and `preload`
+  come from the package's main entry, else from its first listed entry point. They are aligned
+  once, when the config is normalized, before anything picks a bundle. An entry point that leaves a
+  field unset inherits it; one that sets it differently builds, with one warning per package naming
+  the ignored fields. A `version` core derived itself, such as the one `share()` stamps on an
+  `'auto'` entry, is not config and is never reported. `platform` is not package config: an entry
+  point keeps its own.
+- Only a `.package()` declaration groups mappings into one package; every other mapping is a
+  package of its own (see [Mapping packages](mapping-packages.md)).
+- The version each entry point reads from its own `package.json` is a fact about the record, not
+  config, so `remoteEntry.json` assembly aligns it the same way, silently: the record publishes
+  the main entry's `version` and `requiredVersion`, else the first published entry point's.
+- Only packages of one pool can disagree on `chunks`; the first one listed wins, with a warning.
 - It has one version for all its entry points: the installed one, unless the config pins a
   version. The declared range is a last resort, with a warning. A vendored copy of an installed
   package pins its version, or it is published as the installed one.
@@ -35,15 +48,16 @@
   field, it is part of the shared bundle's config state, so toggling it renames the bundle's entry
   files on a rebuild; it changes nothing else in the build. It asks the runtime to fetch the
   package, with the `initial` chunks of its record, once the import map is in place, before
-  anything imports it. Other packages built in the same bundle are not fetched with it. Once one entry point of a package sets it, every
-  entry point of that package does.
+  anything imports it. Other packages built in the same bundle are not fetched with it. Like the
+  rest of the package config, it comes from the package's main entry.
 
 ## Why
 
 - The runtime serves a shared singleton package as a whole, at one version. A remote that
   publishes the entry points of one package at different versions, or with different settings,
   runs its own copy of the whole package next to the shared one, with no error.
-- A record's version names the bytes in its file.
+- A shared package's version names the bytes in its file. A declared mapping package publishes
+  one version for all its libraries instead (see [Mapping packages](mapping-packages.md)).
 - Publishing every entry point of every dependency makes `remoteEntry.json` and the shared
   bundles far larger than what the app uses.
 - Fetching a package before it is used is speculative, so it is opt-in per package: the remote
@@ -58,6 +72,11 @@
   so an upgrade would keep serving old files under the old version.
 - One record per entry point (`features.denseExternals: false`, the 4.x default): a host could
   take one package's entry points from different remotes, at different versions.
+- Splitting entry points with different config into records that share a `packageName` (4.x dense
+  records): the runtime serves the package as one unit, so the split records only looked
+  independent.
+- Preloading a package once any of its entry points sets `preload` (4.x): a second rule for one
+  field, where the package config already says which entry point decides.
 
 ## Limits
 
@@ -65,10 +84,14 @@
   caught by the bare-import check, not served silently (see
   [Published imports](published-imports.md)).
 
-Enforced by: `src/lib/core/build/bundle-shared.spec.ts`,
+Enforced by: `src/lib/config/with-native-federation.spec.ts`,
+`src/lib/config/package-config.spec.ts`, `src/lib/core/build/bundle-exposed-and-mappings.spec.ts`,
+`src/lib/core/build/bundle-shared.spec.ts`,
+`src/lib/core/output/densify-externals.spec.ts`, `src/lib/core/build/assemble-federation-info.spec.ts`,
 `src/lib/config/remove-unused-deps.spec.ts`, `src/lib/config/share-utils.spec.ts`
 Issues: core#104, core#120, core#169, core#233, core#234
 History: one record per entry point, dense records opt-in with `features.denseExternals` → 5.0
-dense records only, the flag removed
+dense records only, the flag removed → 5.0 one config per package, taken from its main entry;
+an entry point set apart warns instead of splitting the record
 Related: [Shared mappings](shared-mappings.md), [Shared cache](shared-cache.md),
 [Mapping packages](mapping-packages.md), [Package resolution](package-resolution.md)

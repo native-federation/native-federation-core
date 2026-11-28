@@ -164,6 +164,10 @@ export default withNativeFederation({
 
 - **`requiredVersion: 'auto'`**: reads the version from the nearest `package.json`.
 - **`singleton`** / **`strictVersion`**: one instance of a dependency / throw on a version mismatch.
+- Config is per package: every field but `platform`, `includeSecondaries` and `packageInfo` comes
+  from a shared package's main entry, else its first listed entry point; an entry point set apart
+  warns and takes the package's values. Only `.package()` groups mappings
+  ([Shared packages](docs/architecture/shared-packages.md)).
 - **`includeSecondaries`**: `true`, `false` or `{ skip, resolveGlob, keepAll }`. On a shared package
   `keepAll` keeps every secondary of a package something reaches; on a `sharedMappings` entry
   `true` or `keepAll` exempts the mapping from pruning entirely.

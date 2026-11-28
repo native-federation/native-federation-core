@@ -10,7 +10,9 @@
   rebuilds and changed bytes always get a new one.
 - Shared packages, mappings and exposed modules are bundled apart.
 - Code splitting (`chunks`) is set per bundle; `build` gives a package, or a pool, a bundle of its
-  own.
+  own. Like the rest of a package's config, `chunks` comes from the package, never from one of its
+  entry points (see [Shared packages](shared-packages.md)), so only the packages of one pool, or
+  the mappings in one mapping bundle, can disagree.
 - A chunk is never a `shared` record. Each exposed module and each shared or mapping record lists
   in `chunks` every chunk it reaches, `initial` marking its static closure. Nothing else in
   `remoteEntry.json` names a chunk: there is no list per bundle and no bundle name on a record.
@@ -31,9 +33,11 @@
   `initial: true` marks the files reached by static imports alone and is never written as
   `false`. An owner that reaches none has no `chunks`. The maps are computed from the output files
   on every build and rebuild, before the published imports are checked against them.
+- A chunk several owners reach is listed by each of them, with that owner's own `initial`. Maps
+  are never deduplicated across owners.
 - The bundle an entry point is built in never splits a shared package's record: the record's map
-  covers the chunks of every bundle its entries are built in. Mappings built in different bundles
-  that split stay in separate records (see [Mapping packages](mapping-packages.md)).
+  covers the chunks of every bundle its entries are built in. A declared mapping package is built
+  in one bundle and publishes one record (see [Mapping packages](mapping-packages.md)).
 - A shared package that sets `preload` preloads the `initial` chunks of its own record.
 
 ## Why
@@ -72,6 +76,11 @@
   `denseChunking`, the first 5.0 shape): a preload package in a combined or pool bundle preloaded
   every member's chunks, a lazy chunk preloaded with the static ones, and a package built in two
   bundles split into two records.
+- One record per pool, a chunk table per pool or bundle, a top-level `{ name: file }` table with
+  owners listing only names, or rows that refer to another record's: a pool is a build and
+  election label, not a package. Each brings back a join between records. A record or table per
+  pool loses a member's own `initial`, a name table keeps one fact in two places, and rows by
+  reference leave a member served from another build without its chunks.
 
 ## Limits
 
@@ -88,6 +97,8 @@
   `build: 'pool'` splits it into one chunk, but that keeps one instance only where one build
   serves the remote's whole pool in that share scope: the runtime may still publish a member the
   serving build does not ship from another build, with its own copy.
+- Each member of a pool or the combined bundle lists the chunks of code no member shares that it
+  reaches, so those rows repeat across members. Sharing that dependency removes them.
 
 Enforced by: `src/lib/core/build/bundle-shared.spec.ts`,
 `src/lib/core/build/bundle-exposed-and-mappings.spec.ts`,

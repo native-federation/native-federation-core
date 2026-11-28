@@ -3,7 +3,8 @@ import type { NormalizedFederationConfig } from '../../domain/config/federation-
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
 import { type DenseFederationInfo, densifyExternals } from '../output/densify-externals.js';
 import { mappingPackageByImport } from '../../config/mapping-utils.js';
-import { mappingBundleByImport } from './mapping-bundle-plan.js';
+import { alignPackageVersions } from '../output/align-package-versions.js';
+import { inferPackageFromSecondary } from '../../utils/normalize.js';
 
 /**
  * Derives the `remoteEntry.json` payload from the populated federation cache. Shared by the initial
@@ -16,20 +17,20 @@ export function assembleFederationInfo(
 ): DenseFederationInfo {
   const federationCache = fedOptions.federationCache;
 
+  const mappingPackages = mappingPackageByImport(config);
   // Scope before densify: shareScope is part of the grouping signature, so an entry inheriting the
   // default must carry it already or it splits from a sibling that set the same scope explicitly.
-  const sharedExternals = applyShareScope(
-    [...federationCache.externals, ...artifactInfo.mappings],
+  const shared = applyShareScope(
+    [
+      ...alignPackageVersions(federationCache.externals, inferPackageFromSecondary),
+      ...alignPackageVersions(artifactInfo.mappings, name => mappingPackages.get(name)!),
+    ],
     config.shareScope
   );
 
   const federationInfo: DenseFederationInfo = {
     name: config.name,
-    shared: densifyExternals(
-      sharedExternals,
-      mappingPackageByImport(config),
-      mappingBundleByImport(config)
-    ),
+    shared: densifyExternals(shared, mappingPackages),
     exposes: artifactInfo.exposes,
     buildNotificationsEndpoint:
       fedOptions.buildNotifications?.enable && fedOptions.dev

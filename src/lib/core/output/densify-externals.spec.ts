@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { densifyExternals, toDenseSharedInfoFormat } from './densify-externals.js';
 import type { SharedInfo, DenseSharedInfo } from '../../domain/core/federation-info.contract.js';
+import { alignPackageVersions } from './align-package-versions.js';
+import { inferPackageFromSecondary } from '../../utils/normalize.js';
 
 function flat(
   packageName: string,
@@ -16,6 +18,12 @@ function flat(
     outFileName,
     ...overrides,
   };
+}
+
+// The build path for shared externals: config is aligned per package when it is read, the version
+// here, then grouping.
+function densify(shared: SharedInfo[]): DenseSharedInfo[] {
+  return densifyExternals(alignPackageVersions(shared, inferPackageFromSecondary), new Map());
 }
 
 describe('densifyExternals', () => {
@@ -61,91 +69,39 @@ describe('densifyExternals', () => {
     });
   });
 
-  it('splits divergent metadata into separate dense objects sharing packageName', () => {
-    const result = densifyExternals(
-      [
-        flat('@angular/common', 'common.js', { version: '1.2.3' }),
-        flat('@angular/common/http', 'common-http.js', { version: '9.9.9' }),
-      ],
-      new Map()
-    );
-
-    expect(result).toHaveLength(2);
-    const [a, b] = result as [DenseSharedInfo, DenseSharedInfo];
-    expect(a.packageName).toBe('@angular/common');
-    expect(b.packageName).toBe('@angular/common');
-    expect(a.entries).toEqual({ '@angular/common': 'common.js' });
-    expect(b.entries).toEqual({ '@angular/common/http': 'common-http.js' });
-    expect(a.version).toBe('1.2.3');
-    expect(b.version).toBe('9.9.9');
-  });
-
-  // core#145: mappings expanded from '@org/ui/*' with build: 'separate' each get their own bundle.
-  it('splits mapping secondaries planned into different bundles', () => {
-    const result = densifyExternals(
-      [
-        flat('@org/ui/button', 'button.js', { bundle: 'mapping-org_ui_button' }),
-        flat('@org/ui/card', 'card.js', { bundle: 'mapping-org_ui_card' }),
-      ],
-      new Map()
-    );
+  // W15: each entry point reads its version from its own package.json; the main entry's wins.
+  it("publishes one record with the main entry's version when entry points diverge", () => {
+    const result = densify([
+      flat('@angular/common/http', 'common-http.js', { version: '9.9.9' }),
+      flat('@angular/common', 'common.js', { version: '1.2.3' }),
+    ]);
 
     expect(result).toEqual([
       expect.objectContaining({
-        bundle: 'mapping-org_ui_button',
-        entries: { '@org/ui/button': 'button.js' },
-      }),
-      expect.objectContaining({
-        bundle: 'mapping-org_ui_card',
-        entries: { '@org/ui/card': 'card.js' },
+        packageName: '@angular/common',
+        version: '1.2.3',
+        entries: { '@angular/common/http': 'common-http.js', '@angular/common': 'common.js' },
       }),
     ]);
   });
 
-  it('splits a separate mapping from one left in the default mapping bundle', () => {
-    const result = densifyExternals(
-      [
-        flat('@org/ui/button', 'button.js', { bundle: 'mapping-org_ui_button' }),
-        flat('@org/ui/card', 'card.js', { bundle: 'mapping-bundle' }),
-      ],
-      new Map()
-    );
-
-    expect(result.map(r => r.bundle)).toEqual(['mapping-org_ui_button', 'mapping-bundle']);
-  });
-
-  it('splits on a group key without writing it', () => {
-    const result = densifyExternals(
-      [
-        flat('@org/ui/button', 'button.js'),
-        flat('@org/ui/card', 'card.js'),
-        flat('@org/ui/table', 'table.js'),
-      ],
-      new Map(),
-      new Map([
-        ['@org/ui/button', 'mapping-org_ui_button'],
-        ['@org/ui/card', 'mapping-bundle'],
-        ['@org/ui/table', 'mapping-bundle'],
-      ])
-    );
-
-    expect(result.map(r => r.entries)).toEqual([
-      { '@org/ui/button': 'button.js' },
-      { '@org/ui/card': 'card.js', '@org/ui/table': 'table.js' },
+  it('takes the requiredVersion with the version', () => {
+    const result = densify([
+      flat('@org/lib', 'lib.js', { requiredVersion: '~1.0.0', version: '1.0.0' }),
+      flat('@org/lib/testing', 'testing.js', { requiredVersion: '~2.0.0', version: '2.0.0' }),
     ]);
-    expect(JSON.stringify(result)).not.toContain('mapping-');
+
+    expect(result.map(r => [r.requiredVersion, r.version, Object.keys(r.entries)])).toEqual([
+      ['~1.0.0', '1.0.0', ['@org/lib', '@org/lib/testing']],
+    ]);
   });
 
-  it('splits secondaries in different pools', () => {
-    const result = densifyExternals(
-      [
-        flat('rxjs', 'rxjs.js', { pool: 'a' }),
-        flat('rxjs/operators', 'rxjs-operators.js', { pool: 'b' }),
-      ],
-      new Map()
-    );
+  it('passes entry points with one version through unchanged', () => {
+    const shared = [flat('rxjs', 'rxjs.js'), flat('rxjs/operators', 'rxjs-operators.js')];
+    const aligned = alignPackageVersions(shared, inferPackageFromSecondary);
 
-    expect(result.map(r => r.pool)).toEqual(['a', 'b']);
+    expect(aligned).toEqual(shared);
+    expect(densifyExternals(aligned, new Map())).toHaveLength(1);
   });
 
   // Guards the denylist: a field the densifier does not know about must not be silently merged.
@@ -208,7 +164,7 @@ describe('densifyExternals', () => {
     ]);
   });
 
-  it('keeps the name rule for everything the declared packages do not list', () => {
+  it('groups a name the mapping packages do not list under its npm package', () => {
     const result = densifyExternals(
       [flat('@angular/common', 'common.js'), flat('@angular/common/http', 'http.js')],
       new Map([['@shared/table', '@shared/table']])
@@ -217,19 +173,15 @@ describe('densifyExternals', () => {
     expect(result.map(d => d.packageName)).toEqual(['@angular/common']);
   });
 
-  // Outside a declared package: two records under one name.
-  it('still splits a name-rule package by version', () => {
-    const result = densifyExternals(
-      [
-        flat('@org/ui/table', 'table.js'),
-        flat('@org/ui/button', 'button.js', { version: '2.0.0' }),
-      ],
-      new Map()
-    ) as DenseSharedInfo[];
+  // Without a main entry, the first listed entry point configures the package.
+  it('takes a package version from its first entry point', () => {
+    const shared = [
+      flat('@org/ui/table', 'table.js'),
+      flat('@org/ui/button', 'button.js', { version: '2.0.0' }),
+    ];
 
-    expect(result.map(d => [d.packageName, d.version])).toEqual([
-      ['@org/ui', '1.2.3'],
-      ['@org/ui', '2.0.0'],
+    expect(densify(shared).map(d => [d.packageName, d.version, Object.keys(d.entries)])).toEqual([
+      ['@org/ui', '1.2.3', ['@org/ui/table', '@org/ui/button']],
     ]);
   });
 

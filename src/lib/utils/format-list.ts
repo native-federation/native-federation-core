@@ -17,7 +17,7 @@ export function formatDifference(a: object, b: object): string {
 }
 
 // Key order in a nested config object is how it was written, not what it means.
-function stableStringify(value: unknown): string {
+export function stableStringify(value: unknown): string {
   return JSON.stringify(value, (_key, v: unknown) =>
     v && typeof v === 'object' && !Array.isArray(v)
       ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)))

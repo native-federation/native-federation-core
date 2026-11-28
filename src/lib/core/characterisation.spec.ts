@@ -652,7 +652,7 @@ describe('characterisation: config forms', () => {
 
   intended(
     'D28',
-    'entries of one package with different metadata split into two records',
+    "entries of one package with different metadata publish one record with the main entry's config",
     async () => {
       const outcome = await characterise({
         files: {
@@ -673,11 +673,12 @@ describe('characterisation: config forms', () => {
       if ('throws' in outcome) throw new Error(outcome.throws);
 
       const dense = densifyExternals(outcome.records, new Map());
-      expect(dense.map(record => [record.packageName, record.singleton])).toEqual([
-        ['p', true],
-        ['p', false],
+      expect(
+        dense.map(record => [record.packageName, record.singleton, record.strictVersion])
+      ).toEqual([['p', true, true]]);
+      expect(outcome.projection.warnings).toEqual([
+        "Entry points of shared package 'p' set different singleton, strictVersion. A package is shared with one config, taken from its main entry; the other entry points' values are ignored. Set them once, on 'p'.",
       ]);
-      expect(outcome.projection.warnings).toEqual([]);
     }
   );
 
