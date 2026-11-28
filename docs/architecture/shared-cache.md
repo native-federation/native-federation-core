@@ -19,6 +19,9 @@
   (`cacheData`).
 - A shared run replaces the previous results only when every shared bundle has finished. A failed
   run keeps the last complete set, and the next build redoes every shared bundle.
+- Chunk maps are not cached: every build derives them from the files a hit copies back, so a warm
+  build publishes what a cold one does. A change to what a cache entry stores within one minor
+  bumps the cache layout, which purges the whole folder once.
 - Deleting the cache folder is always safe.
 
 ## Why
@@ -42,7 +45,8 @@
 
 Enforced by: `src/lib/core/build/bundle-shared.spec.ts`,
 `src/lib/core/cache/federation-cache.spec.ts`,
-`src/lib/core/build/rebuild-affected-externals.spec.ts`
+`src/lib/core/build/rebuild-affected-externals.spec.ts`,
+`src/lib/core/build/build-for-federation-chunks.spec.ts`
 Issues: core#103, core#113, core#152, core#154, core#179, core#190
 Related: [Shared packages](shared-packages.md) (versions), [Build adapter](build-adapter.md),
 [Output files](output-files.md), [File watcher](file-watcher.md)

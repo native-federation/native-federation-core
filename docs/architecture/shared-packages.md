@@ -6,8 +6,9 @@
 
 - A shared package is published as one unit, not entry point by entry point: one `shared` record
   in `remoteEntry.json` (`$version: 'v5'`), with each entry point's file under `entries`. Shared
-  mappings are published the same way. Entry points whose metadata differ split into records
-  that share a `packageName`.
+  mappings are published the same way. The record lists in `chunks` every chunk its entry points
+  reach (see [Chunks](chunks.md)), whichever shared bundles they are built in. Entry points whose
+  metadata differ split into records that share a `packageName`.
 - It has one version for all its entry points: the installed one, unless the config pins a
   version. The declared range is a last resort, with a warning. A vendored copy of an installed
   package pins its version, or it is published as the installed one.
@@ -33,8 +34,8 @@
 - `preload: true` on a shared package is published on its record as `preload`. Like any config
   field, it is part of the shared bundle's config state, so toggling it renames the bundle's entry
   files on a rebuild; it changes nothing else in the build. It asks the runtime to fetch the
-  package, with every chunk of the bundle it is built in (see [Chunks](chunks.md)), once the import
-  map is in place, before anything imports it. Once one entry point of a package sets it, every
+  package, with the `initial` chunks of its record, once the import map is in place, before
+  anything imports it. Other packages built in the same bundle are not fetched with it. Once one entry point of a package sets it, every
   entry point of that package does.
 
 ## Why
