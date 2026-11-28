@@ -42,6 +42,7 @@ type ExportCondition =
 
 export type ExportEntry =
   | string
+  | null
   | undefined
   | { [key in ExportCondition]?: ExportEntry }
   | ExportEntry[];

@@ -574,6 +574,48 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     expect(result.externals[0]).toMatchObject({ packageName: 'foo', version: '2.0.0' });
   });
 
+  it.each(['browser', 'node'] as const)(
+    'bundles the exports condition of a %s bundle',
+    async platform => {
+      const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
+      const adapter = createFakeBuildAdapter({ io: mem });
+      const repo: PackageJsonRepository = {
+        getPackageJsonFiles: () => [{ content: {}, directory: '/ws' }],
+        findDepPackageJson: () => '/ws/node_modules/foo/package.json',
+        readJson: () => ({
+          version: '2.0.0',
+          exports: { '.': { node: './server.js', browser: './client.js' } },
+        }),
+        exists: () => false,
+      };
+      const sharedBundles: Record<string, NormalizedExternalConfig> = {
+        foo: {
+          singleton: true,
+          strictVersion: false,
+          requiredVersion: '^2.0.0',
+          chunks: false,
+          // Disagrees with the bundle on purpose: the bundle's platform decides.
+          platform: platform === 'node' ? 'browser' : 'node',
+          build: 'default',
+        },
+      };
+
+      await bundleSharedCore(
+        { io: mem, repo, adapter },
+        sharedBundles,
+        makeConfig(),
+        makeFedOptions(),
+        [],
+        { ...BUILD_OPTIONS, platform }
+      );
+
+      const file = platform === 'node' ? 'server.js' : 'client.js';
+      expect(adapter.calls.setup[0]!.options.entryPoints[0]!.fileName).toBe(
+        path.join('/ws/node_modules/foo', file)
+      );
+    }
+  );
+
   it('names a shared entry by its content, so the name changes when the bundle changes', async () => {
     const sharedBundles: Record<string, NormalizedExternalConfig> = {
       foo: {

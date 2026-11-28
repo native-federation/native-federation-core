@@ -1,6 +1,6 @@
 import * as path from 'path';
 import { logger } from '../logger.js';
-import { findOptimalExport, resolveExportsEntry } from './exports-resolver.js';
+import { findOptimalExport, resolveExportsEntry, type NotExported } from './exports-resolver.js';
 import { getPkgFolder } from '../io/package-json-repository.js';
 import type {
   PackageInfo,
@@ -19,9 +19,12 @@ interface ResolveContext {
   secondaryPkgPath: string;
   secondaryPkgJson: PartialPackageJson | null;
   repo: PackageJsonRepository;
+  platform: 'browser' | 'node';
 }
 
-type Strategy = (ctx: ResolveContext) => PackageInfo | null;
+// null tries the next strategy; NotExported ends the chain (see
+// docs/architecture/package-resolution.md#strategy-chain).
+type Strategy = (ctx: ResolveContext) => PackageInfo | NotExported | null;
 
 const base = (ctx: ResolveContext, entryPoint: string, esm: boolean): PackageInfo => ({
   entryPoint,
@@ -33,8 +36,8 @@ const base = (ctx: ResolveContext, entryPoint: string, esm: boolean): PackageInf
 const STRATEGIES: Strategy[] = [
   ctx => {
     const entry = resolveExportsEntry(ctx.mainPkgJson?.exports, ctx.relSecondaryPath);
-    if (!entry) return null;
-    return findOptimalExport(entry, base(ctx, ctx.mainPkgPath, ctx.esm)) ?? null;
+    if (entry === undefined) return null;
+    return findOptimalExport(entry, base(ctx, ctx.mainPkgPath, ctx.esm), ctx.platform) ?? null;
   },
   ctx =>
     ctx.mainPkgJson['module'] && ctx.relSecondaryPath === '.'
@@ -69,13 +72,22 @@ const STRATEGIES: Strategy[] = [
 export function resolvePackageInfo(
   repo: PackageJsonRepository,
   packageName: string,
-  directory: string
-): PackageInfo | null {
-  const mainPkgName = getPkgFolder(packageName);
-  if (!mainPkgName) throw new Error(`Could not resolve "${packageName}" in "${directory}`);
-
+  directory: string,
+  platform: 'browser' | 'node'
+): PackageInfo | NotExported | null {
   const mainPkgJsonPath = repo.findDepPackageJson(packageName, directory);
   if (!mainPkgJsonPath) return null;
+  return resolveInstalledPackageInfo(repo, packageName, mainPkgJsonPath, platform);
+}
+
+export function resolveInstalledPackageInfo(
+  repo: PackageJsonRepository,
+  packageName: string,
+  mainPkgJsonPath: string,
+  platform: 'browser' | 'node'
+): PackageInfo | NotExported | null {
+  const mainPkgName = getPkgFolder(packageName);
+  if (!mainPkgName) throw new Error(`Could not resolve "${packageName}" in "${mainPkgJsonPath}`);
 
   const mainPkgPath = path.dirname(mainPkgJsonPath);
   const mainPkgJson = repo.readJson(mainPkgJsonPath);
@@ -84,7 +96,7 @@ export function resolvePackageInfo(
   const esm = mainPkgJson['type'] === 'module';
 
   if (!version) {
-    logger.debug('No version found for ' + packageName + ' in ' + directory);
+    logger.debug('No version found for ' + packageName + ' in ' + mainPkgPath);
     return null;
   }
 
@@ -107,6 +119,7 @@ export function resolvePackageInfo(
     secondaryPkgPath,
     secondaryPkgJson,
     repo,
+    platform,
   };
 
   for (const strategy of STRATEGIES) {
@@ -114,6 +127,6 @@ export function resolvePackageInfo(
     if (result) return result;
   }
 
-  logger.debug('No entry point found for ' + packageName + ' in ' + directory);
+  logger.debug('No entry point found for ' + packageName + ' in ' + mainPkgPath);
   return null;
 }

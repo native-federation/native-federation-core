@@ -7,20 +7,46 @@ import type {
   VersionMap,
 } from '../../domain/utils/package-json.contract.js';
 import { resolvePackageInfo } from './entry-point-resolver.js';
+import { NOT_EXPORTED, type NotExported } from './exports-resolver.js';
 import { getVersionMaps as getVersionMapsFromRepo } from './version-maps.js';
 
 export { sharedPackageJsonRepository } from '../io/package-json-repository.js';
 export type { PackageInfo, VersionMap } from '../../domain/utils/package-json.contract.js';
 
-export function tryGetPackageInfo(
+export function getPackageInfo(
   packageName: string,
   workspaceRoot: string,
-  repo: PackageJsonRepository = sharedPackageJsonRepository
+  repo: PackageJsonRepository,
+  platform: 'browser' | 'node'
 ): PackageInfo | null {
+  const info = resolveFromRoots(packageName, workspaceRoot, repo, platform);
+  if (info && info !== NOT_EXPORTED) return info;
+
+  if (info === NOT_EXPORTED) {
+    logger.warn(
+      `No meta data found for shared lib ${packageName}: its package.json exports blocks this entry point`
+    );
+    logger.warn('Skip it in your federation.config.js, or remove it from shared');
+    return null;
+  }
+
+  logger.warn('No meta data found for shared lib ' + packageName);
+  logger.warn(
+    "If you don't need this package, skip it in your federation.config.js or consider moving it into devDependencies in your package.json"
+  );
+  return null;
+}
+
+function resolveFromRoots(
+  packageName: string,
+  workspaceRoot: string,
+  repo: PackageJsonRepository,
+  platform: 'browser' | 'node'
+): PackageInfo | NotExported | null {
   workspaceRoot = normalize(workspaceRoot, true);
 
   for (const info of repo.getPackageJsonFiles(workspaceRoot, workspaceRoot)) {
-    const cand = resolvePackageInfo(repo, packageName, info.directory);
+    const cand = resolvePackageInfo(repo, packageName, info.directory, platform);
     if (cand) {
       return cand;
     }
@@ -29,34 +55,8 @@ export function tryGetPackageInfo(
   return null;
 }
 
-/**
- * Resolve a package that is expected to be resolvable, warning once if it is not.
- * Only use this where a failure is genuinely actionable, i.e. for packages the user
- * asked to share.
- */
-export function getPackageInfo(
-  packageName: string,
-  workspaceRoot: string,
-  repo: PackageJsonRepository = sharedPackageJsonRepository
-): PackageInfo | null {
-  const info = tryGetPackageInfo(packageName, workspaceRoot, repo);
-
-  if (!info) {
-    logger.warn('No meta data found for shared lib ' + packageName);
-    logger.warn(
-      "If you don't need this package, skip it in your federation.config.js or consider moving it into depDependencies in your package.json"
-    );
-  }
-
-  return info;
-}
-
-/**
- * Installed version per key, from each key's package root. Resolution is deduped by root:
- * `findDepPackageJson` trims to the root anyway, and that root package.json is also where
- * `resolvePackageInfo` reads the `version` it records as `PackageInfo.version`, so a secondary
- * yields the same string as its main entry point. Unresolvable keys map to ''.
- */
+// One lookup per package root: a secondary gets its root's version (see
+// docs/architecture/package-resolution.md#reading-the-package); '' when not installed.
 export function installedVersions(
   packageNames: string[],
   workspaceRoot: string,

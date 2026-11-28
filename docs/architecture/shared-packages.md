@@ -19,10 +19,14 @@
   its `package.json`, the declared value is kept.
 - An override configures the package it names; it never removes another package whose name starts
   with it.
+- Which file an entry point bundles follows the package's `exports` and its `platform`: see
+  [Package resolution](package-resolution.md).
 - Secondary entry points core expands from a shared package inherit its settings.
 - With `ignoreUnusedDeps` (the default), only the entry points the build reaches are published.
   A shared package nothing reaches is dropped; `keepAll` keeps every entry point of one that is
   still reached.
+- Which install of a package the import scan reads: see
+  [Package resolution](package-resolution.md#which-install-the-unused-dependency-scan-reads).
 - `preload: true` on a shared package is published on its record as `preload`. Like any config
   field, it is part of the shared bundle's config state, so toggling it renames the bundle's entry
   files on a rebuild; it changes nothing else in the build. It asks the runtime to fetch the
@@ -59,4 +63,4 @@ Enforced by: `src/lib/core/build/bundle-shared.spec.ts`,
 `src/lib/config/remove-unused-deps.spec.ts`, `src/lib/config/share-utils.spec.ts`
 Issues: core#104, core#120, core#169, core#233, core#234
 Related: [Shared mappings](shared-mappings.md), [Shared cache](shared-cache.md),
-[Mapping packages](mapping-packages.md)
+[Mapping packages](mapping-packages.md), [Package resolution](package-resolution.md)

@@ -1,6 +1,12 @@
 import { getProjectData as sheriffGetProjectData, type ProjectData } from '@softarc/sheriff-core';
-import { sharedPackageJsonRepository, tryGetPackageInfo } from '../utils/package/package-info.js';
-import { type PackageJsonRepository } from '../domain/utils/package-json.contract.js';
+import { sharedPackageJsonRepository } from '../utils/package/package-info.js';
+import { resolveInstalledPackageInfo } from '../utils/package/entry-point-resolver.js';
+import { NOT_EXPORTED } from '../utils/package/exports-resolver.js';
+import { normalize } from '../utils/normalize.js';
+import {
+  type PackageInfo,
+  type PackageJsonRepository,
+} from '../domain/utils/package-json.contract.js';
 import { getExternalImportsCore } from './get-external-imports.js';
 import { nodeIo } from '../utils/io/node-io-adapter.js';
 import { type FileReaderPort } from '../domain/utils/io-port.contract.js';
@@ -36,6 +42,8 @@ type UsedDependenciesConfig = {
   name?: string;
   exposes?: Record<string, ExposeEntry>;
   sharedMappings: PathToImport;
+  shared?: Record<string, { platform: 'browser' | 'node' }>;
+  platform?: 'browser' | 'node';
 };
 
 export function getUsedDependenciesFactory(
@@ -85,7 +93,13 @@ export function getUsedDependenciesFactoryCore(
     }
 
     return {
-      external: addTransientDeps(usedPackageNames, workspaceRoot, deps),
+      external: addTransientDeps(
+        usedPackageNames,
+        workspaceRoot,
+        deps,
+        config.shared ?? {},
+        config.platform ?? 'browser'
+      ),
       ...resolveUsedMappings(fileInfos, workspaceRoot, config.sharedMappings, deps.io),
     };
   };
@@ -105,39 +119,65 @@ function resolveEntryPoint(io: FileReaderPort, workspaceRoot: string, entryPoint
   return resolved;
 }
 
+interface PendingPackage {
+  name: string;
+  importer?: string;
+}
+
 function addTransientDeps(
   packages: Set<string>,
   workspaceRoot: string,
-  deps: UsedDependenciesDeps
+  deps: UsedDependenciesDeps,
+  shared: Record<string, { platform: 'browser' | 'node' }>,
+  configPlatform: 'browser' | 'node'
 ) {
-  const packagesAndPeers = new Set<string>([...packages]);
-  const discovered = new Set<string>(packagesAndPeers);
-  const stack = [...packagesAndPeers];
+  const packagesAndPeers = new Set<string>(packages);
+  const scanned = new Set<string>();
+  const stack: PendingPackage[] = [...packages].map(name => ({ name }));
 
   while (stack.length > 0) {
-    const dep = stack.pop();
+    const { name, importer } = stack.pop()!;
 
-    if (!dep) {
-      continue;
-    }
+    // see docs/architecture/package-resolution.md#which-install-the-unused-dependency-scan-reads
+    const sharedConfig = shared[name];
+    const found = findInstalledPackage(
+      name,
+      sharedConfig ? undefined : importer,
+      workspaceRoot,
+      sharedConfig?.platform ?? configPlatform,
+      deps
+    );
+    if (!found) continue;
 
-    const pInfo = tryGetPackageInfo(dep, workspaceRoot, deps.repo);
+    const entryPoint = deps.io.realpath(found.info.entryPoint);
+    if (scanned.has(entryPoint)) continue;
+    scanned.add(entryPoint);
 
-    if (!pInfo) {
-      continue;
-    }
-
-    const peerDeps = getExternalImportsCore(deps.io, pInfo.entryPoint);
-
-    for (const peerDep of peerDeps) {
-      if (!discovered.has(peerDep)) {
-        discovered.add(peerDep);
-        stack.push(peerDep);
-        packagesAndPeers.add(peerDep);
-      }
+    for (const peerDep of getExternalImportsCore(deps.io, found.info.entryPoint)) {
+      packagesAndPeers.add(peerDep);
+      stack.push({ name: peerDep, importer: found.directory });
     }
   }
   return packagesAndPeers;
+}
+
+function findInstalledPackage(
+  name: string,
+  importer: string | undefined,
+  workspaceRoot: string,
+  platform: 'browser' | 'node',
+  deps: UsedDependenciesDeps
+): { info: PackageInfo; directory: string } | null {
+  const root = normalize(workspaceRoot, true);
+  for (const from of importer ? [importer, root] : [root]) {
+    const pkgJsonPath = deps.repo.findDepPackageJson(name, from);
+    if (!pkgJsonPath) continue;
+    const info = resolveInstalledPackageInfo(deps.repo, name, pkgJsonPath, platform);
+    // The first install the importer sees decides, also when it resolves nothing.
+    if (!info || info === NOT_EXPORTED) return null;
+    return { info, directory: deps.io.realpath(path.dirname(pkgJsonPath)) };
+  }
+  return null;
 }
 
 function resolveUsedMappings(

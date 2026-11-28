@@ -5,7 +5,7 @@ import {
   type UsedDependenciesDeps,
 } from './get-used-dependencies.js';
 import { isSharedMapping, matchMapping } from './match-mapping.js';
-import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
+import { createMemoryIo, type MemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
 import { createPackageJsonRepository } from '../utils/io/package-json-repository.js';
 import { logger } from '../utils/logger.js';
 import * as path from 'path';
@@ -77,6 +77,332 @@ describe('getUsedDependenciesFactoryCore', () => {
 
     expect(used.external).toContain('pkg-a');
     expect(used.external).toContain('pkg-b');
+  });
+
+  // Each shared package is scanned through the exports condition of its own platform; a
+  // package that is not shared, such as a transitive dependency, through the config's platform,
+  // browser when the config sets none.
+  it.each([
+    [
+      'a node package',
+      { pkg: { platform: 'node' as const } },
+      undefined,
+      'node-only',
+      'browser-only',
+    ],
+    [
+      'a browser package',
+      { pkg: { platform: 'browser' as const } },
+      'node' as const,
+      'browser-only',
+      'node-only',
+    ],
+    ['a package that is not shared', {}, undefined, 'browser-only', 'node-only'],
+  ])('scans %s through its own exports condition', (_, shared, platform, kept, missed) => {
+    const deps = makeDeps(
+      {
+        'src/comp.ts': { imports: [], externalLibraries: ['pkg'], unresolvedImports: [] },
+      } as unknown as ProjectData,
+      {
+        '/ws/node_modules/pkg/package.json': JSON.stringify({
+          name: 'pkg',
+          version: '1.0.0',
+          exports: { '.': { node: './server.js', browser: './client.js' } },
+        }),
+        '/ws/node_modules/pkg/server.js': "import 'node-only';",
+        '/ws/node_modules/pkg/client.js': "import 'browser-only';",
+      }
+    );
+
+    const used = getUsedDependenciesFactoryCore(
+      deps,
+      '/ws'
+    )({
+      exposes: { './Comp': { file: 'src/comp.ts' } },
+      sharedMappings: {},
+      shared,
+      ...(platform && { platform }),
+    });
+
+    expect(used.external).toContain(kept);
+    expect(used.external).not.toContain(missed);
+  });
+
+  it("scans a transitive dependency that is not shared through a node config's node condition", () => {
+    const deps = makeDeps(
+      {
+        'src/comp.ts': { imports: [], externalLibraries: ['srv'], unresolvedImports: [] },
+      } as unknown as ProjectData,
+      {
+        '/ws/node_modules/srv/package.json': JSON.stringify({
+          name: 'srv',
+          version: '1.0.0',
+          exports: './index.js',
+        }),
+        '/ws/node_modules/srv/index.js': "import 'pkg';",
+        '/ws/node_modules/pkg/package.json': JSON.stringify({
+          name: 'pkg',
+          version: '1.0.0',
+          exports: { '.': { node: './server.js', browser: './client.js' } },
+        }),
+        '/ws/node_modules/pkg/server.js': "import 'node-only';",
+        '/ws/node_modules/pkg/client.js': "import 'browser-only';",
+      }
+    );
+
+    const used = getUsedDependenciesFactoryCore(
+      deps,
+      '/ws'
+    )({
+      exposes: { './Comp': { file: 'src/comp.ts' } },
+      sharedMappings: {},
+      shared: { srv: { platform: 'node' } },
+      platform: 'node',
+    });
+
+    expect(used.external).toContain('node-only');
+    expect(used.external).not.toContain('browser-only');
+  });
+
+  // Only a key of `shared` takes the shared platform: a secondary that is not one is read with
+  // the config's platform.
+  it('scans a secondary that is not a key of shared through the config platform', () => {
+    const deps = makeDeps(
+      {
+        'src/comp.ts': { imports: [], externalLibraries: ['pkg/sub'], unresolvedImports: [] },
+      } as unknown as ProjectData,
+      {
+        '/ws/node_modules/pkg/package.json': JSON.stringify({
+          name: 'pkg',
+          version: '1.0.0',
+          exports: { './sub': { node: './server.js', browser: './client.js' } },
+        }),
+        '/ws/node_modules/pkg/server.js': "import 'node-only';",
+        '/ws/node_modules/pkg/client.js': "import 'browser-only';",
+      }
+    );
+
+    const used = getUsedDependenciesFactoryCore(
+      deps,
+      '/ws'
+    )({
+      exposes: { './Comp': { file: 'src/comp.ts' } },
+      sharedMappings: {},
+      shared: { pkg: { platform: 'node' } },
+    });
+
+    expect(used.external).toContain('browser-only');
+    expect(used.external).not.toContain('node-only');
+  });
+
+  it('skips a package whose exports blocks the entry point, without a warning', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const deps = makeDeps(
+      {
+        'src/comp.ts': { imports: [], externalLibraries: ['pkg/internal'], unresolvedImports: [] },
+      } as unknown as ProjectData,
+      {
+        '/ws/node_modules/pkg/package.json': JSON.stringify({
+          name: 'pkg',
+          version: '1.0.0',
+          exports: { '.': './index.js', './internal': null },
+        }),
+        '/ws/node_modules/pkg/internal/package.json': '{"main":"./index.js"}',
+        '/ws/node_modules/pkg/internal/index.js': "import 'leaked';",
+      }
+    );
+
+    const used = getUsedDependenciesFactoryCore(
+      deps,
+      '/ws'
+    )({
+      exposes: { './Comp': { file: 'src/comp.ts' } },
+      sharedMappings: {},
+      shared: {},
+    });
+
+    expect(used.external).toContain('pkg/internal');
+    expect(used.external).not.toContain('leaked');
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  // Packages reached through another package's entry closure. Each row builds its own io and
+  // repository: the repository caches lookups, so a shared one would leak layouts between rows.
+  describe('transitive packages', () => {
+    // Two install layouts: hoisted (everything flat under the root node_modules) and isolated
+    // (real dirs under node_modules/.pnpm, symlinked into the node_modules of whoever declares
+    // them).
+    function setPackage(io: MemoryIo, dir: string, imports: string[], version = '1.0.0'): void {
+      io.setFile(
+        `${dir}/package.json`,
+        JSON.stringify({ name: path.basename(dir), version, main: 'index.js' })
+      );
+      io.setFile(`${dir}/index.js`, imports.map(i => `import '${i}';`).join('\n'));
+    }
+
+    const store = (name: string, version = '1.0.0') =>
+      `/ws/node_modules/.pnpm/${name}@${version}/node_modules/${name}`;
+
+    // Isolated install: `owner` sees `name` only through its own node_modules link.
+    function link(io: MemoryIo, ownerNodeModules: string, name: string, version = '1.0.0'): void {
+      io.setSymlink(`${ownerNodeModules}/${name}`, store(name, version));
+    }
+
+    // node_modules folder that sits next to a package inside the store, as the isolated layout
+    // puts each package's own dependencies.
+    const storeDeps = (name: string, version = '1.0.0') =>
+      `/ws/node_modules/.pnpm/${name}@${version}/node_modules`;
+
+    // The app's code imports `a` only.
+    function scan(io: MemoryIo, shared: string[] = []): string[] {
+      io.setFile('/ws/package.json', JSON.stringify({ name: 'app' }));
+      io.setFile('/ws/src/main.ts', '');
+      const projectData = {
+        'src/main.ts': { imports: [], externalLibraries: ['a'], unresolvedImports: [] },
+      } as unknown as ProjectData;
+      const deps: UsedDependenciesDeps = {
+        io,
+        repo: createPackageJsonRepository(io),
+        getProjectData: () => projectData,
+      };
+      const used = getUsedDependenciesFactoryCore(deps, '/ws', ['src/main.ts'])({
+        sharedMappings: {},
+        shared: Object.fromEntries(shared.map(name => [name, { platform: 'browser' as const }])),
+      });
+      return [...used.external].sort();
+    }
+
+    it('reports what a dependency of a dependency imports (hoisted)', () => {
+      const io = createMemoryIo();
+      setPackage(io, '/ws/node_modules/a', ['b']);
+      setPackage(io, '/ws/node_modules/b', ['c']);
+      setPackage(io, '/ws/node_modules/c', ['d']);
+
+      expect(scan(io)).toEqual(['a', 'b', 'c', 'd']);
+    });
+
+    // The app declares `a` and `c`; `b` is only `a`'s dependency, so it is not reachable from
+    // the workspace root.
+    it('reports what a dependency of a dependency imports (isolated)', () => {
+      const io = createMemoryIo();
+      setPackage(io, store('a'), ['b']);
+      setPackage(io, store('b'), ['c']);
+      setPackage(io, store('c'), ['d']);
+      setPackage(io, store('d'), []);
+      link(io, '/ws/node_modules', 'a');
+      link(io, '/ws/node_modules', 'c');
+      link(io, storeDeps('a'), 'b');
+      link(io, storeDeps('b'), 'c');
+      link(io, storeDeps('c'), 'd');
+
+      expect(scan(io)).toEqual(['a', 'b', 'c', 'd']);
+    });
+
+    // `a` and `b` each depend on their own install of `c`, and the two versions import different
+    // packages.
+    it('scans each install of a package that is installed twice', () => {
+      const io = createMemoryIo();
+      setPackage(io, store('a'), ['b', 'c']);
+      setPackage(io, store('b'), ['c']);
+      setPackage(io, store('c', '1.0.0'), ['x'], '1.0.0');
+      setPackage(io, store('c', '2.0.0'), ['y'], '2.0.0');
+      link(io, '/ws/node_modules', 'a');
+      link(io, storeDeps('a'), 'b');
+      link(io, storeDeps('a'), 'c', '1.0.0');
+      link(io, storeDeps('b'), 'c', '2.0.0');
+
+      expect(scan(io)).toEqual(['a', 'b', 'c', 'x', 'y']);
+    });
+
+    // `a` and `b` each link the same install of `c`: two paths, one real file, one scan.
+    it('scans an install reached through two symlinks once', () => {
+      const io = createMemoryIo();
+      setPackage(io, store('a'), ['b', 'c']);
+      setPackage(io, store('b'), ['c']);
+      setPackage(io, store('c'), ['x']);
+      link(io, '/ws/node_modules', 'a');
+      link(io, storeDeps('a'), 'b');
+      link(io, storeDeps('a'), 'c');
+      link(io, storeDeps('b'), 'c');
+      const readText = vi.spyOn(io, 'readText');
+
+      expect(scan(io)).toEqual(['a', 'b', 'c', 'x']);
+      const reads = readText.mock.calls.filter(([file]) => file.endsWith('/c/index.js'));
+      expect(reads).toHaveLength(1);
+    });
+
+    // A linked checkout outside the workspace has no node_modules path back to the root, so the
+    // phantom dependency it imports is found only by looking from the workspace root.
+    it('scans a phantom dependency of a linked package from the workspace root', () => {
+      const io = createMemoryIo();
+      setPackage(io, '/dev/a', ['p']);
+      io.setSymlink('/ws/node_modules/a', '/dev/a');
+      setPackage(io, '/ws/node_modules/p', ['q']);
+
+      expect(scan(io)).toEqual(['a', 'p', 'q']);
+    });
+
+    // The root has its own hoisted `c`, and `a` has its own `c` installed next to it. A shared `c`
+    // is bundled once from the workspace root, so the root's copy is what `a` loads at runtime.
+    it("scans the workspace root's install of a shared package, not the importer's", () => {
+      const io = createMemoryIo();
+      setPackage(io, store('a'), ['c']);
+      setPackage(io, '/ws/node_modules/c', ['x'], '1.0.0');
+      setPackage(io, store('c', '2.0.0'), ['y'], '2.0.0');
+      link(io, '/ws/node_modules', 'a');
+      link(io, storeDeps('a'), 'c', '2.0.0');
+
+      expect(scan(io, ['c'])).toEqual(['a', 'c', 'x']);
+    });
+
+    // Same layout, but `c` is not shared: it is bundled into `a`'s importer, from `a`'s own install.
+    it("scans the importer's own install of a package that is not shared", () => {
+      const io = createMemoryIo();
+      setPackage(io, store('a'), ['c']);
+      setPackage(io, '/ws/node_modules/c', ['x'], '1.0.0');
+      setPackage(io, store('c', '2.0.0'), ['y'], '2.0.0');
+      link(io, '/ws/node_modules', 'a');
+      link(io, storeDeps('a'), 'c', '2.0.0');
+
+      expect(scan(io)).toEqual(['a', 'c', 'y']);
+    });
+
+    // `a`'s own `c` blocks its root entry, but a shared `c` is never looked up from `a`.
+    it("scans the workspace root's install of a shared package the importer's install does not export", () => {
+      const io = createMemoryIo();
+      setPackage(io, store('a'), ['c']);
+      setPackage(io, '/ws/node_modules/c', ['x'], '1.0.0');
+      setPackage(io, store('c', '2.0.0'), ['y'], '2.0.0');
+      io.setFile(
+        `${store('c', '2.0.0')}/package.json`,
+        JSON.stringify({ name: 'c', version: '2.0.0', exports: { '.': null } })
+      );
+      link(io, '/ws/node_modules', 'a');
+      link(io, storeDeps('a'), 'c', '2.0.0');
+
+      expect(scan(io, ['c'])).toEqual(['a', 'c', 'x']);
+    });
+
+    // `c` is not shared and `a`'s own `c` blocks its root entry; the root's `c` is not what `a`
+    // imports, so it is not scanned in its place.
+    it("does not fall back to the workspace root when the importer's install is not exported", () => {
+      const io = createMemoryIo();
+      setPackage(io, store('a'), ['c']);
+      setPackage(io, '/ws/node_modules/c', ['x'], '1.0.0');
+      setPackage(io, store('c', '2.0.0'), ['y'], '2.0.0');
+      io.setFile(
+        `${store('c', '2.0.0')}/package.json`,
+        JSON.stringify({ name: 'c', version: '2.0.0', exports: { '.': null } })
+      );
+      link(io, '/ws/node_modules', 'a');
+      link(io, storeDeps('a'), 'c', '2.0.0');
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      expect(scan(io)).toEqual(['a', 'c']);
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+    });
   });
 
   it('resolves internal shared mappings from analyzed imports', () => {

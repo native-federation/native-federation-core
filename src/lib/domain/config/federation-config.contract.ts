@@ -93,6 +93,7 @@ export interface NormalizedFederationConfig {
   chunks: boolean;
   externals: string[];
   shareScope?: string;
+  platform?: 'browser' | 'node';
   features: {
     mappingVersion: boolean;
     ignoreUnusedDeps: boolean;
