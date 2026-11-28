@@ -594,7 +594,8 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
           strictVersion: false,
           requiredVersion: '^2.0.0',
           chunks: false,
-          platform,
+          // Disagrees with the bundle on purpose: the bundle's platform decides.
+          platform: platform === 'node' ? 'browser' : 'node',
           build: 'default',
         },
       };

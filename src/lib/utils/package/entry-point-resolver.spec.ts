@@ -69,6 +69,48 @@ describe('resolvePackageInfo', () => {
     });
   });
 
+  it('prefers exports over the top-level module field', () => {
+    const repo = repoWith({ version: '1.0.0', exports: './e.js', module: './m.mjs' });
+    expect(resolvePackageInfo(repo, 'pkg', WS, 'browser')?.entryPoint).toBe(
+      path.join(nm('pkg'), './e.js')
+    );
+  });
+
+  // Node throws ERR_PACKAGE_PATH_NOT_EXPORTED for these three; core moves on down the chain.
+  // See package-resolution.md#differences-from-node.
+  it('falls back for a subpath the exports map has no key for', () => {
+    const repo = repoWith(
+      { version: '1.0.0', exports: { '.': './m.js' } },
+      { 'pkg/other/package.json': '{"main":"./o.js"}' }
+    );
+    expect(resolvePackageInfo(repo, 'pkg/other', WS, 'browser')).toMatchObject({
+      packageName: 'pkg/other',
+      entryPoint: path.join(nm('pkg/other'), './o.js'),
+    });
+  });
+
+  it('falls back for a types-only exports object', () => {
+    const repo = repoWith({
+      version: '1.0.0',
+      exports: { types: './t.d.ts' },
+      module: './m.mjs',
+    });
+    expect(resolvePackageInfo(repo, 'pkg', WS, 'browser')?.entryPoint).toBe(
+      path.join(nm('pkg'), './m.mjs')
+    );
+  });
+
+  it('falls back when the conditions name only the other platform', () => {
+    const repo = repoWith({
+      version: '1.0.0',
+      exports: { '.': { node: './n.js' } },
+      module: './m.mjs',
+    });
+    expect(resolvePackageInfo(repo, 'pkg', WS, 'browser')?.entryPoint).toBe(
+      path.join(nm('pkg'), './m.mjs')
+    );
+  });
+
   it('falls back to the top-level module field', () => {
     const repo = repoWith({ version: '2.0.0', module: './dist/index.mjs' });
     const info = resolvePackageInfo(repo, 'pkg', WS, 'browser');
@@ -87,10 +129,62 @@ describe('resolvePackageInfo', () => {
     expect(info).toMatchObject({ esm: false, entryPoint: path.join(nm('pkg'), './lib/index.js') });
   });
 
+  it('marks main esm when the package type is module', () => {
+    const repo = repoWith({ version: '4.0.0', type: 'module', main: './lib/index.js' });
+    expect(resolvePackageInfo(repo, 'pkg', WS, 'browser')).toMatchObject({ esm: true });
+  });
+
   it('falls back to a conventional index.js', () => {
     const repo = repoWith({ version: '5.0.0' }, { 'pkg/index.js': '' });
     const info = resolvePackageInfo(repo, 'pkg', WS, 'browser');
     expect(info).toMatchObject({ entryPoint: nm('pkg/index.js') });
+  });
+
+  // Secondary entry points without exports, strategies 3 to 8 of the chain.
+  describe('for a secondary entry point', () => {
+    const resolveSub = (files: Record<string, string>) =>
+      resolvePackageInfo(repoWith({ version: '7.0.0' }, files), 'pkg/sub', WS, 'browser');
+
+    it("takes the subpath's own module field, with the package's version", () => {
+      expect(
+        resolveSub({
+          'pkg/sub/package.json': '{"module":"./s.mjs","main":"./s.js","version":"0.0.1"}',
+        })
+      ).toMatchObject({
+        packageName: 'pkg/sub',
+        version: '7.0.0',
+        esm: true,
+        entryPoint: path.join(nm('pkg/sub'), './s.mjs'),
+      });
+    });
+
+    it("prefers index.mjs over the subpath's main", () => {
+      expect(
+        resolveSub({ 'pkg/sub/package.json': '{"main":"./s.js"}', 'pkg/sub/index.mjs': '' })
+      ).toMatchObject({ esm: true, entryPoint: nm('pkg/sub/index.mjs') });
+    });
+
+    it("prefers the subpath's main over index.js", () => {
+      expect(
+        resolveSub({ 'pkg/sub/package.json': '{"main":"./s.js"}', 'pkg/sub/index.js': '' })
+      ).toMatchObject({ entryPoint: path.join(nm('pkg/sub'), './s.js') });
+    });
+
+    it('prefers index.js over <subpath>.js', () => {
+      expect(resolveSub({ 'pkg/sub/index.js': '', 'pkg/sub.js': '' })).toMatchObject({
+        entryPoint: nm('pkg/sub/index.js'),
+      });
+    });
+
+    it('prefers <subpath>.js over <subpath>.mjs', () => {
+      expect(resolveSub({ 'pkg/sub.js': '', 'pkg/sub.mjs': '' })).toMatchObject({
+        entryPoint: nm('pkg/sub.js'),
+      });
+    });
+
+    it('falls back to <subpath>.mjs', () => {
+      expect(resolveSub({ 'pkg/sub.mjs': '' })).toMatchObject({ entryPoint: nm('pkg/sub.mjs') });
+    });
   });
 
   it('returns null and logs a debug message when no version is present', () => {

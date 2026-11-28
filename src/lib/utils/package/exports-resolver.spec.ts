@@ -107,6 +107,29 @@ describe('findOptimalExport', () => {
     expect(result?.entryPoint).toBe(path.join('/pkg', './d.js'));
   });
 
+  // Core has no set of active conditions: a custom key or `require` is taken when nothing
+  // better resolves, where Node takes the platform key or nothing.
+  it('takes an unknown condition listed first over a platform key', () => {
+    const target = { 'react-native': './rn.js', browser: './b.js', node: './n.js' };
+    expect(findOptimalExport(target, info, 'browser')?.entryPoint).toBe(
+      path.join('/pkg', './rn.js')
+    );
+    expect(findOptimalExport(target, info, 'node')?.entryPoint).toBe(path.join('/pkg', './rn.js'));
+  });
+
+  it('takes require when nothing else is listed, and marks the result not esm', () => {
+    const result = findOptimalExport({ require: './c.cjs' }, { ...info, esm: true }, 'browser');
+    expect(result).toMatchObject({ entryPoint: path.join('/pkg', './c.cjs'), esm: false });
+  });
+
+  // Node throws ERR_INVALID_PACKAGE_CONFIG on a numeric key; core reads it as a condition name.
+  it('reads a numeric key as a condition name', () => {
+    const target = { 0: './zero.js' } as unknown as ExportEntry;
+    expect(findOptimalExport(target, info, 'browser')?.entryPoint).toBe(
+      path.join('/pkg', './zero.js')
+    );
+  });
+
   it('takes the first non-types key when it names no platform', () => {
     const result = findOptimalExport(
       { types: './t.d.ts', worker: './w.js', node: './n.js' },
@@ -174,6 +197,21 @@ describe('findOptimalExport with an array target', () => {
   });
 });
 
+// Core works with file paths, not URLs; see package-resolution.md#differences-from-node.
+describe('findOptimalExport with a target Node reads as a URL', () => {
+  it('keeps a backslash in a valid target as part of the file name', () => {
+    expect(findOptimalExport('./a\\b.js', info, 'browser')?.entryPoint).toBe(
+      path.join('/pkg', './a\\b.js')
+    );
+  });
+
+  it('does not decode a percent-encoded segment', () => {
+    expect(findOptimalExport('./%2e%2e/x.js', info, 'browser')?.entryPoint).toBe(
+      path.join('/pkg', './%2e%2e/x.js')
+    );
+  });
+});
+
 describe('findOptimalExport with a target outside the package', () => {
   it('is not exported', () => {
     expect(findOptimalExport('../outside.js', info, 'browser')).toBe(NOT_EXPORTED);
@@ -202,6 +240,13 @@ describe('findOptimalExport with a null target', () => {
   it('is not exported when nothing matches before default: null', () => {
     const target = { import: { node: './in.mjs' }, default: null };
     expect(findOptimalExport(target, info, 'browser')).toBe(NOT_EXPORTED);
+  });
+
+  // Here the other-platform filter, not the ESM key, leaves nothing before default: null.
+  it('is not exported on the platform whose key is missing before default: null', () => {
+    expect(findOptimalExport({ browser: './b.js', default: null }, info, 'node')).toBe(
+      NOT_EXPORTED
+    );
   });
 
   it('still takes a matching condition before default: null', () => {
@@ -268,6 +313,10 @@ describe('resolveExportsEntry', () => {
     expect(resolveExportsEntry(exports, './a/x.css')).toBe('./raw/x.css');
   });
 
+  it('does not read a key with two asterisks as a pattern', () => {
+    expect(resolveExportsEntry({ './a/*/*': './m/*.js' }, './a/b/c')).toBeUndefined();
+  });
+
   it('matches the text after the asterisk as a suffix', () => {
     const exports = { './*.js': './dist/*.js' };
     expect(resolveExportsEntry(exports, './feature.js')).toBe('./dist/feature.js');
@@ -287,6 +336,13 @@ describe('resolveExportsEntry', () => {
     expect(resolveExportsEntry(['./a.js', './b.js'], '.')).toEqual(['./a.js', './b.js']);
     expect(resolveExportsEntry({ import: './esm.js' }, '.')).toEqual({ import: './esm.js' });
     expect(resolveExportsEntry('./index.js', './sub')).toBeUndefined();
+  });
+
+  // Node throws ERR_INVALID_PACKAGE_CONFIG on mixed keys; core reads them as a subpath map.
+  it('reads an object that mixes subpath and condition keys as a subpath map', () => {
+    const exports = { '.': './dot.js', import: './e.mjs' };
+    expect(resolveExportsEntry(exports, '.')).toBe('./dot.js');
+    expect(resolveExportsEntry(exports, './x')).toBeUndefined();
   });
 
   it('returns a null target of the key that wins', () => {

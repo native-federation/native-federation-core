@@ -164,6 +164,69 @@ describe('getUsedDependenciesFactoryCore', () => {
     expect(used.external).not.toContain('browser-only');
   });
 
+  // Only a key of `shared` takes the shared platform: a secondary that is not one is read with
+  // the config's platform.
+  it('scans a secondary that is not a key of shared through the config platform', () => {
+    const deps = makeDeps(
+      {
+        'src/comp.ts': { imports: [], externalLibraries: ['pkg/sub'], unresolvedImports: [] },
+      } as unknown as ProjectData,
+      {
+        '/ws/node_modules/pkg/package.json': JSON.stringify({
+          name: 'pkg',
+          version: '1.0.0',
+          exports: { './sub': { node: './server.js', browser: './client.js' } },
+        }),
+        '/ws/node_modules/pkg/server.js': "import 'node-only';",
+        '/ws/node_modules/pkg/client.js': "import 'browser-only';",
+      }
+    );
+
+    const used = getUsedDependenciesFactoryCore(
+      deps,
+      '/ws'
+    )({
+      exposes: { './Comp': { file: 'src/comp.ts' } },
+      sharedMappings: {},
+      shared: { pkg: { platform: 'node' } },
+    });
+
+    expect(used.external).toContain('browser-only');
+    expect(used.external).not.toContain('node-only');
+  });
+
+  it('skips a package whose exports blocks the entry point, without a warning', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const deps = makeDeps(
+      {
+        'src/comp.ts': { imports: [], externalLibraries: ['pkg/internal'], unresolvedImports: [] },
+      } as unknown as ProjectData,
+      {
+        '/ws/node_modules/pkg/package.json': JSON.stringify({
+          name: 'pkg',
+          version: '1.0.0',
+          exports: { '.': './index.js', './internal': null },
+        }),
+        '/ws/node_modules/pkg/internal/package.json': '{"main":"./index.js"}',
+        '/ws/node_modules/pkg/internal/index.js': "import 'leaked';",
+      }
+    );
+
+    const used = getUsedDependenciesFactoryCore(
+      deps,
+      '/ws'
+    )({
+      exposes: { './Comp': { file: 'src/comp.ts' } },
+      sharedMappings: {},
+      shared: {},
+    });
+
+    expect(used.external).toContain('pkg/internal');
+    expect(used.external).not.toContain('leaked');
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it('resolves internal shared mappings from analyzed imports', () => {
     const deps = makeDeps({
       'src/comp.ts': {
