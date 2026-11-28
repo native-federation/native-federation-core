@@ -73,7 +73,7 @@ export function renameChunksByContentCore(
     for (const { 0: match, 2: relative, 3: bare, index } of text.matchAll(CHUNK_REFERENCE)) {
       const file = chunkOf(relative, bare);
       const target = file && renamed.get(file);
-      if (!target) continue;
+      if (!target || index === undefined) continue;
       edits.push({
         start: index + 1,
         end: index + match.length - 1,
