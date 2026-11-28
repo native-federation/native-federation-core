@@ -5,7 +5,7 @@ import {
   type UsedDependenciesDeps,
 } from './get-used-dependencies.js';
 import { isSharedMapping, matchMapping } from './match-mapping.js';
-import { createMemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
+import { createMemoryIo, type MemoryIo } from '../utils/io/__test-helpers__/memory-io.js';
 import { createPackageJsonRepository } from '../utils/io/package-json-repository.js';
 import { logger } from '../utils/logger.js';
 import * as path from 'path';
@@ -225,6 +225,134 @@ describe('getUsedDependenciesFactoryCore', () => {
     expect(used.external).not.toContain('leaked');
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
+  });
+
+  // Packages reached through another package's entry closure. Each row builds its own io and
+  // repository: the repository caches lookups, so a shared one would leak layouts between rows.
+  describe('transitive packages', () => {
+    // Two install layouts: hoisted (everything flat under the root node_modules) and isolated
+    // (real dirs under node_modules/.pnpm, symlinked into the node_modules of whoever declares
+    // them).
+    function setPackage(io: MemoryIo, dir: string, imports: string[], version = '1.0.0'): void {
+      io.setFile(
+        `${dir}/package.json`,
+        JSON.stringify({ name: path.basename(dir), version, main: 'index.js' })
+      );
+      io.setFile(`${dir}/index.js`, imports.map(i => `import '${i}';`).join('\n'));
+    }
+
+    const store = (name: string, version = '1.0.0') =>
+      `/ws/node_modules/.pnpm/${name}@${version}/node_modules/${name}`;
+
+    // Isolated install: `owner` sees `name` only through its own node_modules link.
+    function link(io: MemoryIo, ownerNodeModules: string, name: string, version = '1.0.0'): void {
+      io.setSymlink(`${ownerNodeModules}/${name}`, store(name, version));
+    }
+
+    // node_modules folder that sits next to a package inside the store, as the isolated layout
+    // puts each package's own dependencies.
+    const storeDeps = (name: string, version = '1.0.0') =>
+      `/ws/node_modules/.pnpm/${name}@${version}/node_modules`;
+
+    // The app's code imports `a` only.
+    function scan(io: MemoryIo): string[] {
+      io.setFile('/ws/package.json', JSON.stringify({ name: 'app' }));
+      io.setFile('/ws/src/main.ts', '');
+      const projectData = {
+        'src/main.ts': { imports: [], externalLibraries: ['a'], unresolvedImports: [] },
+      } as unknown as ProjectData;
+      const deps: UsedDependenciesDeps = {
+        io,
+        repo: createPackageJsonRepository(io),
+        getProjectData: () => projectData,
+      };
+      const used = getUsedDependenciesFactoryCore(deps, '/ws', ['src/main.ts'])({
+        sharedMappings: {},
+      });
+      return [...used.external].sort();
+    }
+
+    it('reports what a dependency of a dependency imports (hoisted)', () => {
+      const io = createMemoryIo();
+      setPackage(io, '/ws/node_modules/a', ['b']);
+      setPackage(io, '/ws/node_modules/b', ['c']);
+      setPackage(io, '/ws/node_modules/c', ['d']);
+
+      expect(scan(io)).toEqual(['a', 'b', 'c', 'd']);
+    });
+
+    // The app declares `a` and `c`; `b` is only `a`'s dependency, so it is not reachable from
+    // the workspace root.
+    it('reports what a dependency of a dependency imports (isolated)', () => {
+      const io = createMemoryIo();
+      setPackage(io, store('a'), ['b']);
+      setPackage(io, store('b'), ['c']);
+      setPackage(io, store('c'), ['d']);
+      setPackage(io, store('d'), []);
+      link(io, '/ws/node_modules', 'a');
+      link(io, '/ws/node_modules', 'c');
+      link(io, storeDeps('a'), 'b');
+      link(io, storeDeps('b'), 'c');
+      link(io, storeDeps('c'), 'd');
+
+      expect(scan(io)).toEqual(['a', 'b']);
+    });
+
+    // `a` and `b` each depend on their own install of `c`, and the two versions import different
+    // packages.
+    it('scans each install of a package that is installed twice', () => {
+      const io = createMemoryIo();
+      setPackage(io, store('a'), ['b', 'c']);
+      setPackage(io, store('b'), ['c']);
+      setPackage(io, store('c', '1.0.0'), ['x'], '1.0.0');
+      setPackage(io, store('c', '2.0.0'), ['y'], '2.0.0');
+      link(io, '/ws/node_modules', 'a');
+      link(io, storeDeps('a'), 'b');
+      link(io, storeDeps('a'), 'c', '1.0.0');
+      link(io, storeDeps('b'), 'c', '2.0.0');
+
+      expect(scan(io)).toEqual(['a', 'b', 'c']);
+    });
+
+    // A linked checkout outside the workspace has no node_modules path back to the root, so the
+    // phantom dependency it imports is found only by looking from the workspace root.
+    it('scans a phantom dependency of a linked package from the workspace root', () => {
+      const io = createMemoryIo();
+      setPackage(io, '/dev/a', ['p']);
+      io.setSymlink('/ws/node_modules/a', '/dev/a');
+      setPackage(io, '/ws/node_modules/p', ['q']);
+
+      expect(scan(io)).toEqual(['a', 'p', 'q']);
+    });
+
+    // The root has its own hoisted `c`, but `a` imports the `c` installed next to it.
+    it("scans the importer's own install before the workspace root's", () => {
+      const io = createMemoryIo();
+      setPackage(io, store('a'), ['c']);
+      setPackage(io, '/ws/node_modules/c', ['x'], '1.0.0');
+      setPackage(io, store('c', '2.0.0'), ['y'], '2.0.0');
+      link(io, '/ws/node_modules', 'a');
+      link(io, storeDeps('a'), 'c', '2.0.0');
+
+      expect(scan(io)).toEqual(['a', 'c', 'x']);
+    });
+
+    // `a`'s own `c` blocks its root entry; the root's `c` is not what `a` imports, so it is not
+    // scanned in its place.
+    it("does not fall back to the workspace root when the importer's install is not exported", () => {
+      const io = createMemoryIo();
+      setPackage(io, store('a'), ['c']);
+      setPackage(io, '/ws/node_modules/c', ['x'], '1.0.0');
+      setPackage(io, store('c', '2.0.0'), ['y'], '2.0.0');
+      io.setFile(
+        `${store('c', '2.0.0')}/package.json`,
+        JSON.stringify({ name: 'c', version: '2.0.0', exports: { '.': null } })
+      );
+      link(io, '/ws/node_modules', 'a');
+      link(io, storeDeps('a'), 'c', '2.0.0');
+
+      expect(scan(io)).toEqual(['a', 'c', 'x']);
+    });
   });
 
   it('resolves internal shared mappings from analyzed imports', () => {
