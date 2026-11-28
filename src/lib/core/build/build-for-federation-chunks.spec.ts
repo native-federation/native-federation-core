@@ -33,32 +33,42 @@ let dist: string;
 const CHART = '/pkgs/chart-lib/index.js';
 const CHART_EXTRAS = '/pkgs/chart-lib/extras.js';
 const TSLIB = '/pkgs/tslib/tslib.js';
+const TINY = '/pkgs/tiny-lib/index.js';
 const MY_LIB = 'libs/my-lib/index.ts';
 const sourceOf = (file: string) => path.resolve(workspaceRoot, file);
 
 // The bundler's output, per entry source file; chunk names carry an 8-character bundler hash.
 const entryCode = (): Record<string, string> => ({
   [CHART]: `/* chart */ import './chunk-CHARTAAA.js'; export const lazy = () => import('./chunk-LAZYAAAA.js');`,
-  [CHART_EXTRAS]: `/* extras */ import 'chart-lib'; import './chunk-EXTRASAA.js';`,
-  [TSLIB]: `/* tslib */ import './chunk-TSLIBAAA.js';`,
+  // import.meta is no import, so it adds nothing to the closure.
+  [CHART_EXTRAS]: `/* extras */ import 'chart-lib'; import './chunk-EXTRASAA.js'; export const url = import.meta.url;`,
+  [TSLIB]: `/* tslib */ import './chunk-TSLIBAAA.js'; import './chunk-COMMONAA.js';`,
+  [TINY]: `/* tiny */ export {};`,
   [MY_LIB]: `/* my-lib */ import './chunk-MYLIBAAA.js';`,
   [sourceOf('src/home.ts')]:
     `/* home */ import 'chart-lib'; import './chunk-HOMEAAAA.js'; export const route = () => import('./chunk-ROUTEAAA.js');`,
-  [sourceOf('src/cart.ts')]: `/* cart */ import { s } from './chunk-SHAREDAA.js'; export { s };`,
+  [sourceOf('src/cart.ts')]:
+    `/* cart */ import { s } from './chunk-SHAREDAA.js'; import './chunk-COMMONAA.js'; export { s };`,
 });
 
-const chunkCode: Record<string, Record<string, string>> = {
-  'browser-shared': {
+// The chunks a bundle emits for each of its entries. A bundle holding several entries emits the
+// union, so where an entry is built decides nothing about which chunks it reaches.
+const chunksOf = (): Record<string, Record<string, string>> => ({
+  [CHART]: {
     'chunk-CHARTAAA.js': `/* chart-core */ import './chunk-CHARTBBB.js';`,
-    'chunk-CHARTBBB.js': `/* chart-deep */ export {};`,
-    'chunk-EXTRASAA.js': `/* extras-core */ export {};`,
+    // A relative import() between chunks: reached, but not initially.
+    'chunk-CHARTBBB.js': `/* chart-deep */ export const later = () => import('./chunk-DEEPLAZY.js');`,
+    'chunk-DEEPLAZY.js': `/* chart-deep-lazy */ export {};`,
     'chunk-LAZYAAAA.js': `/* chart-lazy */ export {};`,
+  },
+  [CHART_EXTRAS]: { 'chunk-EXTRASAA.js': `/* extras-core */ export {};` },
+  [TSLIB]: {
     'chunk-TSLIBAAA.js': `/* tslib-core */ export {};`,
+    // The same bytes as the exposed build's copy, so content naming gives both one file.
+    'chunk-COMMONAA.js': `/* common */ export {};`,
   },
-  'mapping-bundle': {
-    'chunk-MYLIBAAA.js': `/* my-lib-core */ export {};`,
-  },
-  'mapping-or-exposed': {
+  [MY_LIB]: { 'chunk-MYLIBAAA.js': `/* my-lib-core */ export {};` },
+  [sourceOf('src/home.ts')]: {
     'chunk-HOMEAAAA.js': `/* home-core */ import './chunk-SHAREDAA.js';`,
     'chunk-SHAREDAA.js': `/* exposed-shared */ export const s = 1;`,
     'chunk-ROUTEAAA.js': `/* home-route */ export {};`,
@@ -66,25 +76,29 @@ const chunkCode: Record<string, Record<string, string>> = {
     'home.js.map': '{}',
     'styles.css': '',
   },
-};
+  [sourceOf('src/cart.ts')]: {
+    'chunk-SHAREDAA.js': `/* exposed-shared */ export const s = 1;`,
+    'chunk-COMMONAA.js': `/* common */ export {};`,
+  },
+});
 
 function bundlerAdapter() {
   const code = entryCode();
+  const chunks = chunksOf();
   const written = new Map<string, string>();
   const adapter = createFakeBuildAdapter({
     io: nodeIo,
     results: name => {
       const { options } = [...adapter.calls.setup].reverse().find(s => s.name === name)!;
-      const files: Array<[string, string]> = [
-        ...options.entryPoints.map(
-          ep => [path.join(options.outdir, ep.outName), code[ep.fileName]!] as [string, string]
-        ),
-        ...Object.entries(chunkCode[name] ?? {}).map(
-          ([file, text]) => [path.join(options.outdir, file), text] as [string, string]
-        ),
-      ];
+      const files = new Map<string, string>();
+      for (const ep of options.entryPoints) {
+        files.set(path.join(options.outdir, ep.outName), code[ep.fileName]!);
+        for (const [file, text] of Object.entries(chunks[ep.fileName] ?? {})) {
+          files.set(path.join(options.outdir, file), text);
+        }
+      }
       for (const [file, text] of files) written.set(file, text);
-      return files.map(([fileName]) => ({ fileName }));
+      return [...files.keys()].map(fileName => ({ fileName }));
     },
     contents: fileName => written.get(fileName)!,
   });
@@ -114,6 +128,7 @@ function makeConfig() {
       'chart-lib': shared(CHART, { preload: true }),
       'chart-lib/extras': shared(CHART_EXTRAS, { preload: true }),
       tslib: shared(TSLIB),
+      'tiny-lib': shared(TINY),
     },
     sharedMappings: { [MY_LIB]: 'my-lib' },
     sharedMappingsConfig: {},
@@ -147,7 +162,7 @@ function makeFedOptions(cacheExternalArtifacts = false): NormalizedFederationOpt
   };
 }
 
-const EXTERNALS = ['chart-lib', 'chart-lib/extras', 'tslib'];
+const EXTERNALS = ['chart-lib', 'chart-lib/extras', 'tslib', 'tiny-lib'];
 
 const readPublished = () =>
   JSON.parse(fs.readFileSync(path.join(dist, 'remoteEntry.json'), 'utf-8')) as FederationInfo;
@@ -206,7 +221,7 @@ describe('buildForFederation — published chunk closures', () => {
         row('exposed-shared', true),
         row('home-route', false),
       ]),
-      './Cart': Object.fromEntries([row('exposed-shared', true)]),
+      './Cart': Object.fromEntries([row('exposed-shared', true), row('common', true)]),
     });
     expect(fileWith('home-core')).not.toBe('chunk-HOMEAAAA.js');
   });
@@ -264,14 +279,21 @@ describe('buildForFederation — published chunk closures', () => {
       name: 'mfe',
       chunks: {
         'browser-shared': [
-          'chunk-QTDORPIU.js',
-          'chunk-3CNQCWNB.js',
-          'chunk-SDY535X5.js',
+          'chunk-AR7ZSCZJ.js',
+          'chunk-3KTDL4MO.js',
+          'chunk-E4TBSRPU.js',
           'chunk-OCDHTTJP.js',
+          'chunk-SDY535X5.js',
           'chunk-3JS3MFFU.js',
+          'chunk-U2RE6XH5.js',
         ],
         'mapping-bundle': ['chunk-4A5BQSGU.js'],
-        'mapping-or-exposed': ['chunk-E4LY4AS4.js', 'chunk-O4YEPRQO.js', 'chunk-MV6JVKWS.js'],
+        'mapping-or-exposed': [
+          'chunk-E4LY4AS4.js',
+          'chunk-O4YEPRQO.js',
+          'chunk-MV6JVKWS.js',
+          'chunk-U2RE6XH5.js',
+        ],
       },
       exposes: [
         {
@@ -288,6 +310,7 @@ describe('buildForFederation — published chunk closures', () => {
           outFileName: 'Cart.js',
           chunks: {
             '@nf-internal/chunk-O4YEPRQO': { file: 'chunk-O4YEPRQO.js', initial: true },
+            '@nf-internal/chunk-U2RE6XH5': { file: 'chunk-U2RE6XH5.js', initial: true },
           },
         },
       ],
@@ -296,8 +319,8 @@ describe('buildForFederation — published chunk closures', () => {
           packageName: 'chart-lib',
           bundle: 'browser-shared',
           entries: {
-            'chart-lib': 'chart_lib.D2XIoLh0XZ.js',
-            'chart-lib/extras': 'chart_lib_extras.GeNvxeJbTq.js',
+            'chart-lib': 'chart_lib.v4lmJQaLRT.js',
+            'chart-lib/extras': 'chart_lib_extras.1EbMVlnLBX.js',
           },
           preload: true,
           requiredVersion: '^1.0.0',
@@ -308,7 +331,16 @@ describe('buildForFederation — published chunk closures', () => {
         {
           packageName: 'tslib',
           bundle: 'browser-shared',
-          entries: { tslib: 'tslib.iAWSpLA311.js' },
+          entries: { tslib: 'tslib.A6K4Jc0jY_.js' },
+          requiredVersion: '^1.0.0',
+          singleton: true,
+          strictVersion: true,
+          version: '1.0.0',
+        },
+        {
+          packageName: 'tiny-lib',
+          bundle: 'browser-shared',
+          entries: { 'tiny-lib': 'tiny_lib.QshXFIwIMs.js' },
           requiredVersion: '^1.0.0',
           singleton: true,
           strictVersion: true,
