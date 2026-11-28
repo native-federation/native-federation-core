@@ -22,7 +22,8 @@ interface ResolveContext {
   platform: 'browser' | 'node';
 }
 
-// null tries the next strategy; NotExported ends the chain.
+// null tries the next strategy; NotExported ends the chain (see
+// docs/architecture/package-resolution.md#strategy-chain).
 type Strategy = (ctx: ResolveContext) => PackageInfo | NotExported | null;
 
 const base = (ctx: ResolveContext, entryPoint: string, esm: boolean): PackageInfo => ({

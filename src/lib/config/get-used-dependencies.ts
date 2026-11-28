@@ -131,6 +131,7 @@ function addTransientDeps(
       continue;
     }
 
+    // see docs/architecture/package-resolution.md#platform
     const platform = shared[dep]?.platform ?? configPlatform;
     const pInfo = tryGetPackageInfo(dep, workspaceRoot, deps.repo, platform);
 

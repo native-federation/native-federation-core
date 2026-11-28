@@ -18,14 +18,7 @@ export function replaceGlob(target: ExportEntry, replacement: string): ExportEnt
   );
 }
 
-/**
- * Walk an `exports` entry (string, conditions object, or array) to the single
- * best target, preferring ESM and never taking the other platform's condition. Returns a
- * {@link PackageInfo} with `entryPoint` resolved relative to `info.entryPoint`, `undefined`
- * when no condition matches, or {@link NOT_EXPORTED} when the package blocks the entry
- * (`null`, a target outside the package, a value that is not a string, array or object, an
- * unmatched conditions object with `default: null`, or an array none of whose elements resolves).
- */
+// see docs/architecture/package-resolution.md#target-selection
 export function findOptimalExport(
   target: ExportEntry,
   info: PackageInfo,
@@ -78,7 +71,6 @@ export function findOptimalExport(
   return result === undefined && target['default'] === null ? NOT_EXPORTED : result;
 }
 
-// Node's definition of a valid target: package-relative, never leaving the package.
 function isValidTarget(target: string): boolean {
   return (
     target.startsWith('./') &&
@@ -91,11 +83,9 @@ function isValidTarget(target: string): boolean {
   );
 }
 
-// Node's PACKAGE_EXPORTS_RESOLVE key order: an exact key, else the pattern with the longest text
-// before `*`, ties to the longer key.
+// see docs/architecture/package-resolution.md#key-matching
 export function resolveExportsEntry(exports: ExportEntry, relSecondaryPath: string): ExportEntry {
   if (!exports) return undefined;
-  // A string, an array or an object without subpath keys is the package root's entry.
   if (typeof exports === 'string' || Array.isArray(exports) || !hasSubpathKeys(exports)) {
     exports = { '.': exports };
   }

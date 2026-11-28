@@ -23,11 +23,7 @@ export function tryGetPackageInfo(
   return info === NOT_EXPORTED ? null : info;
 }
 
-/**
- * Resolve a package that is expected to be resolvable, warning once if it is not.
- * Only use this where a failure is genuinely actionable, i.e. for packages the user
- * asked to share.
- */
+// Warns when it fails, so only for packages the user asked to share.
 export function getPackageInfo(
   packageName: string,
   workspaceRoot: string,
@@ -70,12 +66,8 @@ function resolveFromRoots(
   return null;
 }
 
-/**
- * Installed version per key, from each key's package root. Resolution is deduped by root:
- * `findDepPackageJson` trims to the root anyway, and that root package.json is also where
- * `resolvePackageInfo` reads the `version` it records as `PackageInfo.version`, so a secondary
- * yields the same string as its main entry point. Unresolvable keys map to ''.
- */
+// One lookup per package root: a secondary gets its root's version (see
+// docs/architecture/package-resolution.md#reading-the-package); '' when not installed.
 export function installedVersions(
   packageNames: string[],
   workspaceRoot: string,
