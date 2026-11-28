@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
 import { resolvePackageInfo } from './entry-point-resolver.js';
+import { NOT_EXPORTED } from './exports-resolver.js';
 import { createPackageJsonRepository } from '../io/package-json-repository.js';
 import { createMemoryIo } from '../io/__test-helpers__/memory-io.js';
 import { logger } from '../logger.js';
@@ -35,6 +36,24 @@ describe('resolvePackageInfo', () => {
     const repo = repoWith({ version: '1.0.0', exports: './esm/index.js', main: './cjs/index.js' });
     const info = resolvePackageInfo(repo, 'pkg', WS);
     expect(info?.entryPoint).toBe(path.join(nm('pkg'), './esm/index.js'));
+  });
+
+  it('does not fall back to module or main for a null exports target', () => {
+    const repo = repoWith(
+      {
+        version: '1.0.0',
+        exports: { '.': './index.js', './internal': null },
+        module: './index.mjs',
+        main: './index.js',
+      },
+      { 'pkg/internal/index.js': '', 'pkg/internal/package.json': '{"main":"./index.js"}' }
+    );
+    expect(resolvePackageInfo(repo, 'pkg/internal', WS)).toBe(NOT_EXPORTED);
+  });
+
+  it('does not fall back to main when the root entry is null', () => {
+    const repo = repoWith({ version: '1.0.0', exports: { '.': null }, main: './index.js' });
+    expect(resolvePackageInfo(repo, 'pkg', WS)).toBe(NOT_EXPORTED);
   });
 
   it('falls back to the top-level module field', () => {

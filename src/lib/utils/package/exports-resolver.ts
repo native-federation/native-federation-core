@@ -2,8 +2,11 @@ import * as path from 'path';
 import { isESMExport } from './esm-detection.js';
 import type { ExportEntry, PackageInfo } from '../../domain/utils/package-json.contract.js';
 
+export const NOT_EXPORTED = 'not-exported';
+export type NotExported = typeof NOT_EXPORTED;
+
 export function replaceGlob(target: ExportEntry, replacement: string): ExportEntry {
-  if (!target) return undefined;
+  if (target === null || target === undefined) return target;
   if (typeof target === 'string') return target.split('*').join(replacement);
   if (Array.isArray(target)) return target.map(t => replaceGlob(t, replacement));
   return Object.entries(target).reduce(
@@ -18,13 +21,14 @@ export function replaceGlob(target: ExportEntry, replacement: string): ExportEnt
 /**
  * Walk an `exports` entry (string, conditions object, or array) to the single
  * best target, preferring ESM. Returns a {@link PackageInfo} with `entryPoint`
- * resolved relative to `info.entryPoint`, or `undefined` when nothing resolves.
+ * resolved relative to `info.entryPoint`, `undefined` when no condition matches, or
+ * {@link NOT_EXPORTED} when the package blocks the entry (`null`, or no valid array target).
  */
 export function findOptimalExport(
   target: ExportEntry,
   info: PackageInfo,
   isESM: boolean | undefined = undefined
-): PackageInfo | undefined {
+): PackageInfo | NotExported | undefined {
   if (typeof target === 'string') {
     return {
       ...info,
@@ -32,14 +36,15 @@ export function findOptimalExport(
       esm: isESM ?? info.esm,
     };
   }
+  if (target === null) return NOT_EXPORTED;
   if (!target) return undefined;
   if (Array.isArray(target)) {
     for (const candidate of target) {
       if (typeof candidate === 'string' && !isValidTarget(candidate)) continue;
       const result = findOptimalExport(candidate, info, isESM);
-      if (result) return result;
+      if (result !== undefined) return result;
     }
-    return undefined;
+    return NOT_EXPORTED;
   }
 
   const exportTypes = Object.keys(target);

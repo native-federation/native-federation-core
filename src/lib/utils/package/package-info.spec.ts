@@ -56,6 +56,34 @@ describe('package-info facade (with injected repository)', () => {
 
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('No meta data found'));
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('federation.config.js'));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('into devDependencies'));
+    warn.mockRestore();
+  });
+
+  it.each([
+    ['maps to null', null],
+    ['maps to an array with no valid target', ['../outside.js']],
+  ])('getPackageInfo says the exports block an entry point the package %s', (_, target) => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const io = createMemoryIo()
+      .setFile(path.join(WS, 'package.json'), JSON.stringify({ dependencies: { lib: '1.0.0' } }))
+      .setFile(
+        path.join(WS, 'node_modules/lib/package.json'),
+        JSON.stringify({ version: '1.0.0', exports: { '.': target }, main: './index.js' })
+      );
+    const repo = createPackageJsonRepository(io);
+
+    expect(getPackageInfo('lib', WS, repo)).toBeNull();
+    expect(tryGetPackageInfo('lib', WS, repo)).toBeNull();
+
+    expect(warn).toHaveBeenCalledWith(
+      'No meta data found for shared lib lib: its package.json exports blocks this entry point'
+    );
+    // A blocked entry point stays blocked wherever the package is listed in package.json.
+    expect(warn).toHaveBeenCalledWith(
+      'Skip it in your federation.config.js, or remove it from shared'
+    );
+    expect(warn).toHaveBeenCalledTimes(2);
     warn.mockRestore();
   });
 

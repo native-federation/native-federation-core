@@ -7,6 +7,7 @@ import type {
   VersionMap,
 } from '../../domain/utils/package-json.contract.js';
 import { resolvePackageInfo } from './entry-point-resolver.js';
+import { NOT_EXPORTED, type NotExported } from './exports-resolver.js';
 import { getVersionMaps as getVersionMapsFromRepo } from './version-maps.js';
 
 export { sharedPackageJsonRepository } from '../io/package-json-repository.js';
@@ -17,16 +18,8 @@ export function tryGetPackageInfo(
   workspaceRoot: string,
   repo: PackageJsonRepository = sharedPackageJsonRepository
 ): PackageInfo | null {
-  workspaceRoot = normalize(workspaceRoot, true);
-
-  for (const info of repo.getPackageJsonFiles(workspaceRoot, workspaceRoot)) {
-    const cand = resolvePackageInfo(repo, packageName, info.directory);
-    if (cand) {
-      return cand;
-    }
-  }
-
-  return null;
+  const info = resolveFromRoots(packageName, workspaceRoot, repo);
+  return info === NOT_EXPORTED ? null : info;
 }
 
 /**
@@ -39,16 +32,39 @@ export function getPackageInfo(
   workspaceRoot: string,
   repo: PackageJsonRepository = sharedPackageJsonRepository
 ): PackageInfo | null {
-  const info = tryGetPackageInfo(packageName, workspaceRoot, repo);
+  const info = resolveFromRoots(packageName, workspaceRoot, repo);
+  if (info && info !== NOT_EXPORTED) return info;
 
-  if (!info) {
-    logger.warn('No meta data found for shared lib ' + packageName);
+  if (info === NOT_EXPORTED) {
     logger.warn(
-      "If you don't need this package, skip it in your federation.config.js or consider moving it into depDependencies in your package.json"
+      `No meta data found for shared lib ${packageName}: its package.json exports blocks this entry point`
     );
+    logger.warn('Skip it in your federation.config.js, or remove it from shared');
+    return null;
   }
 
-  return info;
+  logger.warn('No meta data found for shared lib ' + packageName);
+  logger.warn(
+    "If you don't need this package, skip it in your federation.config.js or consider moving it into devDependencies in your package.json"
+  );
+  return null;
+}
+
+function resolveFromRoots(
+  packageName: string,
+  workspaceRoot: string,
+  repo: PackageJsonRepository
+): PackageInfo | NotExported | null {
+  workspaceRoot = normalize(workspaceRoot, true);
+
+  for (const info of repo.getPackageJsonFiles(workspaceRoot, workspaceRoot)) {
+    const cand = resolvePackageInfo(repo, packageName, info.directory);
+    if (cand) {
+      return cand;
+    }
+  }
+
+  return null;
 }
 
 /**

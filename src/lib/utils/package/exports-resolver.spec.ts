@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import * as path from 'path';
-import { findOptimalExport, replaceGlob, resolveExportsEntry } from './exports-resolver.js';
+import {
+  findOptimalExport,
+  NOT_EXPORTED,
+  replaceGlob,
+  resolveExportsEntry,
+} from './exports-resolver.js';
 import type { PackageInfo } from '../../domain/utils/package-json.contract.js';
 
 const info: PackageInfo = { packageName: 'p', entryPoint: '/pkg', version: '1.0.0', esm: false };
@@ -16,6 +21,13 @@ describe('replaceGlob', () => {
 
   it('keeps an array target an array', () => {
     expect(replaceGlob(['./esm/*.js', './cjs/*.js'], 'a')).toEqual(['./esm/a.js', './cjs/a.js']);
+  });
+
+  it('keeps a null target null', () => {
+    expect(replaceGlob({ import: null, default: './*.js' }, 'a')).toEqual({
+      import: null,
+      default: './a.js',
+    });
   });
 
   it('recurses into condition objects', () => {
@@ -95,9 +107,23 @@ describe('findOptimalExport with an array target', () => {
     expect(result?.entryPoint).toBe(path.join('/pkg', './valid.js'));
   });
 
-  it('resolves nothing when no element is a valid target', () => {
-    expect(findOptimalExport(['../outside.js'], info)).toBeUndefined();
-    expect(findOptimalExport([], info)).toBeUndefined();
+  it('is not exported when no element is a valid target', () => {
+    expect(findOptimalExport(['../outside.js'], info)).toBe(NOT_EXPORTED);
+    expect(findOptimalExport([], info)).toBe(NOT_EXPORTED);
+  });
+
+  it('stops at a null element', () => {
+    expect(findOptimalExport([null, './valid.js'], info)).toBe(NOT_EXPORTED);
+  });
+});
+
+describe('findOptimalExport with a null target', () => {
+  it('is not exported', () => {
+    expect(findOptimalExport(null, info)).toBe(NOT_EXPORTED);
+  });
+
+  it('is not exported under the condition that wins', () => {
+    expect(findOptimalExport({ import: null, default: './d.js' }, info)).toBe(NOT_EXPORTED);
   });
 });
 
@@ -162,6 +188,12 @@ describe('resolveExportsEntry', () => {
     expect(resolveExportsEntry(['./a.js', './b.js'], '.')).toEqual(['./a.js', './b.js']);
     expect(resolveExportsEntry({ import: './esm.js' }, '.')).toEqual({ import: './esm.js' });
     expect(resolveExportsEntry('./index.js', './sub')).toBeUndefined();
+  });
+
+  it('returns a null target of the key that wins', () => {
+    const exports = { './*': './dist/*.js', './internal/*': null };
+    expect(resolveExportsEntry(exports, './internal/a')).toBeNull();
+    expect(resolveExportsEntry({ '.': './i.js', './sub': null }, './sub')).toBeNull();
   });
 
   it('returns undefined without exports', () => {

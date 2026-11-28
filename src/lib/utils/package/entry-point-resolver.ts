@@ -1,6 +1,6 @@
 import * as path from 'path';
 import { logger } from '../logger.js';
-import { findOptimalExport, resolveExportsEntry } from './exports-resolver.js';
+import { findOptimalExport, resolveExportsEntry, type NotExported } from './exports-resolver.js';
 import { getPkgFolder } from '../io/package-json-repository.js';
 import type {
   PackageInfo,
@@ -21,7 +21,8 @@ interface ResolveContext {
   repo: PackageJsonRepository;
 }
 
-type Strategy = (ctx: ResolveContext) => PackageInfo | null;
+// null tries the next strategy; NotExported ends the chain.
+type Strategy = (ctx: ResolveContext) => PackageInfo | NotExported | null;
 
 const base = (ctx: ResolveContext, entryPoint: string, esm: boolean): PackageInfo => ({
   entryPoint,
@@ -33,7 +34,7 @@ const base = (ctx: ResolveContext, entryPoint: string, esm: boolean): PackageInf
 const STRATEGIES: Strategy[] = [
   ctx => {
     const entry = resolveExportsEntry(ctx.mainPkgJson?.exports, ctx.relSecondaryPath);
-    if (!entry) return null;
+    if (entry === undefined) return null;
     return findOptimalExport(entry, base(ctx, ctx.mainPkgPath, ctx.esm)) ?? null;
   },
   ctx =>
@@ -70,7 +71,7 @@ export function resolvePackageInfo(
   repo: PackageJsonRepository,
   packageName: string,
   directory: string
-): PackageInfo | null {
+): PackageInfo | NotExported | null {
   const mainPkgName = getPkgFolder(packageName);
   if (!mainPkgName) throw new Error(`Could not resolve "${packageName}" in "${directory}`);
 
