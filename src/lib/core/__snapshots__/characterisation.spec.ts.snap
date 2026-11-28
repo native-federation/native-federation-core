@@ -1,0 +1,824 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`characterisation: config forms > C1: mappings with a build of their own and a declared package 1`] = `
+{
+  "bundles": {
+    "mapping-bundle": {
+      "chunks": true,
+    },
+    "mapping-org_utils": {
+      "chunks": true,
+    },
+  },
+  "mappings": {
+    "@org/data/core": {
+      "bundle": "mapping-bundle",
+      "path": "libs/data/core/index.ts",
+      "requiredVersion": "~3.1.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "3.1.0",
+    },
+    "@org/data/http": {
+      "bundle": "mapping-bundle",
+      "path": "libs/data/http/index.ts",
+      "requiredVersion": "~3.1.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "3.1.0",
+    },
+    "@org/ui": {
+      "bundle": "mapping-bundle",
+      "path": "libs/ui/src/index.ts",
+      "requiredVersion": "~1.2.3",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.2.3",
+    },
+    "@org/utils": {
+      "bundle": "mapping-org_utils",
+      "path": "libs/utils/src/index.ts",
+      "requiredVersion": "~1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+  "shared": {},
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: config forms > C2: no tsconfig shares no mappings 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "a",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "a": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/a/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: config forms > C3: a wildcard export 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "w",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "w": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/w/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: config forms > C4: every DEFAULT_SKIP_LIST entry 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "tslib",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "tslib": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/tslib/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: config forms > C5: two installed copies of one package record the hoisted one 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "a",
+        "b",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "a": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/a/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+    "b": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/b/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: config forms > C6: two package.json files declaring one name: the app's wins 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "rxjs",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "rxjs": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/rxjs/index.js",
+      "requiredVersion": "~7.8.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "7.8.1",
+    },
+  },
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: config forms > C7: a declared range per protocol 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "alias",
+        "cat",
+        "local",
+        "ws",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "alias": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/alias/index.js",
+      "requiredVersion": "~1.2.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.2.0",
+    },
+    "cat": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/cat/index.js",
+      "requiredVersion": "~2.1.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "2.1.0",
+    },
+    "local": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/local/index.js",
+      "requiredVersion": "~5.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "5.0.0",
+    },
+    "ws": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/ws/index.js",
+      "requiredVersion": "~0.3.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "0.3.0",
+    },
+  },
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: config forms > C8: fromPackageJson defaults give every package a bundle; a pool shares one 1`] = `
+{
+  "bundles": {
+    "browser-a": {
+      "chunks": true,
+      "externals": [
+        "b",
+        "c",
+      ],
+      "platform": "browser",
+    },
+    "browser-pool-core": {
+      "chunks": true,
+      "externals": [
+        "a",
+        "b",
+        "c",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "a": {
+      "bundle": "browser-a",
+      "entry": "node_modules/a/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+    "b": {
+      "bundle": "browser-pool-core",
+      "entry": "node_modules/b/index.js",
+      "pool": "core",
+      "preload": true,
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+    "c": {
+      "bundle": "browser-pool-core",
+      "entry": "node_modules/c/index.js",
+      "pool": "core",
+      "preload": true,
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+}
+`;
+
+exports[`characterisation: entry points scanned > C9: exposes only 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "a",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "a": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/a/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: entry points scanned > C10: adapter entryPoints only 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "b",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "b": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/b/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: exports resolution > E1: a null target is not exported 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "p",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {},
+  "warnings": [
+    "No meta data found for shared lib p: its package.json exports blocks this entry point",
+    "Skip it in your federation.config.js, or remove it from shared",
+  ],
+}
+`;
+
+exports[`characterisation: exports resolution > E2: an exact key wins over './*' listed before it 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "p/sub",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "p/sub": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/p/sub/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: exports resolution > E3: the pattern with the longer prefix wins 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "p/a/b/c",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "p/a/b/c": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/p/y/c.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: exports resolution > E4: a pattern with a suffix after the star matches 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "p/feature.js",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "p/feature.js": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/p/dist/feature.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: exports resolution > E5: a target with two stars replaces both 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "p/a",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "p/a": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/p/dist/a/a.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: exports resolution > E6: an array skips a target that leaves the package 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "p",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "p": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/p/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: exports resolution > E7: a browser build skips the node condition 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "p",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "p": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/p/browser.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: install layouts > I1: a package reached only through a dependency's own install 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "a",
+        "d",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "a": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/a/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+    "d": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/d/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: testing rows R1-R10 > R1: a secondary reached only through another shared package 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "a",
+        "b/sub",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "a": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/a/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+    "b/sub": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/b/sub.js",
+      "requiredVersion": "^2.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "2.0.0",
+    },
+  },
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: testing rows R1-R10 > R2: a package imported only by a computed specifier is pruned 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "a",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "a": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/a/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: testing rows R1-R10 > R3: keepAll keeps the secondaries of a reached package only 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "a",
+        "a/extra",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "a": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/a/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+    "a/extra": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/a/extra.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: testing rows R1-R10 > R4: a package reached transitively but not declared is not shared 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "a",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "a": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/a/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: testing rows R1-R10 > R5: a root reached only through its secondary 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "p/sub",
+        "q",
+        "q/sub",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "p/sub": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/p/sub.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+    "q": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/q/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+    "q/sub": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/q/sub.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: testing rows R1-R10 > R6: top-level skip drops a discovered secondary that is imported 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "lib",
+        "lib/public",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "lib": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/lib/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+    "lib/public": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/lib/public.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: testing rows R1-R10 > R9: a cycle and a self-reference in the package graph terminate 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "a",
+        "b",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "a": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/a/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+    "b": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/b/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+  "warnings": [],
+}
+`;
+
+exports[`characterisation: testing rows R1-R10 > R10: a chunks warning fires for a package that is pruned later 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "a",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {
+    "a": {
+      "bundle": "browser-shared",
+      "entry": "node_modules/a/index.js",
+      "requiredVersion": "^1.0.0",
+      "singleton": true,
+      "strictVersion": true,
+      "version": "1.0.0",
+    },
+  },
+  "warnings": [
+    "Shared externals 'unused' set chunks: false, but in the shared bundle they are built with the global chunks: true. Remove chunks, or give the external a bundle of its own with build: 'separate', 'package' or 'pool'.",
+  ],
+}
+`;
