@@ -25,7 +25,7 @@ const seededRepo = () => {
 
 describe('package-info facade (with injected repository)', () => {
   it('getPackageInfo resolves an installed dependency', () => {
-    const info = getPackageInfo('react', WS, seededRepo());
+    const info = getPackageInfo('react', WS, seededRepo(), 'browser');
     expect(info).toMatchObject({ packageName: 'react', version: '18.0.0', esm: true });
   });
 
@@ -40,11 +40,11 @@ describe('package-info facade (with injected repository)', () => {
   });
 
   it('does not leak state across calls using independent repositories', () => {
-    expect(getPackageInfo('react', WS, seededRepo())).not.toBeNull();
+    expect(getPackageInfo('react', WS, seededRepo(), 'browser')).not.toBeNull();
     // A fresh, empty repository must not see anything from the previous call.
     const empty = createPackageJsonRepository(createMemoryIo());
     vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-    expect(getPackageInfo('react', WS, empty)).toBeNull();
+    expect(getPackageInfo('react', WS, empty, 'browser')).toBeNull();
     vi.restoreAllMocks();
   });
 
@@ -52,7 +52,7 @@ describe('package-info facade (with injected repository)', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     const empty = createPackageJsonRepository(createMemoryIo());
 
-    expect(getPackageInfo('react', WS, empty)).toBeNull();
+    expect(getPackageInfo('react', WS, empty, 'browser')).toBeNull();
 
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('No meta data found'));
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('federation.config.js'));
@@ -73,8 +73,8 @@ describe('package-info facade (with injected repository)', () => {
       );
     const repo = createPackageJsonRepository(io);
 
-    expect(getPackageInfo('lib', WS, repo)).toBeNull();
-    expect(tryGetPackageInfo('lib', WS, repo)).toBeNull();
+    expect(getPackageInfo('lib', WS, repo, 'browser')).toBeNull();
+    expect(tryGetPackageInfo('lib', WS, repo, 'browser')).toBeNull();
 
     expect(warn).toHaveBeenCalledWith(
       'No meta data found for shared lib lib: its package.json exports blocks this entry point'
@@ -87,12 +87,36 @@ describe('package-info facade (with injected repository)', () => {
     warn.mockRestore();
   });
 
+  it('passes the platform through to the exports conditions', () => {
+    const io = createMemoryIo()
+      .setFile(path.join(WS, 'package.json'), JSON.stringify({ dependencies: { lib: '1.0.0' } }))
+      .setFile(
+        path.join(WS, 'node_modules/lib/package.json'),
+        JSON.stringify({
+          version: '1.0.0',
+          exports: { node: './server.js', browser: './client.js' },
+        })
+      );
+    const repo = createPackageJsonRepository(io);
+    const lib = path.join(WS, 'node_modules/lib');
+
+    expect(getPackageInfo('lib', WS, repo, 'node')?.entryPoint).toBe(path.join(lib, 'server.js'));
+    expect(tryGetPackageInfo('lib', WS, repo, 'node')?.entryPoint).toBe(
+      path.join(lib, 'server.js')
+    );
+    expect(tryGetPackageInfo('lib', WS, repo, 'browser')?.entryPoint).toBe(
+      path.join(lib, 'client.js')
+    );
+  });
+
   it('tryGetPackageInfo resolves identically but stays silent on failure', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
 
-    expect(tryGetPackageInfo('react', WS, seededRepo())).toMatchObject({ packageName: 'react' });
+    expect(tryGetPackageInfo('react', WS, seededRepo(), 'browser')).toMatchObject({
+      packageName: 'react',
+    });
     expect(
-      tryGetPackageInfo('react', WS, createPackageJsonRepository(createMemoryIo()))
+      tryGetPackageInfo('react', WS, createPackageJsonRepository(createMemoryIo()), 'browser')
     ).toBeNull();
 
     expect(warn).not.toHaveBeenCalled();
@@ -133,7 +157,7 @@ describe('installedVersions', () => {
     const repo = createPackageJsonRepository(versionsIo());
 
     expect(installedVersions(['@scope/lib'], WS, repo)['@scope/lib']).toBe(
-      tryGetPackageInfo('@scope/lib', WS, repo)?.version
+      tryGetPackageInfo('@scope/lib', WS, repo, 'browser')?.version
     );
   });
 

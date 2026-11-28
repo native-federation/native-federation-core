@@ -188,7 +188,7 @@ export async function bundleSharedCore(
 
   const inferredPackageInfos = Object.keys(sharedBundles)
     .filter(packageName => !sharedBundles[packageName]?.packageInfo)
-    .map(packageName => getPackageInfo(packageName, folder, deps.repo))
+    .map(packageName => getPackageInfo(packageName, folder, deps.repo, buildOptions.platform))
     .filter(pi => !!pi) as PackageInfo[];
 
   const configuredPackageInfos = Object.keys(sharedBundles)

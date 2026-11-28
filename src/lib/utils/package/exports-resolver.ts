@@ -20,14 +20,15 @@ export function replaceGlob(target: ExportEntry, replacement: string): ExportEnt
 
 /**
  * Walk an `exports` entry (string, conditions object, or array) to the single
- * best target, preferring ESM. Returns a {@link PackageInfo} with `entryPoint`
- * resolved relative to `info.entryPoint`, `undefined` when no condition matches, or
- * {@link NOT_EXPORTED} when the package blocks the entry (`null`, a target outside the
- * package, or no valid array target).
+ * best target, preferring ESM and never taking the other platform's condition. Returns a
+ * {@link PackageInfo} with `entryPoint` resolved relative to `info.entryPoint`, `undefined`
+ * when no condition matches, or {@link NOT_EXPORTED} when the package blocks the entry
+ * (`null`, a target outside the package, or no valid array target).
  */
 export function findOptimalExport(
   target: ExportEntry,
   info: PackageInfo,
+  platform: 'browser' | 'node',
   isESM: boolean | undefined = undefined
 ): PackageInfo | NotExported | undefined {
   if (typeof target === 'string') {
@@ -43,7 +44,7 @@ export function findOptimalExport(
   if (Array.isArray(target)) {
     for (const candidate of target) {
       if (typeof candidate === 'string' && !isValidTarget(candidate)) continue;
-      const result = findOptimalExport(candidate, info, isESM);
+      const result = findOptimalExport(candidate, info, platform, isESM);
       if (result !== undefined) return result;
     }
     return NOT_EXPORTED;
@@ -54,17 +55,24 @@ export function findOptimalExport(
   if (typeof isESM === 'undefined') {
     const esmExport = exportTypes.find(e => isESMExport(e));
     if (esmExport) {
-      return findOptimalExport(target[esmExport], info, true);
+      const result = findOptimalExport(target[esmExport], info, platform, true);
+      if (result !== undefined) return result;
     }
   }
 
+  const otherPlatform = platform === 'browser' ? 'node' : 'browser';
   const secondBestEntry =
     'default' in target && target['default']
       ? 'default'
-      : exportTypes.filter(e => e !== 'types')[0];
+      : exportTypes.filter(e => e !== 'types' && e !== otherPlatform)[0];
   const secondBestExport: ExportEntry = target[secondBestEntry!];
 
-  return findOptimalExport(secondBestExport, info, isESM ?? isESMExport(secondBestEntry!));
+  return findOptimalExport(
+    secondBestExport,
+    info,
+    platform,
+    isESM ?? isESMExport(secondBestEntry!)
+  );
 }
 
 // Node's definition of a valid target: package-relative, never leaving the package.

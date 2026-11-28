@@ -19,6 +19,7 @@ interface ResolveContext {
   secondaryPkgPath: string;
   secondaryPkgJson: PartialPackageJson | null;
   repo: PackageJsonRepository;
+  platform: 'browser' | 'node';
 }
 
 // null tries the next strategy; NotExported ends the chain.
@@ -35,7 +36,7 @@ const STRATEGIES: Strategy[] = [
   ctx => {
     const entry = resolveExportsEntry(ctx.mainPkgJson?.exports, ctx.relSecondaryPath);
     if (entry === undefined) return null;
-    return findOptimalExport(entry, base(ctx, ctx.mainPkgPath, ctx.esm)) ?? null;
+    return findOptimalExport(entry, base(ctx, ctx.mainPkgPath, ctx.esm), ctx.platform) ?? null;
   },
   ctx =>
     ctx.mainPkgJson['module'] && ctx.relSecondaryPath === '.'
@@ -70,7 +71,8 @@ const STRATEGIES: Strategy[] = [
 export function resolvePackageInfo(
   repo: PackageJsonRepository,
   packageName: string,
-  directory: string
+  directory: string,
+  platform: 'browser' | 'node'
 ): PackageInfo | NotExported | null {
   const mainPkgName = getPkgFolder(packageName);
   if (!mainPkgName) throw new Error(`Could not resolve "${packageName}" in "${directory}`);
@@ -108,6 +110,7 @@ export function resolvePackageInfo(
     secondaryPkgPath,
     secondaryPkgJson,
     repo,
+    platform,
   };
 
   for (const strategy of STRATEGIES) {

@@ -16,9 +16,10 @@ export type { PackageInfo, VersionMap } from '../../domain/utils/package-json.co
 export function tryGetPackageInfo(
   packageName: string,
   workspaceRoot: string,
-  repo: PackageJsonRepository
+  repo: PackageJsonRepository,
+  platform: 'browser' | 'node'
 ): PackageInfo | null {
-  const info = resolveFromRoots(packageName, workspaceRoot, repo);
+  const info = resolveFromRoots(packageName, workspaceRoot, repo, platform);
   return info === NOT_EXPORTED ? null : info;
 }
 
@@ -30,9 +31,10 @@ export function tryGetPackageInfo(
 export function getPackageInfo(
   packageName: string,
   workspaceRoot: string,
-  repo: PackageJsonRepository
+  repo: PackageJsonRepository,
+  platform: 'browser' | 'node'
 ): PackageInfo | null {
-  const info = resolveFromRoots(packageName, workspaceRoot, repo);
+  const info = resolveFromRoots(packageName, workspaceRoot, repo, platform);
   if (info && info !== NOT_EXPORTED) return info;
 
   if (info === NOT_EXPORTED) {
@@ -53,12 +55,13 @@ export function getPackageInfo(
 function resolveFromRoots(
   packageName: string,
   workspaceRoot: string,
-  repo: PackageJsonRepository
+  repo: PackageJsonRepository,
+  platform: 'browser' | 'node'
 ): PackageInfo | NotExported | null {
   workspaceRoot = normalize(workspaceRoot, true);
 
   for (const info of repo.getPackageJsonFiles(workspaceRoot, workspaceRoot)) {
-    const cand = resolvePackageInfo(repo, packageName, info.directory);
+    const cand = resolvePackageInfo(repo, packageName, info.directory, platform);
     if (cand) {
       return cand;
     }
