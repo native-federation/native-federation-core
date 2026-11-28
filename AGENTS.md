@@ -87,6 +87,7 @@ See [Public API](docs/architecture/public-api.md).
 - `src/lib/config/with-native-federation.ts` - Configuration normalization
 - `src/lib/config/share-utils.ts` - `shareAll()`, `share()` helpers
 - `src/lib/config/remove-unused-deps.ts` - Prunes unused shared dependencies
+- `src/lib/utils/package/` - Resolves a shared entry point to the file it bundles
 
 ## Architecture
 
@@ -100,6 +101,7 @@ to Rejected. Open the page before changing what it covers. This table mirrors
 | **1. Configuration**                                                |                                                                                          |
 | [Workspace root](docs/architecture/workspace-root.md)               | resolving any path or loading a config                                                   |
 | [Shared packages](docs/architecture/shared-packages.md)             | changing what is shared, at which version, or what is pruned                             |
+| [Package resolution](docs/architecture/package-resolution.md)       | changing which file a shared entry point resolves to, or reading `exports`               |
 | [Shared mappings](docs/architecture/shared-mappings.md)             | changing how `sharedMappings` are read, selected or pruned                               |
 | [Mapping packages](docs/architecture/mapping-packages.md)           | changing how mappings group into packages, or `.package()`                               |
 | [Mapping imports](docs/architecture/mapping-imports.md)             | a mapped library is evaluated twice, or before proposing a fix for deep imports          |

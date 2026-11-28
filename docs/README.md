@@ -11,6 +11,7 @@ Open the page for the part of the build you are about to change.
 | **1. Configuration**                                           |                                                                                          |
 | [Workspace root](architecture/workspace-root.md)               | resolving any path or loading a config                                                   |
 | [Shared packages](architecture/shared-packages.md)             | changing what is shared, at which version, or what is pruned                             |
+| [Package resolution](architecture/package-resolution.md)       | changing which file a shared entry point resolves to, or reading `exports`               |
 | [Shared mappings](architecture/shared-mappings.md)             | changing how `sharedMappings` are read, selected or pruned                               |
 | [Mapping packages](architecture/mapping-packages.md)           | changing how mappings group into packages, or `.package()`                               |
 | [Mapping imports](architecture/mapping-imports.md)             | a mapped library is evaluated twice, or before proposing a fix for deep imports          |
