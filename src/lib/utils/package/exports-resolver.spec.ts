@@ -47,6 +47,24 @@ describe('findOptimalExport', () => {
     expect(result?.entryPoint).toBe(path.join('/pkg', './n.js'));
   });
 
+  it('prefers default over a platform key listed before it', () => {
+    const result = findOptimalExport({ node: './n.js', default: './d.js' }, info);
+    expect(result?.entryPoint).toBe(path.join('/pkg', './d.js'));
+  });
+
+  it('takes the first non-types key when it names no platform', () => {
+    const result = findOptimalExport({ types: './t.d.ts', worker: './w.js', node: './n.js' }, info);
+    expect(result?.entryPoint).toBe(path.join('/pkg', './w.js'));
+  });
+
+  it('applies the same order inside a nested ESM condition', () => {
+    const result = findOptimalExport(
+      { require: './c.js', import: { types: './t.d.ts', default: './esm.js' } },
+      info
+    );
+    expect(result).toMatchObject({ entryPoint: path.join('/pkg', './esm.js'), esm: true });
+  });
+
   it('resolves the first element of an array target', () => {
     const result = findOptimalExport(['./first.js', './second.js'], info);
     expect(result?.entryPoint).toBe(path.join('/pkg', './first.js'));
