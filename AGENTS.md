@@ -222,8 +222,9 @@ lifetime.
   the snapshot is updated (`vitest -u`), so the change is reviewed as a diff.
 - CI runs the suite a second time on the TypeScript floor (last step of `verify.yml`). To repeat it
   locally, run the same commands, then `git checkout package.json pnpm-lock.yaml && pnpm install`.
-- CI runs the suite on pushes to `main` and on pull requests against `main` (a stacked PR is
-  checked once it is retargeted), so a flaky spec blocks merges: fix it rather than retrying it.
+- CI runs the suite on pushes to `main` and `v5-release` and on pull requests against either (a
+  stacked PR is checked once it is retargeted), so a flaky spec blocks merges: fix it rather than
+  retrying it.
 
 ## Common Patterns & Conventions
 

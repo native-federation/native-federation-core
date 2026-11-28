@@ -1,9 +1,9 @@
 name: Code checks
 on:
   push:
-    branches: [main]
+    branches: [main, v5-release]
   pull_request:
-    branches: [main]
+    branches: [main, v5-release]
 permissions:
   contents: read
 jobs:
