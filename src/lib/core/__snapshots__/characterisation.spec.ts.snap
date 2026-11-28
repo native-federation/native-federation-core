@@ -550,6 +550,26 @@ exports[`characterisation: exports resolution > E8: an array skips an element wh
 }
 `;
 
+exports[`characterisation: exports resolution > E9: default: null blocks the entry when no other condition matches 1`] = `
+{
+  "bundles": {
+    "browser-shared": {
+      "chunks": true,
+      "externals": [
+        "p",
+      ],
+      "platform": "browser",
+    },
+  },
+  "mappings": {},
+  "shared": {},
+  "warnings": [
+    "No meta data found for shared lib p: its package.json exports blocks this entry point",
+    "Skip it in your federation.config.js, or remove it from shared",
+  ],
+}
+`;
+
 exports[`characterisation: install layouts > I1: a package reached only through a dependency's own install 1`] = `
 {
   "bundles": {
