@@ -10,7 +10,9 @@
   rebuilds and changed bytes always get a new one.
 - Shared packages, mappings and exposed modules are bundled apart.
 - Code splitting (`chunks`) is set per bundle; `build` gives a package, or a pool, a bundle of its
-  own.
+  own. Like the rest of a package's config, `chunks` comes from the package, never from one of its
+  entry points (see [Shared packages](shared-packages.md)), so only the packages of one pool, or
+  the mappings in one mapping bundle, can disagree.
 - A chunk is never a `shared` record. Each exposed module and each shared or mapping record lists
   in `chunks` every chunk it reaches, `initial` marking its static closure. Nothing else in
   `remoteEntry.json` names a chunk: there is no list per bundle and no bundle name on a record.
@@ -32,8 +34,8 @@
   `false`. An owner that reaches none has no `chunks`. The maps are computed from the output files
   on every build and rebuild, before the published imports are checked against them.
 - The bundle an entry point is built in never splits a shared package's record: the record's map
-  covers the chunks of every bundle its entries are built in. Mappings built in different bundles
-  that split stay in separate records (see [Mapping packages](mapping-packages.md)).
+  covers the chunks of every bundle its entries are built in. A declared mapping package is built
+  in one bundle and publishes one record (see [Mapping packages](mapping-packages.md)).
 - A shared package that sets `preload` preloads the `initial` chunks of its own record.
 
 ## Why

@@ -1292,8 +1292,8 @@ describe('mapping output with declared packages', () => {
     ]);
   });
 
-  // The config is one per package, but each entry point reads its version from its own
-  // package.json; a mismatch has to fail before anything is written.
+  // The config is one per package by construction, but each entry point reads its version from its
+  // own package.json. The user clustered them into one package, so it publishes one version (W15).
   describe('versions', () => {
     async function buildVersions(testingPackageJson: string) {
       const io = createMemoryIo()
@@ -1312,16 +1312,29 @@ describe('mapping output with declared packages', () => {
       });
       const fedOptions = makeFedOptions({ dev: false, workspaceRoot: '/ws' });
       const run = bundleExposedAndMappingsCore({ adapter, io }, cfg, fedOptions, []);
-      return { adapter, run };
+      return { adapter, run, cfg, fedOptions };
     }
 
-    it('rejects a declared package whose entry points read different versions', async () => {
-      const { adapter, run } = await buildVersions(JSON.stringify({ version: '2.0.0' }));
-
-      await expect(run).rejects.toThrow(
-        /'@org\/lib' and '@org\/lib\/testing' belong to declared package '@org\/lib' but publish different metadata \(requiredVersion: "~1\.0\.0" vs "~2\.0\.0", version: "1\.0\.0" vs "2\.0\.0"\)/
+    it('publishes one record at the first library version, without a throw or warning', async () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const { adapter, run, cfg, fedOptions } = await buildVersions(
+        JSON.stringify({ version: '2.0.0' })
       );
-      expect(adapter.calls.setup).toEqual([]);
+
+      const info = assembleFederationInfo(cfg, fedOptions, await run);
+
+      expect(adapter.calls.setup).toHaveLength(1);
+      expect(
+        info.shared.map(s => [s.packageName, s.requiredVersion, s.version, s.entries])
+      ).toEqual([
+        [
+          '@org/lib',
+          '~1.0.0',
+          '1.0.0',
+          { '@org/lib': '_org_lib.js', '@org/lib/testing': '_org_lib_testing.js' },
+        ],
+      ]);
+      expect(warn).not.toHaveBeenCalled();
     });
 
     it('builds a declared package whose entry points agree', async () => {

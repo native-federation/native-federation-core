@@ -256,22 +256,23 @@ describe('withNativeFederation', () => {
       expect(result.shared['rxjs']!.chunks).toBeUndefined();
     });
 
-    it('warns once when entries of one package bundle disagree, naming every key', () => {
+    // W15: chunks is a package setting, so the main entry's value builds the whole package.
+    it("gives entries of one package the package's chunks, with one warning", () => {
       const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
 
-      withNativeFederation({
+      const result = withNativeFederation({
         shared: {
-          '@org/ui': { build: 'package', chunks: true },
           '@org/ui/button': { build: 'package', chunks: false },
+          '@org/ui': { build: 'package', chunks: true },
           '@org/ui/card': { build: 'package', chunks: false },
         },
       });
 
+      expect(Object.values(result.shared).map(cfg => cfg.chunks)).toEqual([true, true, true]);
       expect(warn).toHaveBeenCalledOnce();
-      const message = warn.mock.calls[0]![0];
-      expect(message).toContain("'@org/ui' (chunks: true)");
-      expect(message).toContain("'@org/ui/button', '@org/ui/card' (chunks: false)");
-      expect(message).toContain("'browser-org_ui'");
+      expect(warn.mock.calls[0]![0]).toContain(
+        "Entry points of shared package '@org/ui' set different chunks."
+      );
     });
 
     it('does not warn when an entry of a package bundle leaves chunks unset', () => {
@@ -301,17 +302,193 @@ describe('withNativeFederation', () => {
       expect(warn.mock.calls[0]![0]).toContain("'browser-pool-p1'");
     });
 
-    // Each platform gets a bundle of its own, so these do not compete.
-    it('does not warn when one package is built for both platforms with different chunks', () => {
+    // Platform stays per entry point; chunks still comes from the package.
+    it('gives an entry built for another platform the package chunks', () => {
       const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
 
-      withNativeFederation({
+      const result = withNativeFederation({
         shared: {
           '@org/ui': { build: 'package', chunks: true },
           '@org/ui/server': { build: 'package', chunks: false, platform: 'node' },
         },
       });
 
+      expect(result.shared['@org/ui/server']).toMatchObject({ chunks: true, platform: 'node' });
+      expect(warn).toHaveBeenCalledOnce();
+    });
+  });
+
+  // W15: config is per package, like an npm package, not per entry point.
+  describe('one config per package', () => {
+    const fields = (cfg: { [key: string]: unknown }) => ({
+      requiredVersion: cfg['requiredVersion'],
+      singleton: cfg['singleton'],
+      strictVersion: cfg['strictVersion'],
+      version: cfg['version'],
+      pool: cfg['pool'],
+    });
+
+    it("gives every entry point the main entry's config, wherever it is listed", () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const main = {
+        requiredVersion: '^7.0.0',
+        singleton: true,
+        strictVersion: true,
+        version: '7.8.1',
+        pool: 'a',
+      };
+
+      const result = withNativeFederation({
+        shared: {
+          'rxjs/operators': {
+            requiredVersion: '^6.0.0',
+            singleton: false,
+            strictVersion: false,
+            version: '6.0.0',
+            pool: 'b',
+          },
+          rxjs: main,
+        },
+      });
+
+      expect(fields(result.shared['rxjs/operators']!)).toEqual(main);
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]![0]).toBe(
+        "Entry points of shared package 'rxjs' set different requiredVersion, singleton, " +
+          'strictVersion, version, pool. A package is shared with one config, taken from its ' +
+          "main entry; the other entry points' values are ignored. Set them once, on 'rxjs'."
+      );
+    });
+
+    it('takes the config from the first entry point listed when there is no main entry', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      const result = withNativeFederation({
+        shared: {
+          '@org/ui/table': { singleton: true, pool: 'a' },
+          '@org/ui/button': { singleton: true, pool: 'b' },
+        },
+      });
+
+      expect(result.shared['@org/ui/button']!.pool).toBe('a');
+      expect(warn.mock.calls[0]![0]).toContain("taken from its first entry point, '@org/ui/table'");
+    });
+
+    // The pool picks the bundle, so the package is built where its record says it lives.
+    it('builds every entry point in the pool of the package', () => {
+      vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      const result = withNativeFederation({
+        shared: {
+          rxjs: { build: 'pool', pool: 'a' },
+          'rxjs/operators': { build: 'pool', pool: 'b' },
+        },
+      });
+
+      expect(result.shared['rxjs/operators']).toMatchObject({ build: 'pool', pool: 'a' });
+    });
+
+    it('lets an entry point that leaves a field unset inherit it silently', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      const result = withNativeFederation({
+        shared: { rxjs: { singleton: true, pool: 'a' }, 'rxjs/operators': {} },
+      });
+
+      expect(result.shared['rxjs/operators']).toMatchObject({ singleton: true, pool: 'a' });
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    // The shapes shareAll() and share() return: shareAll() resolves 'auto' to a range and sets no
+    // version, while share() with requiredVersion 'auto' also stamps the version it read.
+    it('does not report a version core derived for a share() entry under a shareAll() root', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const root = { singleton: true, strictVersion: true, requiredVersion: '^20.1.0' };
+
+      const result = withNativeFederation({
+        shared: {
+          '@angular/common': root,
+          '@angular/common/locales/de': { ...root, version: '20.1.0' },
+        },
+      });
+
+      expect(result.shared['@angular/common/locales/de']!.version).toBeUndefined();
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('reports a version set apart from the version of the package', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      withNativeFederation({
+        shared: { rxjs: { version: '7.8.1' }, 'rxjs/operators': { version: '7.0.0' } },
+      });
+
+      expect(warn.mock.calls[0]![0]).toContain("'rxjs' set different version.");
+    });
+
+    // build and pool move together, so a secondary's pool never outlives its build.
+    it('builds a package whose entry points mix build and pool, with one warning', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      const result = withNativeFederation({
+        shared: {
+          rxjs: { build: 'package' },
+          'rxjs/operators': { build: 'pool', pool: 'x', shareScope: 'other' },
+        },
+      });
+
+      expect(result.shared['rxjs/operators']).toMatchObject({ build: 'package' });
+      expect(result.shared['rxjs/operators']).not.toHaveProperty('pool');
+      expect(result.shared['rxjs/operators']).not.toHaveProperty('shareScope');
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]![0]).toContain('set different build, pool, shareScope.');
+    });
+
+    it('lets an entry point inherit chunks with the build it applies to, without a warning', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      const result = withNativeFederation({
+        shared: { rxjs: { build: 'package', chunks: false }, 'rxjs/operators': {} },
+      });
+
+      expect(result.shared['rxjs/operators']).toMatchObject({ build: 'package', chunks: false });
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('ignores preload set on an entry point apart from its package', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      const result = withNativeFederation({
+        shared: { 'chart-lib': {}, 'chart-lib/extras': { preload: true } },
+      });
+
+      expect(result.shared['chart-lib/extras']).not.toHaveProperty('preload');
+      expect(warn.mock.calls[0]![0]).toContain('set different preload.');
+    });
+
+    it('lets a skipped main entry configure nothing', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+      const result = withNativeFederation({
+        shared: { rxjs: { pool: 'a' }, 'rxjs/operators': { pool: 'b' } },
+        skip: ['rxjs'],
+      });
+
+      expect(Object.keys(result.shared)).toEqual(['rxjs/operators']);
+      expect(result.shared['rxjs/operators']!.pool).toBe('b');
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('leaves agreeing entry points and other packages alone', () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const cfg = { singleton: true, strictVersion: true, requiredVersion: '^7.0.0' };
+
+      const result = withNativeFederation({
+        shared: { rxjs: cfg, 'rxjs/operators': cfg, tslib: { singleton: false } },
+      });
+
+      expect(fields(result.shared['rxjs/operators']!)).toEqual(fields(result.shared['rxjs']!));
+      expect(result.shared['tslib']!.singleton).toBe(false);
       expect(warn).not.toHaveBeenCalled();
     });
   });
@@ -369,9 +546,8 @@ describe('withNativeFederation', () => {
     expect(result.shared['chart-lib']).not.toHaveProperty('preload');
   });
 
-  // Densifying compares every field, so entry points of one package that disagree on preload would
-  // publish as two records of one remote.
-  it('sets preload on every entry point of a package once one sets it', () => {
+  // preload is a package field: the main entry's value applies to every entry point.
+  it('sets preload on every entry point of a package whose main entry sets it', () => {
     const result = withNativeFederation({
       shared: {
         'chart-lib': { build: 'package', preload: true },

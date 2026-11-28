@@ -14,15 +14,14 @@ function isDense(entry: SharedInfo | DenseSharedInfo): entry is DenseSharedInfo 
 /**
  * Groups a flat `shared` array into {@link DenseSharedInfo} objects: one per shared external,
  * with an `entries` map from each import name to its output file. Entries sharing a parent
- * package but with differing metadata split into separate groups. Already-dense entries pass
+ * package but with differing metadata split into separate groups; the build aligns a package's
+ * config and version first, so only fields outside them can split. Already-dense entries pass
  * through unchanged.
  */
 export function densifyExternals(
   shared: Array<SharedInfo | DenseSharedInfo>,
   // The package of each mapping import; any other name is grouped under its npm package.
-  mappingPackages: ReadonlyMap<string, string>,
-  // An extra grouping key per import name; it splits records but is never written.
-  groupKeys: ReadonlyMap<string, string> = new Map()
+  mappingPackages: ReadonlyMap<string, string>
 ): DenseSharedInfo[] {
   const result: DenseSharedInfo[] = [];
   const groupIndex = new Map<string, number>();
@@ -34,12 +33,10 @@ export function densifyExternals(
     }
 
     const { outFileName, packageName, dev, ...meta } = entry;
-    // A declared package publishes one record: its entry points agree, checked before bundling.
     const parent = mappingPackages.get(packageName) ?? inferPackageFromSecondary(packageName);
     // Denylist, so a field added to SharedInfo later splits groups instead of being dropped.
     const sig = JSON.stringify(meta, Object.keys(meta).sort());
-
-    const key = parent + ' ' + (groupKeys.get(packageName) ?? '') + ' ' + sig;
+    const key = parent + ' ' + sig;
 
     const existing = groupIndex.get(key);
     if (existing === undefined) {

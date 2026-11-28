@@ -22,7 +22,6 @@ export function writeFederationOutputs(
   );
 }
 
-// Not keyed by packageName: densify can publish several records under one name.
 function chunkFiles({ exposes, shared }: DenseFederationInfo): string[] {
   const files = [...exposes, ...shared].flatMap(owner =>
     Object.values(owner.chunks ?? {}).map(c => c.file)
