@@ -2,7 +2,23 @@ import * as path from 'path';
 import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
 import type { SharedInfo } from '../../domain/core/federation-info.contract.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
-import { getPackageInfo, type PackageInfo } from '../../utils/package/package-info.js';
+import {
+  getPackageInfo,
+  installedVersions,
+  type PackageInfo,
+} from '../../utils/package/package-info.js';
+
+export function resolveSharedVersions(
+  sharedBundles: Record<string, NormalizedExternalConfig>,
+  folder: string,
+  repo: PackageJsonRepository
+): Record<string, string> {
+  const resolvedVersions = installedVersions(Object.keys(sharedBundles), folder, repo);
+  for (const [key, cfg] of Object.entries(sharedBundles)) {
+    if (cfg.packageInfo?.version) resolvedVersions[key] = cfg.packageInfo.version;
+  }
+  return resolvedVersions;
+}
 
 export function sharedPackageInfos(
   sharedBundles: Record<string, NormalizedExternalConfig>,

@@ -1,10 +1,6 @@
 import * as path from 'path';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
-import {
-  sharedPackageJsonRepository,
-  installedVersions,
-  type PackageInfo,
-} from '../../utils/package/package-info.js';
+import { sharedPackageJsonRepository, type PackageInfo } from '../../utils/package/package-info.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
 import type {
   ChunkInfo,
@@ -17,7 +13,7 @@ import { type NormalizedFederationOptions } from '../../domain/core/federation-o
 import { logger } from '../../utils/logger.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import { sharedBundleExternals } from './default-external-list.js';
-import { buildResult, sharedPackageInfos } from './shared-record.js';
+import { buildResult, resolveSharedVersions, sharedPackageInfos } from './shared-record.js';
 import { rewriteChunkImportsCore, SOURCE_MAP_COMMENT } from './rewrite-chunk-imports.js';
 import { renameChunksByContentCore } from './rename-chunks-by-content.js';
 import { hashBuildMetadata, hashEntryContent } from '../../utils/hash.js';
@@ -121,10 +117,7 @@ export async function bundleSharedCore(
     deps.repo
   );
 
-  const resolvedVersions = installedVersions(Object.keys(sharedBundles), folder, deps.repo);
-  for (const [key, cfg] of Object.entries(sharedBundles)) {
-    if (cfg.packageInfo?.version) resolvedVersions[key] = cfg.packageInfo.version;
-  }
+  const resolvedVersions = resolveSharedVersions(sharedBundles, folder, deps.repo);
   warnUnversionedPackageInfos(sharedBundles, resolvedVersions);
 
   const checksum = getChecksumCore(
