@@ -142,9 +142,15 @@ function addTransientDeps(
   while (stack.length > 0) {
     const { name, importer } = stack.pop()!;
 
-    // see docs/architecture/package-resolution.md#platform
-    const platform = shared[name]?.platform ?? configPlatform;
-    const found = findInstalledPackage(name, importer, workspaceRoot, platform, deps);
+    // A shared package runs as the one copy bundled from the workspace root, whoever imports it.
+    const sharedConfig = shared[name];
+    const found = findInstalledPackage(
+      name,
+      sharedConfig ? undefined : importer,
+      workspaceRoot,
+      sharedConfig?.platform ?? configPlatform,
+      deps
+    );
     if (!found) continue;
 
     const entryPoint = deps.io.realpath(found.info.entryPoint);

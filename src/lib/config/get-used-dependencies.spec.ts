@@ -255,7 +255,7 @@ describe('getUsedDependenciesFactoryCore', () => {
       `/ws/node_modules/.pnpm/${name}@${version}/node_modules`;
 
     // The app's code imports `a` only.
-    function scan(io: MemoryIo): string[] {
+    function scan(io: MemoryIo, shared: string[] = []): string[] {
       io.setFile('/ws/package.json', JSON.stringify({ name: 'app' }));
       io.setFile('/ws/src/main.ts', '');
       const projectData = {
@@ -268,6 +268,7 @@ describe('getUsedDependenciesFactoryCore', () => {
       };
       const used = getUsedDependenciesFactoryCore(deps, '/ws', ['src/main.ts'])({
         sharedMappings: {},
+        shared: Object.fromEntries(shared.map(name => [name, { platform: 'browser' as const }])),
       });
       return [...used.external].sort();
     }
@@ -325,8 +326,21 @@ describe('getUsedDependenciesFactoryCore', () => {
       expect(scan(io)).toEqual(['a', 'p', 'q']);
     });
 
-    // The root has its own hoisted `c`, but `a` imports the `c` installed next to it.
-    it("scans the importer's own install before the workspace root's", () => {
+    // The root has its own hoisted `c`, and `a` has its own `c` installed next to it. A shared `c`
+    // is bundled once from the workspace root, so the root's copy is what `a` loads at runtime.
+    it("scans the workspace root's install of a shared package, not the importer's", () => {
+      const io = createMemoryIo();
+      setPackage(io, store('a'), ['c']);
+      setPackage(io, '/ws/node_modules/c', ['x'], '1.0.0');
+      setPackage(io, store('c', '2.0.0'), ['y'], '2.0.0');
+      link(io, '/ws/node_modules', 'a');
+      link(io, storeDeps('a'), 'c', '2.0.0');
+
+      expect(scan(io, ['c'])).toEqual(['a', 'c', 'x']);
+    });
+
+    // Same layout, but `c` is not shared: it is bundled into `a`'s importer, from `a`'s own install.
+    it("scans the importer's own install of a package that is not shared", () => {
       const io = createMemoryIo();
       setPackage(io, store('a'), ['c']);
       setPackage(io, '/ws/node_modules/c', ['x'], '1.0.0');
@@ -337,8 +351,24 @@ describe('getUsedDependenciesFactoryCore', () => {
       expect(scan(io)).toEqual(['a', 'c', 'y']);
     });
 
-    // `a`'s own `c` blocks its root entry; the root's `c` is not what `a` imports, so it is not
-    // scanned in its place.
+    // `a`'s own `c` blocks its root entry, but a shared `c` is never looked up from `a`.
+    it("scans the workspace root's install of a shared package the importer's install does not export", () => {
+      const io = createMemoryIo();
+      setPackage(io, store('a'), ['c']);
+      setPackage(io, '/ws/node_modules/c', ['x'], '1.0.0');
+      setPackage(io, store('c', '2.0.0'), ['y'], '2.0.0');
+      io.setFile(
+        `${store('c', '2.0.0')}/package.json`,
+        JSON.stringify({ name: 'c', version: '2.0.0', exports: { '.': null } })
+      );
+      link(io, '/ws/node_modules', 'a');
+      link(io, storeDeps('a'), 'c', '2.0.0');
+
+      expect(scan(io, ['c'])).toEqual(['a', 'c', 'x']);
+    });
+
+    // `c` is not shared and `a`'s own `c` blocks its root entry; the root's `c` is not what `a`
+    // imports, so it is not scanned in its place.
     it("does not fall back to the workspace root when the importer's install is not exported", () => {
       const io = createMemoryIo();
       setPackage(io, store('a'), ['c']);
