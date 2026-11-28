@@ -52,8 +52,8 @@ function makeConfig(
     features: {
       mappingVersion: false,
       ignoreUnusedDeps: false,
-      denseChunking: false,
-      denseExternals: false,
+      denseChunking: true,
+      denseExternals: true,
       integrityHashes: false,
       synthesizeCjsExports: true,
       strictImports: false,

@@ -154,8 +154,6 @@ export default withNativeFederation({
   chunks: true, // Enable code-splitting (default: true)
 
   features: {
-    denseChunking: true, // Optimize remoteEntry.json structure
-    denseExternals: true, // Group all entry points of a shared package under one object (opt-in)
     mappingVersion: true, // Use versions for shared mappings, is now opt-out
     strictImports: false, // Fail the build, instead of warning, on a bare import remoteEntry.json does not declare
   },

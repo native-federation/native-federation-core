@@ -51,9 +51,7 @@ const mappingsPerCall = (mappings: () => SharedInfo[]) =>
     outputFiles: [],
   }));
 
-function config(
-  overrides: { denseExternals?: boolean; shareScope?: string } = {}
-): NormalizedFederationConfig {
+function config(overrides: { shareScope?: string } = {}): NormalizedFederationConfig {
   return {
     name: 'app',
     chunks: false,
@@ -63,7 +61,7 @@ function config(
     sharedMappings: {},
     sharedMappingsConfig: {},
     ...(overrides.shareScope ? { shareScope: overrides.shareScope } : {}),
-    features: { denseExternals: overrides.denseExternals ?? false },
+    features: {},
   } as unknown as NormalizedFederationConfig;
 }
 
@@ -99,7 +97,7 @@ describe('rebuildForFederation — affected-external re-bundling', () => {
     );
 
     expect(executeSharedBundlePlans).toHaveBeenCalledOnce();
-    expect(info.shared).toEqual([{ packageName: 'a', outFileName: 'a.fresh.js' }]);
+    expect(info.shared).toEqual([{ packageName: 'a', entries: { a: 'a.fresh.js' } }]);
   });
 
   it('reuses cached externals when no modified file hits a shared package', async () => {
@@ -114,7 +112,7 @@ describe('rebuildForFederation — affected-external re-bundling', () => {
     );
 
     expect(executeSharedBundlePlans).not.toHaveBeenCalled();
-    expect(info.shared).toEqual(cached);
+    expect(info.shared).toEqual([{ packageName: 'a', entries: { a: 'a.cached.js' } }]);
   });
 
   it('skips detection entirely when no files changed', async () => {
@@ -185,7 +183,7 @@ describe('rebuildForFederation — output files (core#177)', () => {
 // Issue #109: a rebuild that emitted flat entries while the remotes stayed dense let a secondary
 // entry point (e.g. @angular/core/rxjs-interop) resolve to a different provider than its primary,
 // loading Angular twice.
-describe('rebuildForFederation — denseExternals', () => {
+describe('rebuildForFederation — dense shared records', () => {
   const angular = (): SharedInfo[] =>
     [
       { packageName: '@angular/core', outFileName: 'core.js', version: '21.0.0', singleton: true },
@@ -202,13 +200,8 @@ describe('rebuildForFederation — denseExternals', () => {
     mappingsPerCall(() => []);
   });
 
-  it('groups secondary entry points under their parent package when the flag is on', async () => {
-    const info = await rebuildForFederation(
-      config({ denseExternals: true }),
-      fedOptions(angular()),
-      ['@angular/core'],
-      []
-    );
+  it('groups secondary entry points under their parent package', async () => {
+    const info = await rebuildForFederation(config(), fedOptions(angular()), ['@angular/core'], []);
 
     expect(info.shared).toHaveLength(1);
     const [core] = info.shared as [DenseSharedInfo];
@@ -219,27 +212,10 @@ describe('rebuildForFederation — denseExternals', () => {
     });
   });
 
-  it('leaves shared flat when the flag is off', async () => {
-    const externals = angular();
-    const info = await rebuildForFederation(config(), fedOptions(externals), ['@angular/core'], []);
-
-    expect(info.shared).toEqual(externals);
-  });
-
   it('stays stable across consecutive rebuilds on the same fedOptions', async () => {
     const options = fedOptions(angular());
-    const first = await rebuildForFederation(
-      config({ denseExternals: true }),
-      options,
-      ['@angular/core'],
-      []
-    );
-    const second = await rebuildForFederation(
-      config({ denseExternals: true }),
-      options,
-      ['@angular/core'],
-      []
-    );
+    const first = await rebuildForFederation(config(), options, ['@angular/core'], []);
+    const second = await rebuildForFederation(config(), options, ['@angular/core'], []);
 
     expect(second).toEqual(first);
   });

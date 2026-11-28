@@ -56,8 +56,8 @@ describe('withNativeFederation', () => {
       features: {
         mappingVersion: true,
         ignoreUnusedDeps: true,
-        denseChunking: false,
-        denseExternals: false,
+        denseChunking: true,
+        denseExternals: true,
         integrityHashes: false,
       },
     });
@@ -378,7 +378,6 @@ describe('withNativeFederation', () => {
         'chart-lib/extras': { build: 'package' },
         rxjs: {},
       },
-      features: { denseChunking: true },
     });
 
     expect(result.shared['chart-lib/extras'].preload).toBe(true);
@@ -397,7 +396,6 @@ describe('withNativeFederation', () => {
 
       withNativeFederation({
         shared: { 'chart-lib': { ...cfg, preload: true } },
-        features: { denseChunking: true },
       });
 
       expect(warn).toHaveBeenCalledOnce();
@@ -412,29 +410,17 @@ describe('withNativeFederation', () => {
 
       withNativeFederation({
         shared: { 'chart-lib': { build: 'package', preload: true }, 'chart-lib/extras': {} },
-        features: { denseChunking: true },
       });
 
       expect(warn).toHaveBeenCalledOnce();
       expect(warn.mock.calls[0]![0]).toContain("Shared externals 'chart-lib/extras' set preload");
     });
 
-    // Flat chunking publishes no bundle list, so the runtime has no chunks to preload.
-    it('warns about preload without denseChunking', () => {
-      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-
-      withNativeFederation({ shared: { 'chart-lib': { build: 'package', preload: true } } });
-
-      expect(warn).toHaveBeenCalledOnce();
-      expect(warn.mock.calls[0]![0]).toContain('features.denseChunking');
-    });
-
-    it('stays quiet for a preload package with a bundle of its own under denseChunking', () => {
+    it('stays quiet for a preload package with a bundle of its own', () => {
       const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
 
       withNativeFederation({
         shared: { 'chart-lib': { build: 'package', preload: true }, rxjs: {} },
-        features: { denseChunking: true },
       });
 
       expect(warn).not.toHaveBeenCalled();
@@ -653,7 +639,7 @@ describe('withNativeFederation', () => {
 
   it('respects explicit feature flags', () => {
     const result = withNativeFederation({
-      features: { mappingVersion: false, denseChunking: true, denseExternals: true },
+      features: { mappingVersion: false, integrityHashes: true },
     });
 
     expect(result.features).toEqual({
@@ -661,10 +647,30 @@ describe('withNativeFederation', () => {
       ignoreUnusedDeps: true,
       denseChunking: true,
       denseExternals: true,
-      integrityHashes: false,
+      integrityHashes: true,
       synthesizeCjsExports: true,
       strictImports: false,
     });
+  });
+
+  // The flags left the config type; a config that still sets them builds dense without a word,
+  // preload included (flat chunking used to warn that it preloads no chunks).
+  it.each([
+    [{ denseChunking: false, denseExternals: false }],
+    [{ denseChunking: true }],
+    [{ denseExternals: false }],
+  ])('reads the removed dense flags as true for %j, silently', features => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const notice = vi.spyOn(logger, 'notice').mockImplementation(() => undefined);
+
+    const result = withNativeFederation({
+      shared: { 'chart-lib': { build: 'package', preload: true } },
+      features,
+    } as FederationConfig);
+
+    expect(result.features).toMatchObject({ denseChunking: true, denseExternals: true });
+    expect(warn).not.toHaveBeenCalled();
+    expect(notice).not.toHaveBeenCalled();
   });
 
   it('passes the configured name and externals through', () => {

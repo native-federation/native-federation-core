@@ -8,7 +8,6 @@ import type { NormalizedFederationOptions } from '../../domain/core/federation-o
 import type {
   DenseSharedInfo,
   FederationInfo,
-  SharedInfo,
 } from '../../domain/core/federation-info.contract.js';
 import { prepareSkipList } from '../../config/default-skip-list.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
@@ -33,6 +32,7 @@ let dist: string;
 const CHART = '/pkgs/chart-lib/index.js';
 const CHART_EXTRAS = '/pkgs/chart-lib/extras.js';
 const TSLIB = '/pkgs/tslib/tslib.js';
+const MY_LIB = 'libs/my-lib/index.ts';
 const sourceOf = (file: string) => path.resolve(workspaceRoot, file);
 
 // The bundler's output, per entry source file; chunk names carry an 8-character bundler hash.
@@ -40,6 +40,7 @@ const entryCode = (): Record<string, string> => ({
   [CHART]: `/* chart */ import './chunk-CHARTAAA.js'; export const lazy = () => import('./chunk-LAZYAAAA.js');`,
   [CHART_EXTRAS]: `/* extras */ import 'chart-lib'; import './chunk-EXTRASAA.js';`,
   [TSLIB]: `/* tslib */ import './chunk-TSLIBAAA.js';`,
+  [MY_LIB]: `/* my-lib */ import './chunk-MYLIBAAA.js';`,
   [sourceOf('src/home.ts')]:
     `/* home */ import 'chart-lib'; import './chunk-HOMEAAAA.js'; export const route = () => import('./chunk-ROUTEAAA.js');`,
   [sourceOf('src/cart.ts')]: `/* cart */ import { s } from './chunk-SHAREDAA.js'; export { s };`,
@@ -52,6 +53,9 @@ const chunkCode: Record<string, Record<string, string>> = {
     'chunk-EXTRASAA.js': `/* extras-core */ export {};`,
     'chunk-LAZYAAAA.js': `/* chart-lazy */ export {};`,
     'chunk-TSLIBAAA.js': `/* tslib-core */ export {};`,
+  },
+  'mapping-bundle': {
+    'chunk-MYLIBAAA.js': `/* my-lib-core */ export {};`,
   },
   'mapping-or-exposed': {
     'chunk-HOMEAAAA.js': `/* home-core */ import './chunk-SHAREDAA.js';`,
@@ -97,7 +101,7 @@ const shared = (entryPoint: string, overrides: Partial<NormalizedExternalConfig>
   ...overrides,
 });
 
-function makeConfig(features: { denseChunking: boolean; denseExternals: boolean }) {
+function makeConfig() {
   const config: NormalizedFederationConfig = {
     $type: 'classic',
     name: 'mfe',
@@ -110,7 +114,7 @@ function makeConfig(features: { denseChunking: boolean; denseExternals: boolean 
       'chart-lib/extras': shared(CHART_EXTRAS, { preload: true }),
       tslib: shared(TSLIB),
     },
-    sharedMappings: {},
+    sharedMappings: { [MY_LIB]: 'my-lib' },
     sharedMappingsConfig: {},
     skip: prepareSkipList([]),
     chunks: true,
@@ -122,7 +126,8 @@ function makeConfig(features: { denseChunking: boolean; denseExternals: boolean 
       synthesizeCjsExports: false,
       // Fails the build on any bare import remoteEntry.json does not declare.
       strictImports: true,
-      ...features,
+      denseChunking: true,
+      denseExternals: true,
     },
   };
   return config;
@@ -141,9 +146,9 @@ function makeFedOptions(): NormalizedFederationOptions {
   };
 }
 
-async function build(features: { denseChunking: boolean; denseExternals: boolean }) {
+async function build() {
   setBuildAdapter(bundlerAdapter());
-  const returned = await buildForFederation(makeConfig(features), makeFedOptions(), [
+  const returned = await buildForFederation(makeConfig(), makeFedOptions(), [
     'chart-lib',
     'chart-lib/extras',
     'tslib',
@@ -167,8 +172,8 @@ function fileWith(marker: string): string {
 const exposedChunks = (info: FederationInfo) =>
   Object.fromEntries(info.exposes.map(e => [e.key, e.chunks]));
 
-const flatRecord = (info: FederationInfo, packageName: string) =>
-  info.shared.find(s => s.packageName === packageName) as SharedInfo;
+const record = (info: FederationInfo, packageName: string) =>
+  info.shared.find(s => s.packageName === packageName) as DenseSharedInfo;
 
 describe('buildForFederation — published chunk closures', () => {
   beforeEach(() => {
@@ -185,27 +190,10 @@ describe('buildForFederation — published chunk closures', () => {
     fs.rmSync(workspaceRoot, { recursive: true, force: true });
   });
 
-  // Without denseChunking an exposed module keeps the bundler's relative imports and names.
-  // The key is still `toChunkImport(file)`: the v5 runtime maps every row under it.
-  it('lists the relative chunks of each exposed module', async () => {
-    const { published } = await build({ denseChunking: false, denseExternals: false });
-
-    expect(exposedChunks(published)).toEqual({
-      './Home': {
-        '@nf-internal/chunk-HOMEAAAA': { file: 'chunk-HOMEAAAA.js', initial: true },
-        '@nf-internal/chunk-SHAREDAA': { file: 'chunk-SHAREDAA.js', initial: true },
-        '@nf-internal/chunk-ROUTEAAA': { file: 'chunk-ROUTEAAA.js' },
-      },
-      './Cart': {
-        '@nf-internal/chunk-SHAREDAA': { file: 'chunk-SHAREDAA.js', initial: true },
-      },
-    });
-  });
-
-  // With denseChunking the entries import `@nf-internal/*`, while chunk-to-chunk imports stay
-  // relative; both resolve, and chunks are renamed by content.
+  // The entries import `@nf-internal/*`, while chunk-to-chunk imports stay relative; both resolve,
+  // and chunks are renamed by content.
   it('lists the dense chunks of each exposed module', async () => {
-    const { published } = await build({ denseChunking: true, denseExternals: false });
+    const { published } = await build();
     const row = (marker: string, initial: boolean) => {
       const file = fileWith(marker);
       return [toChunkImport(file), initial ? { file, initial } : { file }];
@@ -224,22 +212,16 @@ describe('buildForFederation — published chunk closures', () => {
   });
 
   // A preload package's chunks are those of its bundle, listed once in top-level `chunks`.
-  it.each([
-    ['off', false],
-    ['on', true],
-  ])(
-    'publishes no chunk list on shared records with denseChunking %s',
-    async (_, denseChunking) => {
-      const { published } = await build({ denseChunking, denseExternals: false });
+  it('publishes no chunk list on shared records', async () => {
+    const { published } = await build();
 
-      for (const record of published.shared) expect(record).not.toHaveProperty('chunks');
-    }
-  );
+    for (const record of published.shared) expect(record).not.toHaveProperty('chunks');
+  });
 
   it("lists a preload package's chunks under its bundle", async () => {
-    const { published } = await build({ denseChunking: true, denseExternals: false });
+    const { published } = await build();
 
-    const bundle = flatRecord(published, 'chart-lib').bundle!;
+    const bundle = record(published, 'chart-lib').bundle!;
     expect(published.chunks?.[bundle]).toEqual(
       expect.arrayContaining([
         fileWith('chart-core'),
@@ -250,15 +232,14 @@ describe('buildForFederation — published chunk closures', () => {
   });
 
   it('publishes preload only on the packages configured with it', async () => {
-    const { published } = await build({ denseChunking: false, denseExternals: false });
+    const { published } = await build();
 
-    expect(flatRecord(published, 'chart-lib').preload).toBe(true);
-    expect(flatRecord(published, 'chart-lib/extras').preload).toBe(true);
-    expect(flatRecord(published, 'tslib')).not.toHaveProperty('preload');
+    expect(record(published, 'chart-lib').preload).toBe(true);
+    expect(record(published, 'tslib')).not.toHaveProperty('preload');
   });
 
   it('keeps a dense preload record one record, without a list of its own', async () => {
-    const { published } = await build({ denseChunking: true, denseExternals: true });
+    const { published } = await build();
 
     const chartLib = published.shared.filter(s => s.packageName === 'chart-lib');
     expect(chartLib).toHaveLength(1);
@@ -272,90 +253,83 @@ describe('buildForFederation — published chunk closures', () => {
     expect(chartLib[0]).not.toHaveProperty('chunks');
   });
 
-  // The shape a runtime reads; names are content hashes, so they only move when the bytes do.
-  it('assembles remoteEntry.json', async () => {
-    const { published } = await build({ denseChunking: true, denseExternals: true });
+  // The whole wire format a runtime reads: shared packages, a mapping, exposed modules and split
+  // chunks, written out by hand (no snapshot file) so a format change shows up as an edit to this
+  // row. Chunk names are content hashes, so they only move when the fixture's bytes do.
+  it('writes remoteEntry.json', async () => {
+    const { published } = await build();
 
-    expect(published).toMatchInlineSnapshot(`
-      {
-        "$version": "v4",
-        "chunks": {
-          "browser-shared": [
-            "chunk-QTDORPIU.js",
-            "chunk-3CNQCWNB.js",
-            "chunk-SDY535X5.js",
-            "chunk-OCDHTTJP.js",
-            "chunk-3JS3MFFU.js",
-          ],
-          "mapping-or-exposed": [
-            "chunk-E4LY4AS4.js",
-            "chunk-O4YEPRQO.js",
-            "chunk-MV6JVKWS.js",
-          ],
+    expect(published).toEqual({
+      $version: 'v5',
+      name: 'mfe',
+      chunks: {
+        'browser-shared': [
+          'chunk-QTDORPIU.js',
+          'chunk-3CNQCWNB.js',
+          'chunk-SDY535X5.js',
+          'chunk-OCDHTTJP.js',
+          'chunk-3JS3MFFU.js',
+        ],
+        'mapping-bundle': ['chunk-4A5BQSGU.js'],
+        'mapping-or-exposed': ['chunk-E4LY4AS4.js', 'chunk-O4YEPRQO.js', 'chunk-MV6JVKWS.js'],
+      },
+      exposes: [
+        {
+          key: './Home',
+          outFileName: 'Home.js',
+          chunks: {
+            '@nf-internal/chunk-E4LY4AS4': { file: 'chunk-E4LY4AS4.js', initial: true },
+            '@nf-internal/chunk-O4YEPRQO': { file: 'chunk-O4YEPRQO.js', initial: true },
+            '@nf-internal/chunk-MV6JVKWS': { file: 'chunk-MV6JVKWS.js' },
+          },
         },
-        "exposes": [
-          {
-            "chunks": {
-              "@nf-internal/chunk-E4LY4AS4": {
-                "file": "chunk-E4LY4AS4.js",
-                "initial": true,
-              },
-              "@nf-internal/chunk-MV6JVKWS": {
-                "file": "chunk-MV6JVKWS.js",
-              },
-              "@nf-internal/chunk-O4YEPRQO": {
-                "file": "chunk-O4YEPRQO.js",
-                "initial": true,
-              },
-            },
-            "key": "./Home",
-            "outFileName": "Home.js",
+        {
+          key: './Cart',
+          outFileName: 'Cart.js',
+          chunks: {
+            '@nf-internal/chunk-O4YEPRQO': { file: 'chunk-O4YEPRQO.js', initial: true },
           },
-          {
-            "chunks": {
-              "@nf-internal/chunk-O4YEPRQO": {
-                "file": "chunk-O4YEPRQO.js",
-                "initial": true,
-              },
-            },
-            "key": "./Cart",
-            "outFileName": "Cart.js",
+        },
+      ],
+      shared: [
+        {
+          packageName: 'chart-lib',
+          bundle: 'browser-shared',
+          entries: {
+            'chart-lib': 'chart_lib.D2XIoLh0XZ.js',
+            'chart-lib/extras': 'chart_lib_extras.GeNvxeJbTq.js',
           },
-        ],
-        "name": "mfe",
-        "shared": [
-          {
-            "bundle": "browser-shared",
-            "entries": {
-              "chart-lib": "chart_lib.D2XIoLh0XZ.js",
-              "chart-lib/extras": "chart_lib_extras.GeNvxeJbTq.js",
-            },
-            "packageName": "chart-lib",
-            "preload": true,
-            "requiredVersion": "^1.0.0",
-            "singleton": true,
-            "strictVersion": true,
-            "version": "1.0.0",
-          },
-          {
-            "bundle": "browser-shared",
-            "entries": {
-              "tslib": "tslib.iAWSpLA311.js",
-            },
-            "packageName": "tslib",
-            "requiredVersion": "^1.0.0",
-            "singleton": true,
-            "strictVersion": true,
-            "version": "1.0.0",
-          },
-        ],
-      }
-    `);
+          preload: true,
+          requiredVersion: '^1.0.0',
+          singleton: true,
+          strictVersion: true,
+          version: '1.0.0',
+        },
+        {
+          packageName: 'tslib',
+          bundle: 'browser-shared',
+          entries: { tslib: 'tslib.iAWSpLA311.js' },
+          requiredVersion: '^1.0.0',
+          singleton: true,
+          strictVersion: true,
+          version: '1.0.0',
+        },
+        {
+          packageName: 'my-lib',
+          bundle: 'mapping-bundle',
+          entries: { 'my-lib': 'my_lib.js' },
+          requiredVersion: '',
+          singleton: true,
+          strictVersion: false,
+          version: '',
+        },
+      ],
+    });
   });
 
   it('returns what it publishes', async () => {
-    const { returned, published } = await build({ denseChunking: true, denseExternals: true });
+    const { returned, published } = await build();
 
-    expect(JSON.parse(JSON.stringify({ $version: 'v4', ...returned }))).toEqual(published);
+    expect(JSON.parse(JSON.stringify({ $version: 'v5', ...returned }))).toEqual(published);
   });
 });

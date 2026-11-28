@@ -11,6 +11,10 @@
 - Shared packages, mappings and exposed modules are bundled apart.
 - Code splitting (`chunks`) is set per bundle; `build` gives a package, or a pool, a bundle of its
   own.
+- A chunk is never a `shared` record. Each bundle that splits lists its chunks under its name in
+  the top-level `chunks` of `remoteEntry.json`, and each shared and mapping record built in it
+  names it in `bundle`. A bundle that does not split but still emits a chunk lists it the same
+  way. An entry file imports its chunks by their `@nf-internal` name.
 - `build: 'pool'` builds the shared packages of one platform, share scope and `pool` label in one
   bundle, `<platform>-pool-<label>`. Like the combined bundle it keeps every shared specifier bare,
   its members' own subpaths included, so a subpath a member does not publish stays unresolved.
@@ -20,12 +24,12 @@
 - Each exposed module maps in `chunks` every file of its own build it reaches, directly or through
   each other: relative imports and this build's own `@nf-internal` chunks, static or a literal
   `import()`. Any other bare specifier ends the walk. A row is keyed by the file's import name
-  (`@nf-internal/<name>`, with or without `denseChunking`) and holds `{ file, initial? }`;
+  (`@nf-internal/<name>`) and holds `{ file, initial? }`;
   `initial: true` marks the files reached by static imports alone. A module that reaches none has
   no `chunks`. The map is computed from the output files on every build and rebuild.
 - A shared package that sets `preload` preloads every chunk of the bundle it is built in, as the
   top-level `chunks` lists them; shared records carry no list of their own. Core warns when such a
-  package is built in the combined bundle or a pool bundle, or when `denseChunking` is off.
+  package is built in the combined bundle or a pool bundle.
 
 ## Why
 
@@ -45,7 +49,7 @@
   `initial` rows.
 - A map rather than a list, keyed by import name, so a runtime reads the name the built files use
   instead of deriving it from the file name. Lazy rows make the map complete enough to build an
-  import map from: a dense build imports a lazy chunk by its bare `@nf-internal` name too.
+  import map from: an entry file imports a lazy chunk by its bare `@nf-internal` name too.
 - The bundle list is already published, so a preload package reuses it. For a package with a
   bundle of its own (`build: 'package'`) it is close to what the package needs. In the combined
   bundle or a pool bundle it is every member's chunks, hence the warning. A list per shared
@@ -56,6 +60,10 @@
 
 - Sharing chunks across remotes by name or content hash: a chunk carries no version or scope that
   would make that safe.
+- Publishing each chunk as a `shared` record of its own, with the bundler's relative imports
+  left in exposed and mapping bundles (`features.denseChunking: false`, the 4.x default): a second
+  shape for the same chunks, with no bundle list for `preload`, and a chunk record that looks like a
+  package to the runtime.
 
 ## Limits
 
@@ -63,7 +71,6 @@
 - Every extra bundle costs build time and memory, so bundles are split only where the config asks.
 - A preload package's bundle list includes chunks it reaches only through a dynamic import, so a
   library that splits languages, themes or diagrams into lazy chunks preloads all of them.
-- With flat chunking there is no bundle list, so a preload package preloads only its entry files.
 - Without code splitting, each entry point of a bundle inlines its own copy of the private files
   it shares with the other entry points (a relative import cannot be made external), so module
   state in those files exists once per entry point. `build: 'separate'` does this whatever
@@ -82,6 +89,7 @@ Enforced by: `src/lib/core/build/bundle-shared.spec.ts`,
 `src/lib/core/build/shared-bundle-plan.spec.ts`
 Issues: core#138, core#144, core#145, core#246, core#249
 History: core#6 dense chunk list per bundle → core#141 content-named, shared by name → core#145
-build-local, unshared, mappings built apart from exposed modules
+build-local, unshared, mappings built apart from exposed modules → 5.0 dense chunk list only,
+`features.denseChunking` removed
 Related: [Mapping packages](mapping-packages.md), [Build adapter](build-adapter.md),
 [Output files](output-files.md)

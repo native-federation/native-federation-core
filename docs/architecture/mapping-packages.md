@@ -31,8 +31,6 @@
 
 - Declarations belong in one module that every remote's config imports. Remotes that declare the
   same library differently publish it differently, and core cannot detect that.
-- Without `denseExternals`, a host can still take one package's entry points from different
-  remotes, as for any multi-entry library.
 - A mapping name that is not npm-style warns, unless a declaration covers it; it never fails the
   build.
 

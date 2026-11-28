@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { densifyExternals, toDenseSharedInfoFormat } from './densify-externals.js';
 import type { SharedInfo, DenseSharedInfo } from '../../domain/core/federation-info.contract.js';
-import { CHUNK_PREFIX } from '../../domain/core/chunk.js';
 
 function flat(
   packageName: string,
@@ -60,47 +59,6 @@ describe('densifyExternals', () => {
       '@myorg/utils': 'utils.js',
       '@myorg/utils/testing': 'utils-testing.js',
     });
-  });
-
-  it('densifies chunk entries keyed by their full chunk name, not the inferred parent', () => {
-    const chunk = flat(`${CHUNK_PREFIX}/chunk-ABC123`, 'chunk-ABC123.js', {
-      singleton: false,
-      strictVersion: false,
-      version: '0.0.0',
-      requiredVersion: '0.0.0',
-    });
-    const result = densifyExternals([flat('tslib', 'tslib.js'), chunk], new Map());
-
-    expect(result).toHaveLength(2);
-    expect((result[0] as DenseSharedInfo).entries).toEqual({ tslib: 'tslib.js' });
-    const denseChunk = result[1] as DenseSharedInfo;
-    expect('outFileName' in denseChunk).toBe(false);
-    expect(denseChunk.packageName).toBe(`${CHUNK_PREFIX}/chunk-ABC123`);
-    expect(denseChunk.entries).toEqual({ [`${CHUNK_PREFIX}/chunk-ABC123`]: 'chunk-ABC123.js' });
-  });
-
-  it('preserves chunk metadata when densifying a chunk', () => {
-    const chunk = flat(`${CHUNK_PREFIX}/c1`, 'c1.js', {
-      singleton: false,
-      strictVersion: false,
-      version: '0.0.0',
-      requiredVersion: '0.0.0',
-    });
-    const [denseChunk] = densifyExternals([chunk], new Map()) as [DenseSharedInfo];
-
-    expect(denseChunk.singleton).toBe(false);
-    expect(denseChunk.strictVersion).toBe(false);
-    expect(denseChunk.version).toBe('0.0.0');
-    expect(denseChunk.requiredVersion).toBe('0.0.0');
-  });
-
-  it('treats any package starting with the prefix as a chunk (keyed by its full name)', () => {
-    const result = densifyExternals([flat(CHUNK_PREFIX, 'nf-internal.js')], new Map());
-
-    expect(result).toHaveLength(1);
-    const dense = result[0] as DenseSharedInfo;
-    expect(dense.packageName).toBe(CHUNK_PREFIX);
-    expect(dense.entries).toEqual({ [CHUNK_PREFIX]: 'nf-internal.js' });
   });
 
   it('splits divergent metadata into separate dense objects sharing packageName', () => {
@@ -275,16 +233,15 @@ describe('densifyExternals', () => {
     ]);
   });
 
-  it('never emits outFileName on a dense object and never entries on a flat one', () => {
-    const chunk = flat(`${CHUNK_PREFIX}/chunk-x`, 'chunk-x.js');
-    const result = densifyExternals([flat('tslib', 'tslib.js'), chunk], new Map());
+  it('emits only dense objects, never an outFileName', () => {
+    const result = densifyExternals(
+      [flat('tslib', 'tslib.js'), flat('rxjs', 'rxjs.js')],
+      new Map()
+    );
 
     for (const entry of result) {
-      if ('entries' in entry) {
-        expect('outFileName' in entry).toBe(false);
-      } else {
-        expect('entries' in entry).toBe(false);
-      }
+      expect(entry).toHaveProperty('entries');
+      expect(entry).not.toHaveProperty('outFileName');
     }
   });
 
@@ -302,23 +259,18 @@ describe('densifyExternals', () => {
     expect(result[0]).toEqual(dense);
   });
 
-  it('preserves first-seen order across mixed dense groups and chunks', () => {
-    const chunk = flat(`${CHUNK_PREFIX}/c1`, 'c1.js');
+  it('preserves first-seen order across dense groups', () => {
     const result = densifyExternals(
       [
         flat('tslib', 'tslib.js'),
-        chunk,
+        flat('rxjs', 'rxjs.js'),
         flat('@angular/common', 'common.js'),
         flat('@angular/common/http', 'common-http.js'),
       ],
       new Map()
     );
 
-    expect(result.map(r => ('entries' in r ? Object.keys(r.entries)[0] : r.packageName))).toEqual([
-      'tslib',
-      `${CHUNK_PREFIX}/c1`,
-      '@angular/common',
-    ]);
+    expect(result.map(r => r.packageName)).toEqual(['tslib', 'rxjs', '@angular/common']);
   });
 });
 

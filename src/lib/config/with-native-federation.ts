@@ -63,8 +63,8 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
     features: {
       mappingVersion,
       ignoreUnusedDeps: config.features?.ignoreUnusedDeps ?? true,
-      denseChunking: config.features?.denseChunking ?? false,
-      denseExternals: config.features?.denseExternals ?? false,
+      denseChunking: true,
+      denseExternals: true,
       integrityHashes: config.features?.integrityHashes ?? false,
       synthesizeCjsExports: config.features?.synthesizeCjsExports ?? true,
       strictImports: config.features?.strictImports ?? false,
@@ -76,7 +76,6 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
     }),
   };
 
-  warnPreloadWithoutDenseChunking(normalized);
   return normalized;
 }
 
@@ -211,18 +210,6 @@ function warnPreloadInSharedBundle(shared: NormalizedSharedExternalsConfig): voi
     `Shared externals ${listed(keys)} set preload, but are built in a bundle with other ` +
       `packages (the combined shared bundle or a pool), so the runtime preloads the chunks of ` +
       `every package in it. Give them a bundle of their own with build: 'package'.`
-  );
-}
-
-// Without dense chunking, remoteEntry.json lists no chunks per bundle for the runtime to preload.
-function warnPreloadWithoutDenseChunking(normalized: NormalizedFederationConfig): void {
-  if (normalized.features.denseChunking) return;
-  const packages = preloadedPackages(normalized.shared);
-  if (packages.length === 0) return;
-  logger.warn(
-    `Shared externals ${listed(packages)} set preload, but without features.denseChunking the ` +
-      `runtime preloads only their entry files, not their chunks. Enable features.denseChunking ` +
-      `to preload those too.`
   );
 }
 

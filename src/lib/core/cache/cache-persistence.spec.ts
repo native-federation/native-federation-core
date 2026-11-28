@@ -86,7 +86,7 @@ describe('getChecksumCore', () => {
   // to invalidate, even when it defaults off.
   it('distinguishes an explicitly disabled flag from an absent one', () => {
     const base = { react: ext('18') };
-    expect(getChecksumCore(io, base, '0', '1.0.0', { denseChunking: false })).not.toBe(
+    expect(getChecksumCore(io, base, '0', '1.0.0', { integrityHashes: false })).not.toBe(
       getChecksumCore(io, base, '0', '1.0.0', {})
     );
   });
@@ -127,19 +127,21 @@ describe('getChecksumCore', () => {
   it('is independent of feature-flag key insertion order', () => {
     const base = { react: ext('18') };
     expect(
-      getChecksumCore(io, base, '0', '1.0.0', { denseChunking: true, mappingVersion: false })
-    ).toBe(getChecksumCore(io, base, '0', '1.0.0', { mappingVersion: false, denseChunking: true }));
+      getChecksumCore(io, base, '0', '1.0.0', { integrityHashes: true, mappingVersion: false })
+    ).toBe(
+      getChecksumCore(io, base, '0', '1.0.0', { mappingVersion: false, integrityHashes: true })
+    );
   });
 
   it('matches a hand-computed sha256', () => {
     const expected = crypto
       .createHash('sha256')
-      .update('deps:react@18:dev=0:builder=2.0.0:features=denseChunking=1,mappingVersion=0')
+      .update('deps:react@18:dev=0:builder=2.0.0:features=integrityHashes=1,mappingVersion=0')
       .digest('hex');
     expect(
       getChecksumCore(io, { react: ext('18') }, '0', '2.0.0', {
         mappingVersion: false,
-        denseChunking: true,
+        integrityHashes: true,
       })
     ).toBe(expected);
   });

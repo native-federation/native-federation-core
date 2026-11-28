@@ -156,7 +156,6 @@ export async function bundleExposedAndMappingsCore(
     );
   };
 
-  const isDense = (chunks: boolean) => chunks && config.features.denseChunking;
   const exportedChunks: ChunkInfo = {};
   const written: string[] = [];
 
@@ -165,10 +164,10 @@ export async function bundleExposedAndMappingsCore(
     bundleName: string,
     resultMap: Record<string, string>,
     entries: string[],
-    dense: boolean
+    splits: boolean
   ) => {
     const { files, chunks } = finalizeBundleOutputs(io, resultMap, entries, {
-      dense,
+      splits,
       outdir: resolveOutputPath(fedOptions),
     });
     written.push(...files);
@@ -193,12 +192,12 @@ export async function bundleExposedAndMappingsCore(
         records.get(item.fileName)!,
         fedOptions
       );
-      if (isDense(plan.chunks)) mapping.bundle = plan.bundleName;
+      if (plan.chunks) mapping.bundle = plan.bundleName;
       sharedResult.push(mapping);
       files.push(distEntryFile);
     }
 
-    collectBundleOutputs(plan.bundleName, results, files, isDense(plan.chunks));
+    collectBundleOutputs(plan.bundleName, results, files, plan.chunks);
     logger.measure(start, `Bundling '${plan.bundleName}' shared mappings`);
   }
 
@@ -226,7 +225,7 @@ export async function bundleExposedAndMappingsCore(
     exposedFiles.push(distEntryFile);
   }
 
-  collectBundleOutputs(EXPOSED_BUNDLE, exposedResults, exposedFiles, isDense(config.chunks));
+  collectBundleOutputs(EXPOSED_BUNDLE, exposedResults, exposedFiles, config.chunks);
   if (exposes.length > 0) logger.measure(exposedStart, 'Bundling exposed modules');
 
   const outputPaths = [...new Set(written)];
@@ -284,10 +283,10 @@ function finalizeBundleOutputs(
   io: IoPort,
   resultMap: Record<string, string>,
   entries: string[],
-  { dense, outdir }: { dense: boolean; outdir: string }
+  { splits, outdir }: { splits: boolean; outdir: string }
 ): { files: string[]; chunks?: string[] } {
   const outputs = Object.values(resultMap);
-  if (!dense || entries.length === 0) return { files: [...entries, ...outputs] };
+  if (!splits || entries.length === 0) return { files: [...entries, ...outputs] };
 
   const chunks = outputs.filter(file => isScript(file));
   assertWrittenToOutdir(io, [...entries, ...chunks], outdir);

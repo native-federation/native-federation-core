@@ -82,8 +82,8 @@ function makeConfig(
     features: {
       mappingVersion: false,
       ignoreUnusedDeps: false,
-      denseChunking: false,
-      denseExternals: false,
+      denseChunking: true,
+      denseExternals: true,
       integrityHashes: false,
       synthesizeCjsExports: true,
       strictImports: false,
@@ -154,9 +154,10 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
           '@org/c/*': { singleton: true, strictVersion: false, build: 'package' },
         },
       });
-      const adapter = createFakeBuildAdapter();
+      const io = createMemoryIo();
+      const adapter = createFakeBuildAdapter({ io });
 
-      await bundleExposedAndMappingsCore({ adapter }, config, makeFedOptions(), []);
+      await bundleExposedAndMappingsCore({ adapter, io }, config, makeFedOptions(), []);
 
       expect(
         adapter.calls.setup.map(c => ({
@@ -561,13 +562,12 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     ["export * from './chunk-AAAAAAAA.js';\n"],
     ['export const l=()=>import(`./chunk-AAAAAAAA.js`);\n'],
   ])(
-    'names dense chunks after their content and points the rewritten entries at them: %s',
+    'names chunks after their content and points the rewritten entries at them: %s',
     async entryText => {
       const io = createMemoryIo();
       const config = makeConfig({
         exposes: { './Comp': { file: './src/comp.ts' } },
         chunks: true,
-        features: { ...makeConfig().features, denseChunking: true },
       });
       const adapter = createFakeBuildAdapter({
         results: () => {
@@ -598,12 +598,11 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
 
   // A chunk is a non-entry script the adapter reported: an entry, or a file left in the folder by
   // an earlier build, is no chunk and keeps its relative import.
-  it('rewrites only the reported chunks of a dense bundle', async () => {
+  it('rewrites only the reported chunks of a bundle', async () => {
     const io = createMemoryIo().setFile('/ws/dist/stale-AAAAAAAA.js', 'export const s = 1;\n');
     const config = makeConfig({
       exposes: { './Comp': { file: './src/comp.ts' }, './Other': { file: './src/other.ts' } },
       chunks: true,
-      features: { ...makeConfig().features, denseChunking: true },
     });
     const adapter = createFakeBuildAdapter({
       results: () => {
@@ -635,7 +634,6 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         '@org/a': { singleton: true, strictVersion: false, build: 'separate' },
       },
       chunks: true,
-      features: { ...makeConfig().features, denseChunking: true },
     });
     const io = createMemoryIo();
     const adapter = createFakeBuildAdapter({ io });
@@ -667,9 +665,10 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         '@org/a': { singleton: true, strictVersion: false, build: 'separate', chunks: false },
       },
     });
-    const adapter = createFakeBuildAdapter();
+    const io = createMemoryIo();
+    const adapter = createFakeBuildAdapter({ io });
 
-    await bundleExposedAndMappingsCore({ adapter }, config, makeFedOptions(), []);
+    await bundleExposedAndMappingsCore({ adapter, io }, config, makeFedOptions(), []);
 
     expect(adapter.calls.setup.map(c => [c.name, c.options.chunks])).toEqual([
       ['mapping-org_a', false],
@@ -687,7 +686,6 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
       sharedMappings: { './libs/foo': 'foo' },
       sharedMappingsConfig: { foo: { singleton: true, strictVersion: false, chunks: true } },
       chunks: false,
-      features: { ...makeConfig().features, denseChunking: true },
     });
     const adapter = createFakeBuildAdapter({
       results: name => {
@@ -722,7 +720,6 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
       exposes: { './Comp': { file: './src/comp.ts' } },
       sharedMappings: { './libs/foo': 'foo' },
       chunks: true,
-      features: { ...makeConfig().features, denseChunking: true },
     });
     // Adversarial fixture: a real bundler hashes a chunk's output bytes, so one name means one
     // set of bytes. Here both builds emit a differing chunk under one name, to pin that neither
@@ -775,80 +772,79 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         },
       });
 
-    const chunkedConfig = (denseChunking: boolean) =>
+    const chunkedConfig = () =>
       makeConfig({
         exposes: { './Comp': { file: './src/comp.ts' } },
         sharedMappings: { './libs/foo': 'foo' },
         chunks: true,
-        features: { ...makeConfig().features, denseChunking, integrityHashes: true },
+        features: { ...makeConfig().features, integrityHashes: true },
       });
 
     const names = (files: { fileName: string }[] = []) => files.map(f => f.fileName).sort();
     const scripts = (files: { fileName: string }[] = []) =>
       names(files).filter(f => f.endsWith('.js'));
 
-    it('reports non-dense mapping and exposed chunks among the written files', async () => {
+    it('reports mapping and exposed chunks among the written files', async () => {
       const io = createMemoryIo();
 
       const result = await bundleExposedAndMappingsCore(
         { adapter: chunkedFixture(io), io },
-        chunkedConfig(false),
+        chunkedConfig(),
         makeFedOptions(),
         []
       );
 
-      expect(names(result.outputFiles)).toEqual([
-        'Comp.js',
-        'Comp.js.map',
-        'chunk-EXPOSED1.js',
-        'chunk-EXPOSED1.js.map',
-        'chunk-MAPPING1.js',
-        'chunk-MAPPING1.js.map',
-        'foo.js',
-        'foo.js.map',
-      ]);
+      const [mappingChunk] = result.chunks!['mapping-bundle']!;
+      const [exposedChunk] = result.chunks!['mapping-or-exposed']!;
+      expect(names(result.outputFiles)).toEqual(
+        [
+          'Comp.js',
+          'Comp.js.map',
+          exposedChunk,
+          `${exposedChunk}.map`,
+          mappingChunk,
+          `${mappingChunk}.map`,
+          'foo.js',
+          'foo.js.map',
+        ].sort()
+      );
       expect(result.outputFiles!.every(f => f.platform === 'browser')).toBe(true);
-      // Not dense, so nothing is published as a chunk.
-      expect(result.chunks).toBeUndefined();
     });
 
-    it('hashes non-dense chunks into the integrity map', async () => {
+    it('hashes chunks into the integrity map', async () => {
       const io = createMemoryIo();
 
       const result = await bundleExposedAndMappingsCore(
         { adapter: chunkedFixture(io), io },
-        chunkedConfig(false),
+        chunkedConfig(),
         makeFedOptions(),
         []
       );
 
       expect(Object.keys(result.integrity!)).toEqual(
-        expect.arrayContaining(['chunk-MAPPING1.js', 'chunk-EXPOSED1.js'])
+        expect.arrayContaining(Object.values(result.chunks!).flat())
       );
     });
 
-    it.each([false, true])(
-      'keeps the integrity keys equal to the written scripts (denseChunking: %s)',
-      async denseChunking => {
-        const io = createMemoryIo();
-
-        const result = await bundleExposedAndMappingsCore(
-          { adapter: chunkedFixture(io), io },
-          chunkedConfig(denseChunking),
-          makeFedOptions(),
-          []
-        );
-
-        expect(Object.keys(result.integrity!).sort()).toEqual(scripts(result.outputFiles));
-      }
-    );
-
-    it('lists the content-renamed chunks, not the bundler names, when dense', async () => {
+    it('keeps the integrity keys equal to the written scripts', async () => {
       const io = createMemoryIo();
 
       const result = await bundleExposedAndMappingsCore(
         { adapter: chunkedFixture(io), io },
-        chunkedConfig(true),
+        chunkedConfig(),
+        makeFedOptions(),
+        []
+      );
+
+      expect(Object.keys(result.integrity!).sort()).toEqual(scripts(result.outputFiles));
+    });
+
+    it('lists the content-renamed chunks, not the bundler names', async () => {
+      const io = createMemoryIo();
+
+      const result = await bundleExposedAndMappingsCore(
+        { adapter: chunkedFixture(io), io },
+        chunkedConfig(),
         makeFedOptions(),
         []
       );
@@ -861,59 +857,42 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
       expect(names(result.outputFiles).every(f => io.isFile(`/ws/dist/${f}`))).toBe(true);
     });
 
-    it('leaves chunk names and entry imports untouched when not dense', async () => {
+    // A CSS import or a file-loader asset leaves a non-script output beside the chunks.
+    it('lists an emitted asset but never publishes or hashes it', async () => {
       const io = createMemoryIo();
+      const adapter = createFakeBuildAdapter({
+        results: () => {
+          io.setFile(
+            '/ws/dist/Comp.js',
+            "import './Comp.css';\nexport * from './chunk-AAAAAAAA.js';\n"
+          );
+          io.setFile('/ws/dist/chunk-AAAAAAAA.js', 'export const a = 1;\n');
+          io.setFile('/ws/dist/Comp.css', '.a{}');
+          return ['Comp.js', 'chunk-AAAAAAAA.js', 'Comp.css'].map(f => ({
+            fileName: `/ws/dist/${f}`,
+          }));
+        },
+      });
 
-      await bundleExposedAndMappingsCore(
-        { adapter: chunkedFixture(io), io },
-        chunkedConfig(false),
+      const result = await bundleExposedAndMappingsCore(
+        { adapter, io },
+        makeConfig({
+          exposes: { './Comp': { file: './src/comp.ts' } },
+          chunks: true,
+          features: { ...makeConfig().features, integrityHashes: true },
+        }),
         makeFedOptions(),
         []
       );
 
-      expect(io.readText('/ws/dist/Comp.js')).toBe("export * from './chunk-EXPOSED1.js';\n");
-      expect(io.isFile('/ws/dist/chunk-EXPOSED1.js')).toBe(true);
+      expect(names(result.outputFiles)).toContain('Comp.css');
+      expect(Object.values(result.chunks ?? {}).flat()).not.toContain('Comp.css');
+      expect(Object.keys(result.integrity!)).not.toContain('Comp.css');
+      expect(io.readText('/ws/dist/Comp.css')).toBe('.a{}');
+      expect(io.readText('/ws/dist/Comp.js')).toContain("import './Comp.css';");
     });
 
-    // A CSS import or a file-loader asset leaves a non-script output beside the chunks.
-    it.each([false, true])(
-      'lists an emitted asset but never publishes or hashes it (denseChunking: %s)',
-      async denseChunking => {
-        const io = createMemoryIo();
-        const adapter = createFakeBuildAdapter({
-          results: () => {
-            io.setFile(
-              '/ws/dist/Comp.js',
-              "import './Comp.css';\nexport * from './chunk-AAAAAAAA.js';\n"
-            );
-            io.setFile('/ws/dist/chunk-AAAAAAAA.js', 'export const a = 1;\n');
-            io.setFile('/ws/dist/Comp.css', '.a{}');
-            return ['Comp.js', 'chunk-AAAAAAAA.js', 'Comp.css'].map(f => ({
-              fileName: `/ws/dist/${f}`,
-            }));
-          },
-        });
-
-        const result = await bundleExposedAndMappingsCore(
-          { adapter, io },
-          makeConfig({
-            exposes: { './Comp': { file: './src/comp.ts' } },
-            chunks: true,
-            features: { ...makeConfig().features, denseChunking, integrityHashes: true },
-          }),
-          makeFedOptions(),
-          []
-        );
-
-        expect(names(result.outputFiles)).toContain('Comp.css');
-        expect(Object.values(result.chunks ?? {}).flat()).not.toContain('Comp.css');
-        expect(Object.keys(result.integrity!)).not.toContain('Comp.css');
-        expect(io.readText('/ws/dist/Comp.css')).toBe('.a{}');
-        expect(io.readText('/ws/dist/Comp.js')).toContain("import './Comp.css';");
-      }
-    );
-
-    it('keeps publishing an empty chunk list for a dense bundle without chunks', async () => {
+    it('keeps publishing an empty chunk list for a bundle without chunks', async () => {
       const io = createMemoryIo();
 
       const result = await bundleExposedAndMappingsCore(
@@ -921,7 +900,6 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         makeConfig({
           exposes: { './Comp': { file: './src/comp.ts' } },
           chunks: true,
-          features: { ...makeConfig().features, denseChunking: true },
         }),
         makeFedOptions(),
         []
@@ -943,7 +921,6 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
       const config = makeConfig({
         exposes: { './Comp': { file: './src/comp.ts' } },
         chunks: true,
-        features: { ...makeConfig().features, denseChunking: true },
       });
       const first = await bundleExposedAndMappingsCore(
         { adapter, io },
@@ -978,46 +955,42 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         []
       );
 
-      expect(names(result.outputFiles)).toEqual(['Comp.js', 'chunk-AAAAAAAA.js']);
+      const [chunk] = result.chunks!['mapping-or-exposed']!;
+      expect(names(result.outputFiles)).toEqual(['Comp.js', chunk].sort());
     });
 
-    // A name relative to outdir used to drop out of integrity without a word (non-dense) or fail
-    // with a bare ENOENT in the chunk rewrite (dense).
-    it.each([false, true])(
-      'rejects a relative fileName from the adapter (denseChunking: %s)',
-      async denseChunking => {
-        const io = createMemoryIo()
-          .setFile('/ws/dist/Comp.js', "export * from './chunk-AAAAAAAA.js';\n")
-          .setFile('/ws/dist/chunk-AAAAAAAA.js', 'export const a = 1;\n');
-        const adapter = createFakeBuildAdapter({
-          results: [{ fileName: 'Comp.js' }, { fileName: 'chunk-AAAAAAAA.js' }],
-        });
-        vi.spyOn(logger, 'error').mockImplementation(() => undefined);
+    // A name relative to outdir used to fail with a bare ENOENT in the chunk rewrite.
+    it('rejects a relative fileName from the adapter', async () => {
+      const io = createMemoryIo()
+        .setFile('/ws/dist/Comp.js', "export * from './chunk-AAAAAAAA.js';\n")
+        .setFile('/ws/dist/chunk-AAAAAAAA.js', 'export const a = 1;\n');
+      const adapter = createFakeBuildAdapter({
+        results: [{ fileName: 'Comp.js' }, { fileName: 'chunk-AAAAAAAA.js' }],
+      });
+      vi.spyOn(logger, 'error').mockImplementation(() => undefined);
 
-        await expect(
-          bundleExposedAndMappingsCore(
-            { adapter, io },
-            makeConfig({
-              exposes: { './Comp': { file: './src/comp.ts' } },
-              chunks: true,
-              features: { ...makeConfig().features, denseChunking, integrityHashes: true },
-            }),
-            makeFedOptions(),
-            []
-          )
-        ).rejects.toThrow("NFBuildAdapter.build returned a relative fileName 'Comp.js'");
-      }
-    );
+      await expect(
+        bundleExposedAndMappingsCore(
+          { adapter, io },
+          makeConfig({
+            exposes: { './Comp': { file: './src/comp.ts' } },
+            chunks: true,
+            features: { ...makeConfig().features, integrityHashes: true },
+          }),
+          makeFedOptions(),
+          []
+        )
+      ).rejects.toThrow("NFBuildAdapter.build returned a relative fileName 'Comp.js'");
+    });
 
-    const denseComp = makeConfig({
+    const chunkedComp = makeConfig({
       exposes: { './Comp': { file: './src/comp.ts' } },
       chunks: true,
-      features: { ...makeConfig().features, denseChunking: true },
     });
 
     // A chunk in assets/ would be renamed there and published under `chunks` by a name that is not
     // in the output folder.
-    it('rejects a dense chunk written into a subfolder of outdir', async () => {
+    it('rejects a chunk written into a subfolder of outdir', async () => {
       const io = createMemoryIo()
         .setFile('/ws/dist/Comp.js', "export * from './assets/chunk-AAAAAAAA.js';\n")
         .setFile('/ws/dist/assets/chunk-AAAAAAAA.js', 'export const a = 1;\n');
@@ -1029,7 +1002,7 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
       });
 
       await expect(
-        bundleExposedAndMappingsCore({ adapter, io }, denseComp, makeFedOptions(), [])
+        bundleExposedAndMappingsCore({ adapter, io }, chunkedComp, makeFedOptions(), [])
       ).rejects.toThrow(
         "NFBuildAdapter.build returned '/ws/dist/assets/chunk-AAAAAAAA.js', missing from outdir '/ws/dist'"
       );
@@ -1051,11 +1024,11 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
       });
       const fedOptions = makeFedOptions();
 
-      await bundleExposedAndMappingsCore({ adapter, io }, denseComp, fedOptions, []);
+      await bundleExposedAndMappingsCore({ adapter, io }, chunkedComp, fedOptions, []);
       await expect(
         bundleExposedAndMappingsCore(
           { adapter, io },
-          denseComp,
+          chunkedComp,
           fedOptions,
           [],
           ['/ws/src/comp.ts']
@@ -1105,7 +1078,7 @@ describe('mapping output without declared packages', () => {
   // Shaped like discussion #176: domain-named libraries that the name rule groups by their first
   // two segments, a library next to its own secondary, one mapping in each other build mode, and a
   // package whose entries land in two bundles (`@org/b` on its own, `@org/b/extra` in the default).
-  const config = (denseExternals: boolean, denseChunking: boolean) =>
+  const config = () =>
     makeConfig({
       chunks: true,
       sharedMappings: {
@@ -1122,34 +1095,24 @@ describe('mapping output without declared packages', () => {
         '@org/b': { ...cfg, build: 'separate' },
         '@org/c/*': { ...cfg, build: 'package' },
       },
-      features: { ...makeConfig().features, denseExternals, denseChunking },
     });
 
-  async function build(denseExternals: boolean, denseChunking: boolean) {
+  async function build() {
     const io = createMemoryIo();
     const adapter = createFakeBuildAdapter({ io });
     const fedOptions = makeFedOptions({ dev: false });
     const artifactInfo = await bundleExposedAndMappingsCore(
       { adapter, io },
-      config(denseExternals, denseChunking),
+      config(),
       fedOptions,
       []
     );
-    const info = assembleFederationInfo(
-      config(denseExternals, denseChunking),
-      fedOptions,
-      artifactInfo
-    );
+    const info = assembleFederationInfo(config(), fedOptions, artifactInfo);
     return { adapter, artifactInfo, info };
   }
 
-  it.each([
-    [false, false],
-    [false, true],
-    [true, false],
-    [true, true],
-  ])('plans the same bundles (denseExternals: %s, denseChunking: %s)', async (dx, dc) => {
-    const { adapter } = await build(dx, dc);
+  it('plans the bundles', async () => {
+    const { adapter } = await build();
 
     expect(
       adapter.calls.setup.map(c => [
@@ -1174,52 +1137,10 @@ describe('mapping output without declared packages', () => {
     ]);
   });
 
-  it.each([false, true])(
-    'publishes one flat record per mapping (denseChunking: %s)',
-    async denseChunking => {
-      const { info } = await build(false, denseChunking);
-      const bundle = (name: string) => (denseChunking ? { bundle: name } : {});
-
-      expect(
-        info.shared.map(s => ({
-          packageName: s.packageName,
-          ...('bundle' in s && { bundle: s.bundle }),
-        }))
-      ).toEqual([
-        { packageName: '@shared/components/table', ...bundle('mapping-bundle') },
-        { packageName: '@shared/components/collapse', ...bundle('mapping-bundle') },
-        { packageName: '@org/lib', ...bundle('mapping-bundle') },
-        { packageName: '@org/lib/testing', ...bundle('mapping-bundle') },
-        { packageName: '@org/b/extra', ...bundle('mapping-bundle') },
-        { packageName: '@org/b', ...bundle('mapping-org_b') },
-        { packageName: '@org/c/x', ...bundle('mapping-org_c') },
-        { packageName: '@org/c/y', ...bundle('mapping-org_c') },
-      ]);
-    }
-  );
-
-  it('groups dense records by the name rule', async () => {
-    const { info } = await build(true, false);
-
-    expect(info.shared.map(s => ('entries' in s ? [s.packageName, s.entries] : s))).toEqual([
-      [
-        '@shared/components',
-        {
-          '@shared/components/table': '_shared_components_table.js',
-          '@shared/components/collapse': '_shared_components_collapse.js',
-        },
-      ],
-      ['@org/lib', { '@org/lib': '_org_lib.js', '@org/lib/testing': '_org_lib_testing.js' }],
-      // One record although its entries were built in two bundles.
-      ['@org/b', { '@org/b/extra': '_org_b_extra.js', '@org/b': '_org_b.js' }],
-      ['@org/c', { '@org/c/x': '_org_c_x.js', '@org/c/y': '_org_c_y.js' }],
-    ]);
-  });
-
-  // With denseChunking the bundle is part of a record's metadata, so a package built in two
-  // bundles publishes two records under one name.
-  it('splits dense records by bundle with denseChunking', async () => {
-    const { info } = await build(true, true);
+  // The bundle is part of a record's metadata, so a package built in two bundles publishes two
+  // records under one name.
+  it('splits dense records by bundle', async () => {
+    const { info } = await build();
 
     expect(
       info.shared.map(s => ('entries' in s ? [s.packageName, s.bundle, Object.keys(s.entries)] : s))
@@ -1241,7 +1162,7 @@ describe('mapping output without declared packages', () => {
 // exact tsconfig key per entry point joined by one declaration.
 describe('mapping output with declared packages', () => {
   const pkg: NormalizedMappingConfig = { singleton: true, strictVersion: false };
-  const config = (denseExternals: boolean, denseChunking: boolean) =>
+  const config = () =>
     makeConfig({
       chunks: true,
       sharedMappings: {
@@ -1257,79 +1178,52 @@ describe('mapping output with declared packages', () => {
         '@shared/components/collapse': pkg,
         '@org/lib': pkg,
       },
-      features: { ...makeConfig().features, denseExternals, denseChunking },
     });
 
-  async function build(denseExternals: boolean, denseChunking: boolean) {
+  async function build() {
     const io = createMemoryIo();
     const adapter = createFakeBuildAdapter({ io });
     const fedOptions = makeFedOptions({ dev: false });
-    const cfg = config(denseExternals, denseChunking);
+    const cfg = config();
     const artifactInfo = await bundleExposedAndMappingsCore({ adapter, io }, cfg, fedOptions, []);
     return { adapter, info: assembleFederationInfo(cfg, fedOptions, artifactInfo) };
   }
 
-  const dense = [
-    [false, false],
-    [false, true],
-    [true, false],
-    [true, true],
-  ];
+  it('bundles declared packages with the other mappings', async () => {
+    const { adapter } = await build();
 
-  it.each(dense)(
-    'bundles declared packages with the other mappings (denseExternals: %s, denseChunking: %s)',
-    async (dx, dc) => {
-      const { adapter } = await build(dx, dc);
-
-      expect(
-        adapter.calls.setup.map(c => [
-          c.name,
-          c.options.chunks,
-          c.options.entryPoints.map(ep => ep.outName),
-        ])
-      ).toEqual([
+    expect(
+      adapter.calls.setup.map(c => [
+        c.name,
+        c.options.chunks,
+        c.options.entryPoints.map(ep => ep.outName),
+      ])
+    ).toEqual([
+      [
+        'mapping-bundle',
+        true,
         [
-          'mapping-bundle',
-          true,
-          [
-            '_shared_components_table.js',
-            '_shared_components_collapse.js',
-            '_org_lib.js',
-            '_org_lib_testing.js',
-            '_org_library.js',
-          ],
+          '_shared_components_table.js',
+          '_shared_components_collapse.js',
+          '_org_lib.js',
+          '_org_lib_testing.js',
+          '_org_library.js',
         ],
-      ]);
-    }
-  );
+      ],
+    ]);
+  });
 
-  it.each([false, true])(
-    'publishes one dense record per declared package (denseChunking: %s)',
-    async denseChunking => {
-      const { info } = await build(true, denseChunking);
+  it('publishes one dense record per declared package', async () => {
+    const { info } = await build();
 
-      expect(info.shared.map(s => ('entries' in s ? [s.packageName, s.entries] : s))).toEqual([
-        ['@shared/components/table', { '@shared/components/table': '_shared_components_table.js' }],
-        [
-          '@shared/components/collapse',
-          { '@shared/components/collapse': '_shared_components_collapse.js' },
-        ],
-        ['@org/lib', { '@org/lib': '_org_lib.js', '@org/lib/testing': '_org_lib_testing.js' }],
-        ['@org/library', { '@org/library': '_org_library.js' }],
-      ]);
-    }
-  );
-
-  // A flat record carries no package group (normalize warns about it).
-  it('keeps flat records per mapping', async () => {
-    const { info } = await build(false, true);
-
-    expect(info.shared.map(s => [s.packageName, 'bundle' in s && s.bundle])).toEqual([
-      ['@shared/components/table', 'mapping-bundle'],
-      ['@shared/components/collapse', 'mapping-bundle'],
-      ['@org/lib', 'mapping-bundle'],
-      ['@org/lib/testing', 'mapping-bundle'],
-      ['@org/library', 'mapping-bundle'],
+    expect(info.shared.map(s => ('entries' in s ? [s.packageName, s.entries] : s))).toEqual([
+      ['@shared/components/table', { '@shared/components/table': '_shared_components_table.js' }],
+      [
+        '@shared/components/collapse',
+        { '@shared/components/collapse': '_shared_components_collapse.js' },
+      ],
+      ['@org/lib', { '@org/lib': '_org_lib.js', '@org/lib/testing': '_org_lib_testing.js' }],
+      ['@org/library', { '@org/library': '_org_library.js' }],
     ]);
   });
 
