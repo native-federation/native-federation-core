@@ -226,7 +226,7 @@ lifetime.
 - `src/lib/core/characterisation.spec.ts` records what the shared and mapping selection publishes.
   A change to its snapshot cites an id from `INTENDED_DIFFS`
   (`src/lib/core/__test-helpers__/characterisation/intended-diffs.ts`), or it is a bug. A row an
-  intended diff flips is an assertion named after that id (`D2: …`).
+  intended diff covers is an assertion named after that id (`D2: …`).
 - CI runs the typecheck and the suite a second time on the TypeScript floor (last step of
   `verify.yml`). To repeat it locally, run the same commands, then
   `git checkout package.json pnpm-lock.yaml && pnpm install`.
