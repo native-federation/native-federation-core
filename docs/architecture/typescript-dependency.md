@@ -7,8 +7,9 @@
 - `typescript` is a regular dependency with a wide range, `>=5.0.0 <7`.
 - 5.0 is the lowest version that has the module resolution core relies on. TypeScript 7 ships
   without the JS API.
-- CI runs the suite a second time with the lowest version of the range installed, so the floor is
-  tested, not assumed. Raising the floor is a deliberate change to the range.
+- CI runs the typecheck and the suite a second time with the lowest version of the range
+  installed, so the floor is tested, not assumed: core's source must typecheck on the floor as
+  well as on the version the lockfile pins. Raising the floor is a deliberate change to the range.
 
 ## Why
 
@@ -27,7 +28,8 @@
 
 ## Limits
 
-- A TypeScript API newer than the floor fails the floor run only as far as the suite covers it.
+- A TypeScript API newer than the floor fails the floor typecheck when core's own source calls it;
+  an API reached in another way fails the floor run only as far as the suite covers it.
 - Supporting TypeScript 7 needs a different way to read tsconfigs, not a wider range.
 
 Enforced by: `.github/workflows/verify.yml`

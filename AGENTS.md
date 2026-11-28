@@ -45,7 +45,8 @@ This is a **single-package repository** published as `@softarc/native-federation
 - `pnpm build` → runs `node esbuild.config.mjs` (transpiles every `src/**/*.ts`
   to a mirrored `dist/**/*.js`, preserving `./*.js` import specifiers) then
   `tsc -p tsconfig.build.json` (emits matching `.d.ts` files only).
-- `pnpm typecheck` → `tsc -p tsconfig.build.json --noEmit`.
+- `pnpm typecheck` → `tsc -p tsconfig.build.json --noEmit --emitDeclarationOnly false` (TypeScript
+  5.0 rejects `--noEmit` next to `emitDeclarationOnly`).
 - `pnpm lint` → `eslint src`.
 - `pnpm test` → `vitest`, run in CI twice: as is and on the TypeScript floor.
 
@@ -220,8 +221,9 @@ lifetime.
 - Run with `pnpm test` (`vitest`).
 - `src/public-api.spec.ts` snapshots every entry point's exports. A surface change fails it until
   the snapshot is updated (`vitest -u`), so the change is reviewed as a diff.
-- CI runs the suite a second time on the TypeScript floor (last step of `verify.yml`). To repeat it
-  locally, run the same commands, then `git checkout package.json pnpm-lock.yaml && pnpm install`.
+- CI runs the typecheck and the suite a second time on the TypeScript floor (last step of
+  `verify.yml`). To repeat it locally, run the same commands, then
+  `git checkout package.json pnpm-lock.yaml && pnpm install`.
 - CI runs the suite on pushes to `main` and `v5-release` and on pull requests against either (a
   stacked PR is checked once it is retargeted), so a flaky spec blocks merges: fix it rather than
   retrying it.
