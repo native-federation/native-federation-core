@@ -6,7 +6,7 @@ import {
   replaceGlob,
   resolveExportsEntry,
 } from './exports-resolver.js';
-import type { PackageInfo } from '../../domain/utils/package-json.contract.js';
+import type { ExportEntry, PackageInfo } from '../../domain/utils/package-json.contract.js';
 
 const info: PackageInfo = { packageName: 'p', entryPoint: '/pkg', version: '1.0.0', esm: false };
 
@@ -28,6 +28,10 @@ describe('replaceGlob', () => {
       import: null,
       default: './a.js',
     });
+  });
+
+  it('keeps a scalar that is not a string as it is', () => {
+    expect(replaceGlob({ import: true } as unknown as ExportEntry, 'a')).toEqual({ import: true });
   });
 
   it('recurses into condition objects', () => {
@@ -180,6 +184,33 @@ describe('findOptimalExport with a null target', () => {
 
   it('is not exported under the condition that wins', () => {
     expect(findOptimalExport({ import: null, default: './d.js' }, info, 'browser')).toBe(
+      NOT_EXPORTED
+    );
+  });
+
+  // Node stops at `default: null` when no earlier condition matches; core used to try the next key.
+  it('is not exported when nothing matches before default: null', () => {
+    const target = { import: { node: './in.mjs' }, default: null };
+    expect(findOptimalExport(target, info, 'browser')).toBe(NOT_EXPORTED);
+  });
+
+  it('still takes a matching condition before default: null', () => {
+    expect(
+      findOptimalExport({ browser: './b.js', default: null }, info, 'browser')?.entryPoint
+    ).toBe(path.join('/pkg', './b.js'));
+  });
+});
+
+// Node rejects these as ERR_INVALID_PACKAGE_TARGET; core used to throw a TypeError on them.
+describe('findOptimalExport with a target that is not a string, array, null or object', () => {
+  it('is not exported under the condition that wins', () => {
+    const target = { import: true, default: './d.js' } as unknown as ExportEntry;
+    expect(findOptimalExport(target, info, 'browser')).toBe(NOT_EXPORTED);
+  });
+
+  it('is not exported as the whole exports field', () => {
+    const exports = 5 as unknown as ExportEntry;
+    expect(findOptimalExport(resolveExportsEntry(exports, '.'), info, 'browser')).toBe(
       NOT_EXPORTED
     );
   });

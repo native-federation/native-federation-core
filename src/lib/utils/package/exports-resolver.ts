@@ -6,8 +6,8 @@ export const NOT_EXPORTED = 'not-exported';
 export type NotExported = typeof NOT_EXPORTED;
 
 export function replaceGlob(target: ExportEntry, replacement: string): ExportEntry {
-  if (target === null || target === undefined) return target;
   if (typeof target === 'string') return target.split('*').join(replacement);
+  if (target === null || typeof target !== 'object') return target;
   if (Array.isArray(target)) return target.map(t => replaceGlob(t, replacement));
   return Object.entries(target).reduce(
     (a, [k, v]) => ({
@@ -23,7 +23,8 @@ export function replaceGlob(target: ExportEntry, replacement: string): ExportEnt
  * best target, preferring ESM and never taking the other platform's condition. Returns a
  * {@link PackageInfo} with `entryPoint` resolved relative to `info.entryPoint`, `undefined`
  * when no condition matches, or {@link NOT_EXPORTED} when the package blocks the entry
- * (`null`, a target outside the package, or an array none of whose elements resolves).
+ * (`null`, a target outside the package, a value that is not a string, array or object, an
+ * unmatched conditions object with `default: null`, or an array none of whose elements resolves).
  */
 export function findOptimalExport(
   target: ExportEntry,
@@ -40,7 +41,8 @@ export function findOptimalExport(
     };
   }
   if (target === null) return NOT_EXPORTED;
-  if (!target) return undefined;
+  if (target === undefined) return undefined;
+  if (typeof target !== 'object') return NOT_EXPORTED;
   if (Array.isArray(target)) {
     for (const candidate of target) {
       const result = findOptimalExport(candidate, info, platform, isESM);
@@ -66,12 +68,13 @@ export function findOptimalExport(
       : exportTypes.filter(e => e !== 'types' && e !== otherPlatform)[0];
   const secondBestExport: ExportEntry = target[secondBestEntry!];
 
-  return findOptimalExport(
+  const result = findOptimalExport(
     secondBestExport,
     info,
     platform,
     isESM ?? isESMExport(secondBestEntry!)
   );
+  return result === undefined && target['default'] === null ? NOT_EXPORTED : result;
 }
 
 // Node's definition of a valid target: package-relative, never leaving the package.

@@ -24,17 +24,18 @@
   key. A pattern may have text after its `*`, which the subpath must end with, and the part it
   matches is never empty. Every `*` in the target is replaced by that part. A string, an array or
   a conditions object without `.` keys is the package root's entry.
-- A valid target is a `./` path with no `.`, `..` or `node_modules` segment. A `null` target or an
-  invalid one, at the subpath or under the condition that wins, means the entry point is not
-  exported: core does not fall back to `module`, `main` or a conventional file, and the "No meta
-  data found" warning says the package's exports block it. An array target resolves to its first
-  element that resolves; a `null` or invalid element, also one under a nested condition, is
-  skipped. When no element resolves, it is not exported either.
+- A valid target is a `./` path with no `.`, `..` or `node_modules` segment; a number or boolean is
+  invalid. A `null` target or an invalid one, at the subpath or under the condition that wins,
+  means the entry point is not exported: core does not fall back to `module`, `main` or a
+  conventional file, and the "No meta data found" warning says the package's exports block it. An
+  array target resolves to its first element that resolves; a `null` or invalid element, also one
+  under a nested condition, is skipped. When no element resolves, it is not exported either.
 - The condition is picked as an ESM key, else `default`, else the first key that is not `types`.
-  A browser entry never takes a `node` key, nor a node entry a `browser` key. A shared entry uses
-  its own `platform`, in its bundle and in the unused-dependency scan; the scan reads a package
-  that is not shared, such as a transitive dependency, through the config's top-level `platform`
-  (`browser` when it sets none).
+  When that resolves nothing, a `default: null` means the entry point is not exported. A browser
+  entry never takes a `node` key, nor a node entry a `browser` key. A shared entry uses its own
+  `platform`, in its bundle and in the unused-dependency scan; the scan reads a package that is not
+  shared, such as a transitive dependency, through the config's top-level `platform` (`browser`
+  when it sets none).
 - Secondary entry points core expands from a shared package inherit its settings.
 - With `ignoreUnusedDeps` (the default), only the entry points the build reaches are published.
   A shared package nothing reaches is dropped; `keepAll` keeps every entry point of one that is
