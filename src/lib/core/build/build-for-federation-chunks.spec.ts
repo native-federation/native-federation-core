@@ -8,7 +8,6 @@ import type { NormalizedFederationOptions } from '../../domain/core/federation-o
 import type {
   DenseSharedInfo,
   FederationInfo,
-  SharedInfo,
 } from '../../domain/core/federation-info.contract.js';
 import { prepareSkipList } from '../../config/default-skip-list.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
@@ -172,8 +171,8 @@ function fileWith(marker: string): string {
 const exposedChunks = (info: FederationInfo) =>
   Object.fromEntries(info.exposes.map(e => [e.key, e.chunks]));
 
-const flatRecord = (info: FederationInfo, packageName: string) =>
-  info.shared.find(s => s.packageName === packageName) as SharedInfo;
+const record = (info: FederationInfo, packageName: string) =>
+  info.shared.find(s => s.packageName === packageName) as DenseSharedInfo;
 
 describe('buildForFederation — published chunk closures', () => {
   beforeEach(() => {
@@ -242,9 +241,9 @@ describe('buildForFederation — published chunk closures', () => {
   );
 
   it("lists a preload package's chunks under its bundle", async () => {
-    const { published } = await build({ denseChunking: true, denseExternals: false });
+    const { published } = await build({ denseChunking: true, denseExternals: true });
 
-    const bundle = flatRecord(published, 'chart-lib').bundle!;
+    const bundle = record(published, 'chart-lib').bundle!;
     expect(published.chunks?.[bundle]).toEqual(
       expect.arrayContaining([
         fileWith('chart-core'),
@@ -255,11 +254,10 @@ describe('buildForFederation — published chunk closures', () => {
   });
 
   it('publishes preload only on the packages configured with it', async () => {
-    const { published } = await build({ denseChunking: false, denseExternals: false });
+    const { published } = await build({ denseChunking: true, denseExternals: true });
 
-    expect(flatRecord(published, 'chart-lib').preload).toBe(true);
-    expect(flatRecord(published, 'chart-lib/extras').preload).toBe(true);
-    expect(flatRecord(published, 'tslib')).not.toHaveProperty('preload');
+    expect(record(published, 'chart-lib').preload).toBe(true);
+    expect(record(published, 'tslib')).not.toHaveProperty('preload');
   });
 
   it('keeps a dense preload record one record, without a list of its own', async () => {

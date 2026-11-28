@@ -99,7 +99,7 @@ function makeConfig(denseExternals: boolean): NormalizedFederationConfig {
     features: {
       mappingVersion: false,
       ignoreUnusedDeps: false,
-      denseChunking: false,
+      denseChunking: true,
       denseExternals,
       integrityHashes: false,
       synthesizeCjsExports: true,
@@ -188,7 +188,7 @@ describe('buildForFederation — build notification endpoint', () => {
   // decides whether a consuming browser opens an event stream at all.
   async function buildWith(overrides: Partial<NormalizedFederationOptions>) {
     const info = await buildForFederation(
-      makeConfig(false),
+      makeConfig(true),
       makeFedOptions(seededExternals(), overrides),
       []
     );
@@ -229,7 +229,7 @@ describe('buildForFederation — unwatched linked deps hint', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('hints once per build, with the config and options it was given', async () => {
-    const config = makeConfig(false);
+    const config = makeConfig(true);
     const fedOptions = makeFedOptions(seededExternals(), { watch: true });
 
     await buildForFederation(config, fedOptions, []);
@@ -262,7 +262,7 @@ describe('buildForFederation — output files (core#177)', () => {
       exposes: [],
       outputFiles: artifacts,
     });
-    const config = makeConfig(false);
+    const config = makeConfig(true);
     const fedOptions = makeFedOptions([]);
     bundled = {
       'browser-shared': { externals: [], outputFiles: [external[0]!] },
@@ -295,7 +295,7 @@ describe('buildForFederation — output files (core#177)', () => {
       exposes: [],
       outputFiles: [{ fileName: 'Comp.js', platform: 'browser' }],
     });
-    const config = makeConfig(false);
+    const config = makeConfig(true);
     config.features.strictImports = true;
 
     await expect(
@@ -327,7 +327,7 @@ describe('buildForFederation — output files (core#177)', () => {
       },
     };
 
-    await expect(buildForFederation(makeConfig(false), fedOptions, [])).rejects.toThrow(
+    await expect(buildForFederation(makeConfig(true), fedOptions, [])).rejects.toThrow(
       "remoteEntry.json names 'rxjs.js', missing from"
     );
     expect(writeFederationInfo).not.toHaveBeenCalled();
@@ -339,7 +339,7 @@ describe('buildForFederation — an aborted build', () => {
 
   it('keeps the externals of the last complete build', async () => {
     const fedOptions = makeFedOptions([flat('react', 'react.js')]);
-    await buildForFederation(makeConfig(false), fedOptions, []);
+    await buildForFederation(makeConfig(true), fedOptions, []);
 
     bundled = {
       'browser-shared': { externals: [flat('vue', 'vue.js')], outputFiles: [] },
@@ -348,7 +348,7 @@ describe('buildForFederation — an aborted build', () => {
     const controller = new AbortController();
     controller.abort();
     await expect(
-      buildForFederation(makeConfig(false), fedOptions, [], controller.signal)
+      buildForFederation(makeConfig(true), fedOptions, [], controller.signal)
     ).rejects.toThrow(/After browser-shared bundle/);
 
     expect(fedOptions.federationCache.externals).toEqual([flat('react', 'react.js')]);
@@ -370,7 +370,7 @@ describe('buildForFederation — an aborted build', () => {
       },
     };
 
-    await expect(buildForFederation(makeConfig(false), fedOptions, [])).rejects.toThrow(
+    await expect(buildForFederation(makeConfig(true), fedOptions, [])).rejects.toThrow(
       'bundle failed'
     );
 
@@ -382,10 +382,10 @@ describe('buildForFederation — an aborted build', () => {
   it('clears the incomplete mark once a run completes', async () => {
     const fedOptions = makeFedOptions([]);
     bundled = { 'separate-fails': async () => Promise.reject(new Error('bundle failed')) };
-    await expect(buildForFederation(makeConfig(false), fedOptions, [])).rejects.toThrow();
+    await expect(buildForFederation(makeConfig(true), fedOptions, [])).rejects.toThrow();
 
     bundled = { 'browser-shared': { externals: [flat('react', 'react.js')], outputFiles: [] } };
-    await buildForFederation(makeConfig(false), fedOptions, []);
+    await buildForFederation(makeConfig(true), fedOptions, []);
 
     expect(fedOptions.federationCache.sharedRunIncomplete).toBe(false);
     expect(fedOptions.federationCache.externals).toEqual([flat('react', 'react.js')]);

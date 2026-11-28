@@ -3,9 +3,9 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import type {
+  DenseSharedInfo,
   FederationInfo,
   OutputFile,
-  SharedInfo,
 } from '../../domain/core/federation-info.contract.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedExternalConfig } from '../../domain/config/external-config.contract.js';
@@ -18,14 +18,14 @@ import { findUnresolvedImportsCore, validateBareImports } from './validate-bare-
 const OUT = path.resolve('/ws/dist');
 const out = (file: string) => path.join(OUT, file);
 
-function shared(packageName: string, outFileName: string): SharedInfo {
+function shared(packageName: string, outFileName: string): DenseSharedInfo {
   return {
     singleton: true,
     strictVersion: true,
     requiredVersion: '^1.0.0',
     version: '1.0.0',
     packageName,
-    outFileName,
+    entries: { [packageName]: outFileName },
   };
 }
 
@@ -57,8 +57,8 @@ function makeConfig(
     features: {
       mappingVersion: false,
       ignoreUnusedDeps: true,
-      denseChunking: false,
-      denseExternals: false,
+      denseChunking: true,
+      denseExternals: true,
       integrityHashes: false,
       synthesizeCjsExports: true,
       strictImports: false,

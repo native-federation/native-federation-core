@@ -82,8 +82,8 @@ function makeConfig(
     features: {
       mappingVersion: false,
       ignoreUnusedDeps: false,
-      denseChunking: false,
-      denseExternals: false,
+      denseChunking: true,
+      denseExternals: true,
       integrityHashes: false,
       synthesizeCjsExports: true,
       strictImports: false,
@@ -154,9 +154,10 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
           '@org/c/*': { singleton: true, strictVersion: false, build: 'package' },
         },
       });
-      const adapter = createFakeBuildAdapter();
+      const io = createMemoryIo();
+      const adapter = createFakeBuildAdapter({ io });
 
-      await bundleExposedAndMappingsCore({ adapter }, config, makeFedOptions(), []);
+      await bundleExposedAndMappingsCore({ adapter, io }, config, makeFedOptions(), []);
 
       expect(
         adapter.calls.setup.map(c => ({
@@ -667,9 +668,10 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         '@org/a': { singleton: true, strictVersion: false, build: 'separate', chunks: false },
       },
     });
-    const adapter = createFakeBuildAdapter();
+    const io = createMemoryIo();
+    const adapter = createFakeBuildAdapter({ io });
 
-    await bundleExposedAndMappingsCore({ adapter }, config, makeFedOptions(), []);
+    await bundleExposedAndMappingsCore({ adapter, io }, config, makeFedOptions(), []);
 
     expect(adapter.calls.setup.map(c => [c.name, c.options.chunks])).toEqual([
       ['mapping-org_a', false],
@@ -787,43 +789,45 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     const scripts = (files: { fileName: string }[] = []) =>
       names(files).filter(f => f.endsWith('.js'));
 
-    it('reports non-dense mapping and exposed chunks among the written files', async () => {
+    it('reports mapping and exposed chunks among the written files', async () => {
       const io = createMemoryIo();
 
       const result = await bundleExposedAndMappingsCore(
         { adapter: chunkedFixture(io), io },
-        chunkedConfig(false),
+        chunkedConfig(true),
         makeFedOptions(),
         []
       );
 
-      expect(names(result.outputFiles)).toEqual([
-        'Comp.js',
-        'Comp.js.map',
-        'chunk-EXPOSED1.js',
-        'chunk-EXPOSED1.js.map',
-        'chunk-MAPPING1.js',
-        'chunk-MAPPING1.js.map',
-        'foo.js',
-        'foo.js.map',
-      ]);
+      const [mappingChunk] = result.chunks!['mapping-bundle']!;
+      const [exposedChunk] = result.chunks!['mapping-or-exposed']!;
+      expect(names(result.outputFiles)).toEqual(
+        [
+          'Comp.js',
+          'Comp.js.map',
+          exposedChunk,
+          `${exposedChunk}.map`,
+          mappingChunk,
+          `${mappingChunk}.map`,
+          'foo.js',
+          'foo.js.map',
+        ].sort()
+      );
       expect(result.outputFiles!.every(f => f.platform === 'browser')).toBe(true);
-      // Not dense, so nothing is published as a chunk.
-      expect(result.chunks).toBeUndefined();
     });
 
-    it('hashes non-dense chunks into the integrity map', async () => {
+    it('hashes chunks into the integrity map', async () => {
       const io = createMemoryIo();
 
       const result = await bundleExposedAndMappingsCore(
         { adapter: chunkedFixture(io), io },
-        chunkedConfig(false),
+        chunkedConfig(true),
         makeFedOptions(),
         []
       );
 
       expect(Object.keys(result.integrity!)).toEqual(
-        expect.arrayContaining(['chunk-MAPPING1.js', 'chunk-EXPOSED1.js'])
+        expect.arrayContaining(Object.values(result.chunks!).flat())
       );
     });
 
@@ -978,7 +982,8 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         []
       );
 
-      expect(names(result.outputFiles)).toEqual(['Comp.js', 'chunk-AAAAAAAA.js']);
+      const [chunk] = result.chunks!['mapping-or-exposed']!;
+      expect(names(result.outputFiles)).toEqual(['Comp.js', chunk].sort());
     });
 
     // A name relative to outdir used to drop out of integrity without a word (non-dense) or fail

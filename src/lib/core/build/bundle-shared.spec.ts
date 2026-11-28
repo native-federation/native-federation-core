@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { bundleSharedCore } from './bundle-shared.js';
+import { toChunkImport } from '../../domain/core/chunk.js';
 import { parseBuilderVersion, readBuilderPackageJson } from '../cache/cache-persistence.js';
 import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
 import {
@@ -106,8 +107,8 @@ function makeConfig(): NormalizedFederationConfig {
     features: {
       mappingVersion: false,
       ignoreUnusedDeps: false,
-      denseChunking: false,
-      denseExternals: false,
+      denseChunking: true,
+      denseExternals: true,
       integrityHashes: false,
       synthesizeCjsExports: true,
       strictImports: false,
@@ -1273,35 +1274,31 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
       return Object.assign(result, { adapter });
     };
 
-    it('publishes a chunk under a name derived from its content, scoped to this remote', async () => {
+    it('publishes a chunk under a name derived from its content', async () => {
       const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
 
-      const result = await chunkedBuild(mem, 'export const a = 1;\n', false);
+      const result = await chunkedBuild(mem, 'export const a = 1;\n', true);
 
-      const chunk = result.externals.find(e => e.packageName.startsWith('@nf-internal/'))!;
-      expect(chunk).toMatchObject({ singleton: false, strictVersion: false, version: '0.0.0' });
-      expect(chunk.outFileName).toMatch(/^chunk-[A-Z2-7]{8}\.js$/);
-      expect(chunk.outFileName).not.toBe('chunk-AAAAAAAA.js');
-      expect(chunk.packageName).toBe(`@nf-internal/${chunk.outFileName.replace(/\.js$/, '')}`);
-      expect(mem.isFile(path.join('/ws/dist', chunk.outFileName))).toBe(true);
-      expect(mem.isFile(path.join('/ws/dist', `${chunk.outFileName}.map`))).toBe(true);
+      const [chunk] = result.chunks!['shared']!;
+      expect(mem.isFile(path.join('/ws/dist', chunk!))).toBe(true);
+      expect(mem.isFile(path.join('/ws/dist', `${chunk}.map`))).toBe(true);
       expect(mem.isFile('/ws/dist/chunk-AAAAAAAA.js')).toBe(false);
 
       const entry = mem.readText(path.join('/ws/dist', result.externals[0]!.outFileName));
-      expect(entry).toContain(chunk.packageName);
+      expect(entry).toContain(toChunkImport(chunk!));
       expect(entry).not.toContain('AAAAAAAA');
     });
 
     it('follows a backtick chunk import and leaves a relative CSS import as written', async () => {
       const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
 
-      const result = await chunkedBuild(mem, 'export const a = 1;\n', false, {
+      const result = await chunkedBuild(mem, 'export const a = 1;\n', true, {
         entryText: "import'./foo.css';export const l=()=>import(`./chunk-AAAAAAAA.js`);\n",
       });
 
-      const chunk = result.externals.find(e => e.packageName.startsWith('@nf-internal/'))!;
+      const [chunk] = result.chunks!['shared']!;
       const entry = mem.readText(path.join('/ws/dist', result.externals[0]!.outFileName));
-      expect(entry).toContain(`import(\`${chunk.packageName}\`)`);
+      expect(entry).toContain(`import(\`${toChunkImport(chunk!)}\`)`);
       expect(entry).toContain("import'./foo.css'");
       expect(entry).not.toContain('AAAAAAAA');
     });
@@ -1356,11 +1353,11 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     it('reports every written file with the platform of its bundle', async () => {
       const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
 
-      const result = await chunkedBuild(mem, 'export const a = 1;\n', false, { platform: 'node' });
+      const result = await chunkedBuild(mem, 'export const a = 1;\n', true, { platform: 'node' });
 
-      const chunk = result.externals.find(e => e.packageName.startsWith('@nf-internal/'))!;
+      const [chunk] = result.chunks!['shared']!;
       expect(result.outputFiles.map(f => f.fileName).sort()).toEqual(
-        [result.externals[0]!.outFileName, chunk.outFileName, `${chunk.outFileName}.map`].sort()
+        [result.externals[0]!.outFileName, chunk!, `${chunk}.map`].sort()
       );
       expect(result.outputFiles.every(f => f.platform === 'node')).toBe(true);
       for (const { fileName } of result.outputFiles) {
@@ -1394,8 +1391,8 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
         const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
         const opts = { integrityHashes: true, cache: true, platform };
 
-        const fresh = await chunkedBuild(mem, 'export const a = 1;\n', false, opts);
-        const cached = await chunkedBuild(mem, 'export const a = 1;\n', false, opts);
+        const fresh = await chunkedBuild(mem, 'export const a = 1;\n', true, opts);
+        const cached = await chunkedBuild(mem, 'export const a = 1;\n', true, opts);
 
         expect(cached.adapter.calls.build).toHaveLength(0);
         expect(cached.outputFiles).toEqual(fresh.outputFiles);
@@ -1515,12 +1512,12 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
     it('recomputes the same integrity on a cache hit whose metadata has none', async () => {
       const mem = createMemoryIo().setFile(ROOT_PKG, '{}');
       const opts = { integrityHashes: true, cache: true };
-      const fresh = await chunkedBuild(mem, 'export const a = 1;\n', false, opts);
+      const fresh = await chunkedBuild(mem, 'export const a = 1;\n', true, opts);
       const metaFile = path.join('/cache', 'shared.meta.json');
       const { integrity: _dropped, ...meta } = JSON.parse(mem.readText(metaFile));
       mem.setFile(metaFile, JSON.stringify(meta));
 
-      const cached = await chunkedBuild(mem, 'export const a = 1;\n', false, opts);
+      const cached = await chunkedBuild(mem, 'export const a = 1;\n', true, opts);
 
       expect(cached.adapter.calls.build).toHaveLength(0);
       expect(cached.integrity).toEqual(fresh.integrity);
@@ -1699,8 +1696,7 @@ describe('bundleSharedCore (via injected io, repo and build adapter)', () => {
 
     const [a, b] = await Promise.all([bundle('a'), bundle('b')]);
 
-    const chunkOf = (result: typeof a) =>
-      result.externals.find(e => e.packageName !== 'a' && e.packageName !== 'b')!.outFileName;
+    const chunkOf = (result: typeof a) => Object.values(result.chunks!).flat()[0]!;
     expect(chunkOf(a)).toBe(chunkOf(b));
     expect(mem.isFile(path.join('/cache', 'browser-a', chunkOf(a)))).toBe(true);
     expect(mem.isFile(path.join('/cache', 'browser-b', chunkOf(b)))).toBe(true);

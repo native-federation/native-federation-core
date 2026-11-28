@@ -34,8 +34,8 @@ const makeConfig = (
   features: {
     mappingVersion: true,
     ignoreUnusedDeps: true,
-    denseChunking: false,
-    denseExternals: false,
+    denseChunking: true,
+    denseExternals: true,
     integrityHashes: false,
     synthesizeCjsExports: true,
     strictImports: false,
