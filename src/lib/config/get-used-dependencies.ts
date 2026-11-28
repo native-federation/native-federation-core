@@ -37,6 +37,7 @@ type UsedDependenciesConfig = {
   exposes?: Record<string, ExposeEntry>;
   sharedMappings: PathToImport;
   shared?: Record<string, { platform: 'browser' | 'node' }>;
+  platform?: 'browser' | 'node';
 };
 
 export function getUsedDependenciesFactory(
@@ -86,7 +87,13 @@ export function getUsedDependenciesFactoryCore(
     }
 
     return {
-      external: addTransientDeps(usedPackageNames, workspaceRoot, deps, config.shared ?? {}),
+      external: addTransientDeps(
+        usedPackageNames,
+        workspaceRoot,
+        deps,
+        config.shared ?? {},
+        config.platform ?? 'browser'
+      ),
       ...resolveUsedMappings(fileInfos, workspaceRoot, config.sharedMappings, deps.io),
     };
   };
@@ -110,7 +117,8 @@ function addTransientDeps(
   packages: Set<string>,
   workspaceRoot: string,
   deps: UsedDependenciesDeps,
-  shared: Record<string, { platform: 'browser' | 'node' }>
+  shared: Record<string, { platform: 'browser' | 'node' }>,
+  configPlatform: 'browser' | 'node'
 ) {
   const packagesAndPeers = new Set<string>([...packages]);
   const discovered = new Set<string>(packagesAndPeers);
@@ -123,7 +131,7 @@ function addTransientDeps(
       continue;
     }
 
-    const platform = shared[dep]?.platform ?? 'browser';
+    const platform = shared[dep]?.platform ?? configPlatform;
     const pInfo = tryGetPackageInfo(dep, workspaceRoot, deps.repo, platform);
 
     if (!pInfo) {

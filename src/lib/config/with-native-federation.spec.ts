@@ -139,6 +139,7 @@ describe('withNativeFederation', () => {
     });
 
     expect(result.shared['react'].platform).toBe('node');
+    expect(result.platform).toBe('node');
   });
 
   it('normalizes backslashes in shared keys to forward slashes', () => {

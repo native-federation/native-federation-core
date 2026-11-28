@@ -33,7 +33,8 @@
 - The condition is picked as an ESM key, else `default`, else the first key that is not `types`.
   A browser entry never takes a `node` key, nor a node entry a `browser` key. A shared entry uses
   its own `platform`, in its bundle and in the unused-dependency scan; the scan reads a package
-  that is not shared, such as a transitive dependency, through the browser key.
+  that is not shared, such as a transitive dependency, through the config's top-level `platform`
+  (`browser` when it sets none).
 - Secondary entry points core expands from a shared package inherit its settings.
 - With `ignoreUnusedDeps` (the default), only the entry points the build reaches are published.
   A shared package nothing reaches is dropped; `keepAll` keeps every entry point of one that is

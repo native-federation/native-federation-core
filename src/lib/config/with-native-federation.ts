@@ -70,6 +70,7 @@ export function withNativeFederation(config: FederationConfig): NormalizedFedera
       strictImports: config.features?.strictImports ?? false,
     },
     ...(config.shareScope && { shareScope: config.shareScope }),
+    ...(config.platform && { platform: config.platform }),
     ...(prefixes.length > 0 && {
       sharedMappingPackages: normalizeMappingConfigs(packages, mappingVersion),
     }),

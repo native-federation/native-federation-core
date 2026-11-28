@@ -80,12 +80,25 @@ describe('getUsedDependenciesFactoryCore', () => {
   });
 
   // Each shared package is scanned through the exports condition of its own platform; a
-  // package that is not shared, such as a transitive dependency, through the browser one.
+  // package that is not shared, such as a transitive dependency, through the config's platform,
+  // browser when the config sets none.
   it.each([
-    ['a node package', { pkg: { platform: 'node' as const } }, 'node-only', 'browser-only'],
-    ['a browser package', { pkg: { platform: 'browser' as const } }, 'browser-only', 'node-only'],
-    ['a package that is not shared', {}, 'browser-only', 'node-only'],
-  ])('scans %s through its own exports condition', (_, shared, kept, missed) => {
+    [
+      'a node package',
+      { pkg: { platform: 'node' as const } },
+      undefined,
+      'node-only',
+      'browser-only',
+    ],
+    [
+      'a browser package',
+      { pkg: { platform: 'browser' as const } },
+      'node' as const,
+      'browser-only',
+      'node-only',
+    ],
+    ['a package that is not shared', {}, undefined, 'browser-only', 'node-only'],
+  ])('scans %s through its own exports condition', (_, shared, platform, kept, missed) => {
     const deps = makeDeps(
       {
         'src/comp.ts': { imports: [], externalLibraries: ['pkg'], unresolvedImports: [] },
@@ -108,10 +121,47 @@ describe('getUsedDependenciesFactoryCore', () => {
       exposes: { './Comp': { file: 'src/comp.ts' } },
       sharedMappings: {},
       shared,
+      ...(platform && { platform }),
     });
 
     expect(used.external).toContain(kept);
     expect(used.external).not.toContain(missed);
+  });
+
+  it("scans a transitive dependency that is not shared through a node config's node condition", () => {
+    const deps = makeDeps(
+      {
+        'src/comp.ts': { imports: [], externalLibraries: ['srv'], unresolvedImports: [] },
+      } as unknown as ProjectData,
+      {
+        '/ws/node_modules/srv/package.json': JSON.stringify({
+          name: 'srv',
+          version: '1.0.0',
+          exports: './index.js',
+        }),
+        '/ws/node_modules/srv/index.js': "import 'pkg';",
+        '/ws/node_modules/pkg/package.json': JSON.stringify({
+          name: 'pkg',
+          version: '1.0.0',
+          exports: { '.': { node: './server.js', browser: './client.js' } },
+        }),
+        '/ws/node_modules/pkg/server.js': "import 'node-only';",
+        '/ws/node_modules/pkg/client.js': "import 'browser-only';",
+      }
+    );
+
+    const used = getUsedDependenciesFactoryCore(
+      deps,
+      '/ws'
+    )({
+      exposes: { './Comp': { file: 'src/comp.ts' } },
+      sharedMappings: {},
+      shared: { srv: { platform: 'node' } },
+      platform: 'node',
+    });
+
+    expect(used.external).toContain('node-only');
+    expect(used.external).not.toContain('browser-only');
   });
 
   it('resolves internal shared mappings from analyzed imports', () => {
