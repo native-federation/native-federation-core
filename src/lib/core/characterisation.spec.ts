@@ -817,4 +817,8 @@ describe('characterisation: exports resolution', () => {
   snapshotRow('E8', 'an array skips an element whose matching condition is null', () =>
     resolving('p', { '.': [{ import: null }, './index.js'] }, {})
   );
+
+  snapshotRow('E9', 'default: null blocks the entry when no other condition matches', () =>
+    resolving('p', { '.': { import: { node: './node.mjs' }, default: null } }, { 'node.mjs': '' })
+  );
 });
