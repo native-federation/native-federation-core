@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
 import {
   getPackageInfo,
-  tryGetPackageInfo,
   getVersionMaps,
   findDepPackageJson,
   installedVersions,
@@ -74,7 +73,6 @@ describe('package-info facade (with injected repository)', () => {
     const repo = createPackageJsonRepository(io);
 
     expect(getPackageInfo('lib', WS, repo, 'browser')).toBeNull();
-    expect(tryGetPackageInfo('lib', WS, repo, 'browser')).toBeNull();
 
     expect(warn).toHaveBeenCalledWith(
       'No meta data found for shared lib lib: its package.json exports blocks this entry point'
@@ -112,7 +110,6 @@ describe('package-info facade (with injected repository)', () => {
       ],
     };
 
-    expect(tryGetPackageInfo('lib', WS, repo, 'browser')).toBeNull();
     expect(getPackageInfo('lib', WS, repo, 'browser')).toBeNull();
     expect(warn).toHaveBeenCalledWith(
       'No meta data found for shared lib lib: its package.json exports blocks this entry point'
@@ -134,26 +131,9 @@ describe('package-info facade (with injected repository)', () => {
     const lib = path.join(WS, 'node_modules/lib');
 
     expect(getPackageInfo('lib', WS, repo, 'node')?.entryPoint).toBe(path.join(lib, 'server.js'));
-    expect(tryGetPackageInfo('lib', WS, repo, 'node')?.entryPoint).toBe(
-      path.join(lib, 'server.js')
-    );
-    expect(tryGetPackageInfo('lib', WS, repo, 'browser')?.entryPoint).toBe(
+    expect(getPackageInfo('lib', WS, repo, 'browser')?.entryPoint).toBe(
       path.join(lib, 'client.js')
     );
-  });
-
-  it('tryGetPackageInfo resolves identically but stays silent on failure', () => {
-    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-
-    expect(tryGetPackageInfo('react', WS, seededRepo(), 'browser')).toMatchObject({
-      packageName: 'react',
-    });
-    expect(
-      tryGetPackageInfo('react', WS, createPackageJsonRepository(createMemoryIo()), 'browser')
-    ).toBeNull();
-
-    expect(warn).not.toHaveBeenCalled();
-    warn.mockRestore();
   });
 });
 
@@ -190,7 +170,7 @@ describe('installedVersions', () => {
     const repo = createPackageJsonRepository(versionsIo());
 
     expect(installedVersions(['@scope/lib'], WS, repo)['@scope/lib']).toBe(
-      tryGetPackageInfo('@scope/lib', WS, repo, 'browser')?.version
+      getPackageInfo('@scope/lib', WS, repo, 'browser')?.version
     );
   });
 

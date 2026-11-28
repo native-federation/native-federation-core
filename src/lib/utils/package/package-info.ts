@@ -13,16 +13,6 @@ import { getVersionMaps as getVersionMapsFromRepo } from './version-maps.js';
 export { sharedPackageJsonRepository } from '../io/package-json-repository.js';
 export type { PackageInfo, VersionMap } from '../../domain/utils/package-json.contract.js';
 
-export function tryGetPackageInfo(
-  packageName: string,
-  workspaceRoot: string,
-  repo: PackageJsonRepository,
-  platform: 'browser' | 'node'
-): PackageInfo | null {
-  const info = resolveFromRoots(packageName, workspaceRoot, repo, platform);
-  return info === NOT_EXPORTED ? null : info;
-}
-
 export function getPackageInfo(
   packageName: string,
   workspaceRoot: string,
