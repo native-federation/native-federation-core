@@ -73,6 +73,38 @@ describe('resolveExportsEntry', () => {
     ).toEqual({ import: './esm/a.js', default: './cjs/a.js' });
   });
 
+  it('prefers an exact key over a pattern listed before it', () => {
+    expect(resolveExportsEntry({ './*': './dist/*.js', './sub': './sub.js' }, './sub')).toBe(
+      './sub.js'
+    );
+  });
+
+  it('prefers the pattern with the longest text before the asterisk', () => {
+    const exports = { './a/*': './a/*.js', './a/b/*': './ab/*.js' };
+    expect(resolveExportsEntry(exports, './a/b/c')).toBe('./ab/c.js');
+    expect(resolveExportsEntry(exports, './a/c')).toBe('./a/c.js');
+  });
+
+  it('breaks a tie on the text before the asterisk with the longer key', () => {
+    const exports = { './a/*': './raw/*', './a/*.js': './dist/*.mjs' };
+    expect(resolveExportsEntry(exports, './a/x.js')).toBe('./dist/x.mjs');
+    expect(resolveExportsEntry(exports, './a/x.css')).toBe('./raw/x.css');
+  });
+
+  it('matches the text after the asterisk as a suffix', () => {
+    const exports = { './*.js': './dist/*.js' };
+    expect(resolveExportsEntry(exports, './feature.js')).toBe('./dist/feature.js');
+    expect(resolveExportsEntry(exports, './feature')).toBeUndefined();
+  });
+
+  it('does not match the package root against "./*"', () => {
+    expect(resolveExportsEntry({ './*': './dist/*.js' }, '.')).toBeUndefined();
+  });
+
+  it('does not match a pattern with an empty part', () => {
+    expect(resolveExportsEntry({ './a/*': './a/*.js' }, './a/')).toBeUndefined();
+  });
+
   it('returns undefined without exports', () => {
     expect(resolveExportsEntry(undefined, './sub')).toBeUndefined();
   });

@@ -55,28 +55,42 @@ export function findOptimalExport(
   return findOptimalExport(secondBestExport, info, isESM ?? isESMExport(secondBestEntry!));
 }
 
-/**
- * Find the `exports` field entry matching a secondary subpath (e.g. `./sub`),
- * expanding subpath-pattern (`*`) entries. Returns `undefined` when no key matches.
- */
+// Node's PACKAGE_EXPORTS_RESOLVE key order: an exact key, else the pattern with the longest text
+// before `*`, ties to the longer key.
 export function resolveExportsEntry(
   exports: Record<string, ExportEntry> | undefined,
   relSecondaryPath: string
 ): ExportEntry {
-  const exportsKey = Object.keys(exports ?? {}).find(e => {
-    if (e === relSecondaryPath) return true;
-    if (e === './*') return true;
-    if (!e.endsWith('*')) return false;
-    const globPath = e.substring(0, e.length - 1);
-    return relSecondaryPath.startsWith(globPath);
-  });
+  if (!exports) return undefined;
+  if (relSecondaryPath in exports) return exports[relSecondaryPath];
 
-  if (!exportsKey || !exports) return undefined;
-
-  let entry = exports[exportsKey];
-  if (exportsKey.endsWith('*')) {
-    const replacement = relSecondaryPath.substring(exportsKey.length - 1);
-    entry = replaceGlob(entry, replacement);
+  let bestKey: string | undefined;
+  for (const key of Object.keys(exports)) {
+    if (!matchesPattern(key, relSecondaryPath)) continue;
+    if (bestKey && outranks(bestKey, key)) continue;
+    bestKey = key;
   }
-  return entry;
+  if (!bestKey) return undefined;
+
+  const star = bestKey.indexOf('*');
+  const suffixLength = bestKey.length - star - 1;
+  return replaceGlob(
+    exports[bestKey],
+    relSecondaryPath.slice(star, relSecondaryPath.length - suffixLength)
+  );
+}
+
+// The matched part is never empty, hence the length check.
+function matchesPattern(key: string, subpath: string): boolean {
+  const star = key.indexOf('*');
+  if (star < 0 || star !== key.lastIndexOf('*')) return false;
+  return (
+    subpath.length >= key.length &&
+    subpath.startsWith(key.slice(0, star)) &&
+    subpath.endsWith(key.slice(star + 1))
+  );
+}
+
+function outranks(a: string, b: string): boolean {
+  return (a.indexOf('*') - b.indexOf('*') || a.length - b.length) >= 0;
 }
