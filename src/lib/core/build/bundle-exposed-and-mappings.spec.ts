@@ -13,6 +13,20 @@ import type {
   NormalizedMappingConfig,
 } from '../../domain/config/federation-config.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
+import type { ArtifactInfo } from '../../domain/core/federation-info.contract.js';
+
+// The chunk files a build wrote: every script that is not an entry.
+const chunkFiles = ({ outputFiles = [], exposes, mappings }: ArtifactInfo) => {
+  const entries = new Set([...exposes, ...mappings].map(e => e.outFileName));
+  return outputFiles
+    .map(f => f.fileName)
+    .filter(f => f.endsWith('.js') && !entries.has(f))
+    .sort();
+};
+
+// The chunk an entry imports, by the file name its `@nf-internal` import stands for.
+const importedChunk = (io: ReturnType<typeof createMemoryIo>, entryFile: string) =>
+  /@nf-internal\/(chunk-[A-Z2-7]{8})/.exec(io.readText(entryFile))![1] + '.js';
 
 describe('getMappingVersionCore', () => {
   it('returns the version from the nearest package.json walking up', () => {
@@ -584,7 +598,7 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         []
       );
 
-      const [chunk] = result.chunks!['mapping-or-exposed']!;
+      const [chunk] = chunkFiles(result);
       expect(chunk).toMatch(/^chunk-[A-Z2-7]{8}\.js$/);
       expect(chunk).not.toBe('chunk-AAAAAAAA.js');
       expect(io.isFile(`/ws/dist/${chunk}`)).toBe(true);
@@ -650,10 +664,8 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
       'mapping-bundle',
       'mapping-or-exposed',
     ]);
-    expect(result.mappings).toEqual([
-      expect.objectContaining({ packageName: '@org/a', bundle: 'mapping-org_a' }),
-      expect.objectContaining({ packageName: '@org/b', bundle: 'mapping-bundle' }),
-    ]);
+    expect(result.mappings.map(m => m.packageName)).toEqual(['@org/a', '@org/b']);
+    for (const mapping of result.mappings) expect(mapping).not.toHaveProperty('bundle');
   });
 
   it('sets up a mapping bundle with its own chunks and the exposed bundle with the global', async () => {
@@ -677,9 +689,9 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
     ]);
   });
 
-  // Dense chunking follows each bundle's own chunks, so a mapping that splits while the global
-  // setting does not still publishes its chunks by name.
-  it('publishes the chunks of a mapping that splits when the global setting does not', async () => {
+  // Chunk naming follows each bundle's own chunks, so a mapping that splits while the global
+  // setting does not still gets its chunks content-named and imported as `@nf-internal/*`.
+  it('names the chunks of a mapping that splits when the global setting does not', async () => {
     const io = createMemoryIo();
     const config = makeConfig({
       exposes: { './Comp': { file: './src/comp.ts' } },
@@ -706,12 +718,8 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
       []
     );
 
-    expect(Object.keys(result.chunks!)).toEqual(['mapping-bundle']);
-    expect(result.chunks!['mapping-bundle']).toEqual([
-      expect.stringMatching(/^chunk-[A-Z2-7]{8}\.js$/),
-    ]);
+    expect(chunkFiles(result)).toEqual([expect.stringMatching(/^chunk-[A-Z2-7]{8}\.js$/)]);
     expect(io.readText('/ws/dist/foo.js')).toMatch(/from '@nf-internal\/chunk-[A-Z2-7]{8}'/);
-    expect(result.mappings[0]).toMatchObject({ packageName: 'foo', bundle: 'mapping-bundle' });
   });
 
   it('keeps a mapping chunk and an exposed chunk in separate bundles', async () => {
@@ -741,13 +749,12 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
       []
     );
 
-    const [mappingChunk] = result.chunks!['mapping-bundle']!;
-    const [exposedChunk] = result.chunks!['mapping-or-exposed']!;
-    expect(mappingChunk).toMatch(/^chunk-[A-Z2-7]{8}\.js$/);
+    const mappingChunk = importedChunk(io, '/ws/dist/foo.js');
+    const exposedChunk = importedChunk(io, '/ws/dist/Comp.js');
     expect(exposedChunk).not.toBe(mappingChunk);
     expect(io.readText(`/ws/dist/${mappingChunk}`)).toBe('export const m = 1;\n');
     expect(io.readText(`/ws/dist/${exposedChunk}`)).toBe('export const e = 2;\n');
-    expect(result.mappings[0]).toMatchObject({ packageName: 'foo', bundle: 'mapping-bundle' });
+    expect(chunkFiles(result)).toEqual([mappingChunk, exposedChunk].sort());
   });
 
   describe('output files (core#177)', () => {
@@ -794,8 +801,8 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         []
       );
 
-      const [mappingChunk] = result.chunks!['mapping-bundle']!;
-      const [exposedChunk] = result.chunks!['mapping-or-exposed']!;
+      const mappingChunk = importedChunk(io, '/ws/dist/foo.js');
+      const exposedChunk = importedChunk(io, '/ws/dist/Comp.js');
       expect(names(result.outputFiles)).toEqual(
         [
           'Comp.js',
@@ -821,9 +828,7 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         []
       );
 
-      expect(Object.keys(result.integrity!)).toEqual(
-        expect.arrayContaining(Object.values(result.chunks!).flat())
-      );
+      expect(Object.keys(result.integrity!)).toEqual(expect.arrayContaining(chunkFiles(result)));
     });
 
     it('keeps the integrity keys equal to the written scripts', async () => {
@@ -849,7 +854,10 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         []
       );
 
-      const published = Object.values(result.chunks!).flat();
+      const published = [
+        importedChunk(io, '/ws/dist/foo.js'),
+        importedChunk(io, '/ws/dist/Comp.js'),
+      ];
       expect(scripts(result.outputFiles)).toEqual(['Comp.js', 'foo.js', ...published].sort());
       expect(names(result.outputFiles)).not.toContain('chunk-MAPPING1.js');
       // The renamed chunk carries its source map along.
@@ -886,13 +894,13 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
       );
 
       expect(names(result.outputFiles)).toContain('Comp.css');
-      expect(Object.values(result.chunks ?? {}).flat()).not.toContain('Comp.css');
       expect(Object.keys(result.integrity!)).not.toContain('Comp.css');
       expect(io.readText('/ws/dist/Comp.css')).toBe('.a{}');
       expect(io.readText('/ws/dist/Comp.js')).toContain("import './Comp.css';");
     });
 
-    it('keeps publishing an empty chunk list for a bundle without chunks', async () => {
+    // Each owner lists its own chunks once remoteEntry.json is assembled; a bundle lists none.
+    it('returns no chunk list per bundle', async () => {
       const io = createMemoryIo();
 
       const result = await bundleExposedAndMappingsCore(
@@ -905,7 +913,7 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         []
       );
 
-      expect(result.chunks).toEqual({ 'mapping-or-exposed': [] });
+      expect(result).not.toHaveProperty('chunks');
     });
 
     // An outdir that is not cleaned between builds can still hold a map from an earlier build.
@@ -922,13 +930,8 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         exposes: { './Comp': { file: './src/comp.ts' } },
         chunks: true,
       });
-      const first = await bundleExposedAndMappingsCore(
-        { adapter, io },
-        config,
-        makeFedOptions(),
-        []
-      );
-      const [chunk] = first.chunks!['mapping-or-exposed']!;
+      await bundleExposedAndMappingsCore({ adapter, io }, config, makeFedOptions(), []);
+      const chunk = importedChunk(io, '/ws/dist/Comp.js');
       io.setFile(`/ws/dist/${chunk}.map`, '{}');
 
       const result = await bundleExposedAndMappingsCore(
@@ -955,8 +958,10 @@ describe('bundleExposedAndMappingsCore (via injected build adapter)', () => {
         []
       );
 
-      const [chunk] = result.chunks!['mapping-or-exposed']!;
-      expect(names(result.outputFiles)).toEqual(['Comp.js', chunk].sort());
+      expect(names(result.outputFiles)).toEqual([
+        'Comp.js',
+        expect.stringMatching(/^chunk-[A-Z2-7]{8}\.js$/),
+      ]);
     });
 
     // A name relative to outdir used to fail with a bare ENOENT in the chunk rewrite.
@@ -1137,24 +1142,19 @@ describe('mapping output without declared packages', () => {
     ]);
   });
 
-  // The bundle is part of a record's metadata, so a package built in two bundles publishes two
-  // records under one name.
+  // A mapping package built in two chunked bundles publishes two records under one name, while the
+  // bundle that splits them stays off the wire.
   it('splits dense records by bundle', async () => {
     const { info } = await build();
 
-    expect(
-      info.shared.map(s => ('entries' in s ? [s.packageName, s.bundle, Object.keys(s.entries)] : s))
-    ).toEqual([
-      [
-        '@shared/components',
-        'mapping-bundle',
-        ['@shared/components/table', '@shared/components/collapse'],
-      ],
-      ['@org/lib', 'mapping-bundle', ['@org/lib', '@org/lib/testing']],
-      ['@org/b', 'mapping-bundle', ['@org/b/extra']],
-      ['@org/b', 'mapping-org_b', ['@org/b']],
-      ['@org/c', 'mapping-org_c', ['@org/c/x', '@org/c/y']],
+    expect(info.shared.map(s => [s.packageName, Object.keys(s.entries)])).toEqual([
+      ['@shared/components', ['@shared/components/table', '@shared/components/collapse']],
+      ['@org/lib', ['@org/lib', '@org/lib/testing']],
+      ['@org/b', ['@org/b/extra']],
+      ['@org/b', ['@org/b']],
+      ['@org/c', ['@org/c/x', '@org/c/y']],
     ]);
+    for (const record of info.shared) expect(record).not.toHaveProperty('bundle');
   });
 });
 

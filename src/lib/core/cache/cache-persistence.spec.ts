@@ -487,7 +487,7 @@ describe('prepareCacheCore', () => {
     expect(files.sort()).toEqual(
       ['/cache/.nf-cache.json', '/cache/foo.ABC.js'].map(f => path.resolve(f).replace(/\\/g, '/'))
     );
-    expect(stamp(io)).toEqual({ layout: 2, version: '4.8.0' });
+    expect(stamp(io)).toEqual({ layout: 3, version: '4.8.0' });
   });
 
   // A misdirected cachePath ('.' with project 'src') must not delete the folder it lands on.
@@ -498,7 +498,7 @@ describe('prepareCacheCore', () => {
 
     expect(io.isFile('/cache/main.ts')).toBe(true);
     expect(io.isFile('/cache/app/app.ts')).toBe(true);
-    expect(stamp(io)).toEqual({ layout: 2, version: '4.8.0' });
+    expect(stamp(io)).toEqual({ layout: 3, version: '4.8.0' });
   });
 
   it('keeps the cache when only the patch version changed', () => {
@@ -523,9 +523,10 @@ describe('prepareCacheCore', () => {
     expect(stamp(io).version).toBe('4.9.0');
   });
 
+  // Layout 2 metadata carries per-bundle chunk lists and record bundle names, which no build reads.
   it('purges the cache when the layout changed under the same minor', () => {
     const io = createMemoryIo()
-      .setFile('/cache/.nf-cache.json', JSON.stringify({ layout: 1, version: '4.8.0' }))
+      .setFile('/cache/.nf-cache.json', JSON.stringify({ layout: 2, version: '4.8.0' }))
       .setFile('/cache/x/a.js', 'A');
 
     prepareCacheCore(io, '/cache', '4.8.0');

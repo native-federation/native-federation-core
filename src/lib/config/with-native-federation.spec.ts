@@ -384,47 +384,17 @@ describe('withNativeFederation', () => {
     expect(result.shared['rxjs']).not.toHaveProperty('preload');
   });
 
-  describe('preload warnings', () => {
-    afterEach(() => vi.restoreAllMocks());
+  // Each record lists its own chunks, so a package in a bundle with others preloads only its own.
+  it.each([
+    ['the combined bundle', {}],
+    ['a pool bundle', { build: 'pool', pool: 'p1' }],
+  ] as const)('stays quiet about a preload package in %s', (_, cfg) => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
 
-    // The runtime preloads every chunk of the bundle a preload package is built in.
-    it.each([
-      ['the combined bundle', {}],
-      ['a pool bundle', { build: 'pool', pool: 'p1' }],
-    ] as const)('warns about a preload package in %s', (_, cfg) => {
-      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    withNativeFederation({ shared: { 'chart-lib': { ...cfg, preload: true } } });
 
-      withNativeFederation({
-        shared: { 'chart-lib': { ...cfg, preload: true } },
-      });
-
-      expect(warn).toHaveBeenCalledOnce();
-      expect(warn.mock.calls[0]![0]).toContain("'chart-lib'");
-      expect(warn.mock.calls[0]![0]).toContain("build: 'package'");
-    });
-
-    // extras inherits preload from chart-lib but stays in the combined bundle; naming the
-    // package would point at chart-lib, which already has a bundle of its own.
-    it('names the entry point in the combined bundle, not its package', () => {
-      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-
-      withNativeFederation({
-        shared: { 'chart-lib': { build: 'package', preload: true }, 'chart-lib/extras': {} },
-      });
-
-      expect(warn).toHaveBeenCalledOnce();
-      expect(warn.mock.calls[0]![0]).toContain("Shared externals 'chart-lib/extras' set preload");
-    });
-
-    it('stays quiet for a preload package with a bundle of its own', () => {
-      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-
-      withNativeFederation({
-        shared: { 'chart-lib': { build: 'package', preload: true }, rxjs: {} },
-      });
-
-      expect(warn).not.toHaveBeenCalled();
-    });
+    expect(warn).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
   });
 
   it('normalizes declared packages with the mapping defaults', () => {

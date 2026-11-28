@@ -1,15 +1,16 @@
 import * as path from 'path';
-import type { FederationInfo, OutputFile } from '../../domain/core/federation-info.contract.js';
+import type { OutputFile } from '../../domain/core/federation-info.contract.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
 import type { FileReaderPort } from '../../domain/utils/io-port.contract.js';
 import { resolveOutputPath } from '../../utils/output-path.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
 import { logger } from '../../utils/logger.js';
 import { formatList } from '../../utils/format-list.js';
+import type { DenseFederationInfo } from './densify-externals.js';
 
 export function validateOutputFiles(
   fedOptions: NormalizedFederationOptions,
-  federationInfo: FederationInfo,
+  federationInfo: DenseFederationInfo,
   files: OutputFile[]
 ): void {
   validateOutputFilesCore(nodeIo, resolveOutputPath(fedOptions), federationInfo, files);
@@ -20,7 +21,7 @@ export function validateOutputFiles(
 export function validateOutputFilesCore(
   io: FileReaderPort,
   outputDir: string,
-  federationInfo: FederationInfo,
+  federationInfo: DenseFederationInfo,
   files: OutputFile[]
 ): void {
   const missing = files
@@ -40,14 +41,13 @@ export function validateOutputFilesCore(
   logger.warn(`Output file(s) ${formatList(missing, 3)} ${cause}`);
 }
 
-function publishedFileNames(federationInfo: FederationInfo): Set<string> {
+function publishedFileNames(federationInfo: DenseFederationInfo): Set<string> {
   const names = new Set(federationInfo.exposes.map(exposed => exposed.outFileName));
   for (const shared of federationInfo.shared) {
-    if ('entries' in shared) Object.values(shared.entries).forEach(name => names.add(name));
-    else names.add(shared.outFileName);
+    Object.values(shared.entries).forEach(name => names.add(name));
   }
-  for (const chunks of Object.values(federationInfo.chunks ?? {})) {
-    chunks.forEach(chunk => names.add(chunk));
+  for (const owner of [...federationInfo.shared, ...federationInfo.exposes]) {
+    Object.values(owner.chunks ?? {}).forEach(({ file }) => names.add(file));
   }
   return names;
 }

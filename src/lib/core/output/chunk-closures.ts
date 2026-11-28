@@ -1,10 +1,7 @@
 import * as path from 'path';
 import type { ImportSpecifier } from 'es-module-lexer/minimal';
-import type {
-  ChunkMap,
-  FederationInfo,
-  OutputFile,
-} from '../../domain/core/federation-info.contract.js';
+import type { ChunkMap, OutputFile } from '../../domain/core/federation-info.contract.js';
+import type { DenseFederationInfo } from './densify-externals.js';
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
 import type { FileReaderPort } from '../../domain/utils/io-port.contract.js';
 import { CHUNK_PREFIX, toChunkImport } from '../../domain/core/chunk.js';
@@ -106,23 +103,25 @@ export function addChunkClosuresCore(
   io: FileReaderPort,
   outputDir: string,
   files: readonly OutputFile[],
-  federationInfo: FederationInfo
-): FederationInfo {
+  federationInfo: DenseFederationInfo
+): DenseFederationInfo {
   const graph = readImportGraph(io, outputDir, files);
+  const withChunks = <T extends object>(owner: T, roots: readonly string[]): T => {
+    const chunks = ownerChunks(roots, graph);
+    return Object.keys(chunks).length > 0 ? { ...owner, chunks } : owner;
+  };
 
   return {
     ...federationInfo,
-    exposes: federationInfo.exposes.map(e => {
-      const chunks = ownerChunks([e.outFileName], graph);
-      return Object.keys(chunks).length > 0 ? { ...e, chunks } : e;
-    }),
+    exposes: federationInfo.exposes.map(e => withChunks(e, [e.outFileName])),
+    shared: federationInfo.shared.map(s => withChunks(s, Object.values(s.entries))),
   };
 }
 
 export function addChunkClosures(
   fedOptions: NormalizedFederationOptions,
   files: readonly OutputFile[],
-  federationInfo: FederationInfo
-): FederationInfo {
+  federationInfo: DenseFederationInfo
+): DenseFederationInfo {
   return addChunkClosuresCore(nodeIo, resolveOutputPath(fedOptions), files, federationInfo);
 }

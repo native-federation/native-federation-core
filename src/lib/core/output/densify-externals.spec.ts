@@ -136,28 +136,6 @@ describe('densifyExternals', () => {
     expect(JSON.stringify(result)).not.toContain('mapping-');
   });
 
-  it('splits external secondaries planned into different bundles but merges those sharing one', () => {
-    const result = densifyExternals(
-      [
-        flat('rxjs', 'rxjs.js', { bundle: 'browser-rxjs' }),
-        flat('rxjs/operators', 'rxjs-operators.js', { bundle: 'browser-rxjs_operators' }),
-        flat('rxjs/ajax', 'rxjs-ajax.js', { bundle: 'browser-rxjs' }),
-      ],
-      new Map()
-    );
-
-    expect(result).toEqual([
-      expect.objectContaining({
-        bundle: 'browser-rxjs',
-        entries: { rxjs: 'rxjs.js', 'rxjs/ajax': 'rxjs-ajax.js' },
-      }),
-      expect.objectContaining({
-        bundle: 'browser-rxjs_operators',
-        entries: { 'rxjs/operators': 'rxjs-operators.js' },
-      }),
-    ]);
-  });
-
   it('splits secondaries in different pools', () => {
     const result = densifyExternals(
       [

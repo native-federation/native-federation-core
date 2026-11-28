@@ -3,12 +3,14 @@ export interface FederationInfo {
   name: string;
   exposes: ExposesInfo[];
   shared: Array<SharedInfo | DenseSharedInfo>;
-  chunks?: Record<string, string[]>;
   integrity?: IntegrityMap;
   buildNotificationsEndpoint?: string;
 }
 
-export type DenseSharedInfo = Omit<SharedInfo, 'outFileName'> & { entries: Record<string, string> };
+export type DenseSharedInfo = Omit<SharedInfo, 'outFileName'> & {
+  entries: Record<string, string>;
+  chunks?: ChunkMap;
+};
 
 export type SharedInfo = {
   singleton: boolean;
@@ -18,7 +20,6 @@ export type SharedInfo = {
   packageName: string;
   shareScope?: string;
   pool?: string;
-  bundle?: string;
   outFileName: string;
   // see docs/architecture/shared-packages.md
   preload?: true;
@@ -54,7 +55,6 @@ export interface ExposesInfo {
 export interface ArtifactInfo {
   mappings: SharedInfo[];
   exposes: ExposesInfo[];
-  chunks?: ChunkInfo;
   integrity?: IntegrityMap;
   outputFiles?: OutputFile[];
 }

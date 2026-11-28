@@ -25,7 +25,7 @@ describe('writeImportMapCore', () => {
     const io = createMemoryIo();
     writeImportMapCore(
       io,
-      { externals: [], chunks: { main: ['chunk-a.js'] } },
+      { externals: [], chunks: ['chunk-a.js'] },
       opts()
     );
     expect(readMap(io).imports).toEqual({ [toChunkImport('chunk-a.js')]: 'chunk-a.js' });

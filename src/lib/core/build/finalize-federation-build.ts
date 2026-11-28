@@ -17,9 +17,9 @@ export function finalizeFederationBuild(
   const federationInfo = assembleFederationInfo(config, fedOptions, artifactInfo);
   recordArtifactFiles(fedOptions.federationCache, artifactInfo);
   const outputFiles = collectOutputFiles(fedOptions.federationCache);
-  validateOutputFiles(fedOptions, federationInfo, outputFiles);
-  validateBareImports(config, fedOptions, federationInfo, outputFiles, { fullReport });
   const published = addChunkClosures(fedOptions, outputFiles, federationInfo);
+  validateOutputFiles(fedOptions, published, outputFiles);
+  validateBareImports(config, fedOptions, published, outputFiles, { fullReport });
   writeFederationOutputs(published, fedOptions, artifactInfo);
   return published;
 }

@@ -37,13 +37,6 @@ export function assembleFederationInfo(
         : undefined,
   };
 
-  if (federationCache.chunks) {
-    federationInfo.chunks = federationCache.chunks;
-  }
-  if (artifactInfo.chunks) {
-    federationInfo.chunks = { ...(federationInfo.chunks ?? {}), ...artifactInfo.chunks };
-  }
-
   if (config.features.integrityHashes) {
     federationInfo.integrity = {
       ...(federationCache.integrity ?? {}),

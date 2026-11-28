@@ -5,7 +5,7 @@ import type {
 } from '../../domain/core/federation-info.contract.js';
 import { inferPackageFromSecondary } from '../../utils/normalize.js';
 
-export type DenseFederationInfo = FederationInfo & { shared: DenseSharedInfo[] };
+export type DenseFederationInfo = Omit<FederationInfo, 'shared'> & { shared: DenseSharedInfo[] };
 
 function isDense(entry: SharedInfo | DenseSharedInfo): entry is DenseSharedInfo {
   return 'entries' in entry;

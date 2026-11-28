@@ -17,16 +17,12 @@ export function createFederationCache<TBundlerCache = unknown>(
 export function addExternalsToCache(
   cache: FederationCache,
   bundleName: string,
-  { externals, chunks, integrity, outputFiles, adapterData }: SharedBundleResult
+  { externals, integrity, outputFiles, adapterData }: SharedBundleResult
 ) {
   cache.externals.push(...externals);
   cache.externalFiles = { ...cache.externalFiles, [bundleName]: outputFiles };
   if (adapterData !== undefined) {
     cache.adapterData = { ...cache.adapterData, [bundleName]: adapterData };
-  }
-  if (chunks) {
-    if (!cache.chunks) cache.chunks = {};
-    cache.chunks = { ...cache.chunks, ...chunks };
   }
   if (integrity) {
     if (!cache.integrity) cache.integrity = {};
@@ -36,20 +32,18 @@ export function addExternalsToCache(
 
 type ExternalsState = Pick<
   FederationCache,
-  'externals' | 'chunks' | 'integrity' | 'externalFiles' | 'adapterData'
+  'externals' | 'integrity' | 'externalFiles' | 'adapterData'
 >;
 
-const pickExternals = ({
+const pickExternals = ({ externals, integrity, externalFiles, adapterData }: ExternalsState) => ({
   externals,
-  chunks,
   integrity,
   externalFiles,
   adapterData,
-}: ExternalsState) => ({ externals, chunks, integrity, externalFiles, adapterData });
+});
 
 const emptyExternals = (): ExternalsState => ({
   externals: [],
-  chunks: undefined,
   integrity: undefined,
   externalFiles: undefined,
   adapterData: undefined,

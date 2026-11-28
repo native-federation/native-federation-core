@@ -5,7 +5,6 @@ import type { NormalizedFederationConfig } from '../../domain/config/federation-
 import type { NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
 import type { FileReaderPort } from '../../domain/utils/io-port.contract.js';
 import type { FederationCache } from '../../domain/core/federation-cache.contract.js';
-import { toChunkImport } from '../../domain/core/chunk.js';
 import type { DenseFederationInfo } from './densify-externals.js';
 import { isScript } from '../../utils/script-file.js';
 import { isInSkipList } from '../../config/default-skip-list.js';
@@ -136,8 +135,8 @@ function declaredSpecifiers(federationInfo: DenseFederationInfo): Set<string> {
   for (const shared of federationInfo.shared) {
     Object.keys(shared.entries).forEach(key => declared.add(key));
   }
-  for (const chunks of Object.values(federationInfo.chunks ?? {})) {
-    chunks.forEach(chunk => declared.add(toChunkImport(chunk)));
+  for (const owner of [...federationInfo.shared, ...federationInfo.exposes]) {
+    Object.keys(owner.chunks ?? {}).forEach(key => declared.add(key));
   }
   return declared;
 }

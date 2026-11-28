@@ -46,7 +46,7 @@ describe('writeFederationOutputs', () => {
     writeFederationOutputs(federationInfo, options, { mappings: [] });
 
     expect(writeImportMap).toHaveBeenCalledWith(
-      { externals, chunks: undefined },
+      { externals, chunks: [] },
       options,
       undefined
     );
@@ -64,26 +64,81 @@ describe('writeFederationOutputs', () => {
     });
 
     expect(writeImportMap).toHaveBeenCalledWith(
-      { externals: [external, mapping], chunks: undefined },
+      { externals: [external, mapping], chunks: [] },
       options,
       undefined
     );
   });
 
-  // core#248: an exposed bundle imports its chunks as `@nf-internal/...`. Those live in the
-  // artifact's chunks, which only the assembled federation info merges with the cache's.
-  it('takes the chunks from the federation info, exposed and mapping bundles included', () => {
+  // core#248: an exposed bundle imports its chunks as `@nf-internal/...`, so the static import map
+  // needs every chunk an owner map lists, exposed modules and shared records alike.
+  it('takes the chunks from the owner maps of the federation info', () => {
     const options = fedOptions([]);
-    const chunks = {
-      'browser-angular_core': ['chunk-YSTJXBMP.js'],
-      'mapping-or-exposed': ['chunk-NUORN2G7.js'],
-    };
+    const federationInfo = {
+      name: 'mfe3',
+      shared: [
+        {
+          packageName: '@angular/core',
+          entries: { '@angular/core': 'core.js' },
+          chunks: { '@nf-internal/chunk-YSTJXBMP': { file: 'chunk-YSTJXBMP.js', initial: true } },
+        },
+        { packageName: 'rxjs', entries: { rxjs: 'rxjs.js' } },
+      ],
+      exposes: [
+        {
+          key: './Home',
+          outFileName: 'Home.js',
+          chunks: { '@nf-internal/chunk-NUORN2G7': { file: 'chunk-NUORN2G7.js' } },
+        },
+      ],
+    } as unknown as FederationInfo;
 
-    writeFederationOutputs({ name: 'mfe3', shared: [], exposes: [], chunks }, options, {
-      mappings: [],
-    });
+    writeFederationOutputs(federationInfo, options, { mappings: [] });
 
-    expect(writeImportMap).toHaveBeenCalledWith({ externals: [], chunks }, options, undefined);
+    expect(writeImportMap).toHaveBeenCalledWith(
+      {
+        externals: [],
+        chunks: ['chunk-NUORN2G7.js', 'chunk-YSTJXBMP.js'],
+      },
+      options,
+      undefined
+    );
+  });
+
+  // densify splits one package into several records by bundle group and metadata; each record's
+  // chunks must reach the import map, and a chunk two owners list appears once.
+  it('keeps the chunks of every record that shares a packageName', () => {
+    const options = fedOptions([]);
+    const federationInfo = {
+      name: 'mfe',
+      shared: [
+        {
+          packageName: '@org/ui',
+          entries: { '@org/ui/table': 'table.js' },
+          chunks: {
+            '@nf-internal/chunk-A': { file: 'chunk-A.js', initial: true },
+            '@nf-internal/chunk-C': { file: 'chunk-C.js', initial: true },
+          },
+        },
+        {
+          packageName: '@org/ui',
+          entries: { '@org/ui/button': 'button.js' },
+          chunks: {
+            '@nf-internal/chunk-B': { file: 'chunk-B.js', initial: true },
+            '@nf-internal/chunk-C': { file: 'chunk-C.js', initial: true },
+          },
+        },
+      ],
+      exposes: [],
+    } as unknown as FederationInfo;
+
+    writeFederationOutputs(federationInfo, options, { mappings: [] });
+
+    expect(writeImportMap).toHaveBeenCalledWith(
+      { externals: [], chunks: ['chunk-A.js', 'chunk-C.js', 'chunk-B.js'] },
+      options,
+      undefined
+    );
   });
 
   it('threads the integrity map through to the import map', () => {
@@ -95,7 +150,7 @@ describe('writeFederationOutputs', () => {
     });
 
     expect(writeImportMap).toHaveBeenCalledWith(
-      { externals: [], chunks: undefined },
+      { externals: [], chunks: [] },
       options,
       integrity
     );

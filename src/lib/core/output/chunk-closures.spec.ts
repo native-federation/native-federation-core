@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import * as path from 'path';
 import type {
+  DenseSharedInfo,
   ExposesInfo,
-  FederationInfo,
   OutputFile,
-  SharedInfo,
 } from '../../domain/core/federation-info.contract.js';
+import type { DenseFederationInfo } from './densify-externals.js';
 import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
 import { addChunkClosuresCore, ownerChunks, readImportGraph } from './chunk-closures.js';
 
@@ -200,22 +200,22 @@ describe('addChunkClosuresCore', () => {
   const exposed = (key: string, outFileName: string): ExposesInfo => ({ key, outFileName });
   const shared = (
     packageName: string,
-    outFileName: string,
-    extra: Partial<SharedInfo> = {}
-  ): SharedInfo => ({
+    entries: Record<string, string>,
+    extra: Partial<DenseSharedInfo> = {}
+  ): DenseSharedInfo => ({
     singleton: true,
     strictVersion: true,
     requiredVersion: '^1.0.0',
     version: '1.0.0',
     packageName,
-    outFileName,
+    entries,
     ...extra,
   });
 
-  function run(files: Record<string, string>, info: Partial<FederationInfo>) {
+  function run(files: Record<string, string>, info: Partial<DenseFederationInfo>) {
     const io = createMemoryIo();
     for (const [name, code] of Object.entries(files)) io.setFile(path.join(OUT, name), code);
-    const federationInfo: FederationInfo = { name: 'mfe', exposes: [], shared: [], ...info };
+    const federationInfo: DenseFederationInfo = { name: 'mfe', exposes: [], shared: [], ...info };
     return addChunkClosuresCore(io, OUT, browser(...Object.keys(files)), federationInfo);
   }
 
@@ -273,21 +273,43 @@ describe('addChunkClosuresCore', () => {
     expect(result.exposes[0]).not.toHaveProperty('chunks');
   });
 
-  // A preload package's chunks are its bundle's, which top-level `chunks` already lists.
-  it('leaves every shared record untouched, preload ones included', () => {
-    const external = shared('@angular/core', 'core.js', { preload: true });
-    const plain = shared('rxjs', 'rx.js');
+  // Shared and mapping records are owners like exposed modules: their roots are all of their entries,
+  // and a bare import of another package ends the walk.
+  it('lists the chunks of each shared record, initial over the union of its entries', () => {
+    const core = shared('@angular/core', {
+      '@angular/core': 'core.js',
+      '@angular/core/rx': 'rx.js',
+    });
     const result = run(
-      { 'core.js': `import './chunk-C.js';`, 'rx.js': '', 'chunk-C.js': '' },
-      { shared: [external, plain] }
+      {
+        'core.js': `import './chunk-C.js'; const l = () => import('./chunk-L.js');`,
+        'rx.js': `import '@angular/core'; import './chunk-R.js';`,
+        'chunk-C.js': '',
+        'chunk-L.js': '',
+        'chunk-R.js': '',
+      },
+      { shared: [core] }
     );
-    expect(result.shared[0]).toBe(external);
-    expect(result.shared[1]).toBe(plain);
+
+    expect(result.shared[0]).toEqual({
+      ...core,
+      chunks: {
+        '@nf-internal/chunk-C': { file: 'chunk-C.js', initial: true },
+        '@nf-internal/chunk-L': { file: 'chunk-L.js' },
+        '@nf-internal/chunk-R': { file: 'chunk-R.js', initial: true },
+      },
+    });
+  });
+
+  it('leaves a shared record that reaches no chunk as it is', () => {
+    const plain = shared('rxjs', { rxjs: 'rx.js' });
+    const result = run({ 'rx.js': '' }, { shared: [plain] });
+    expect(result.shared[0]).toBe(plain);
   });
 
   // Cached externals outlive a build; writing into them would leak one build's chunks into the next.
   it('does not mutate its input', () => {
-    const external = shared('@angular/core', 'core.js', { preload: true });
+    const external = shared('@angular/core', { '@angular/core': 'core.js' }, { preload: true });
     const expose = exposed('./Home', 'home.js');
     run(
       {
