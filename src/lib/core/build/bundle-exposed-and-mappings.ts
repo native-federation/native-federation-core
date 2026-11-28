@@ -7,7 +7,7 @@ import type {
   IntegrityMap,
   SharedInfo,
 } from '../../domain/core/federation-info.contract.js';
-import type { FileReaderPort, IoPort } from '../../domain/utils/io-port.contract.js';
+import type { IoPort } from '../../domain/utils/io-port.contract.js';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
 import { createBuildResultMap, popFromResultMap } from './build-result-map.js';
 import { computeIntegrityMapCore } from './compute-integrity.js';
@@ -25,11 +25,10 @@ import type {
 import { rewriteChunkImportsCore } from './rewrite-chunk-imports.js';
 import { renameChunksByContentCore } from './rename-chunks-by-content.js';
 import { getBuildAdapter } from './build-adapter.js';
-import { mappingPackageByImport, resolveMappingConfig } from '../../config/mapping-utils.js';
+import { mappingPackageByImport } from '../../config/mapping-utils.js';
 import { formatDifference } from '../../utils/format-list.js';
-import { applyAutoRequiredOptions } from '../../config/version-lookup.js';
-import type { AutoRequiredOptions } from '../../domain/config/external-config.contract.js';
 import { planMappingBundles } from './mapping-bundle-plan.js';
+import { mappingRecord, type MappingRecord } from './mapping-record.js';
 import {
   assertAbsoluteFileNames,
   assertWrittenToOutdir,
@@ -342,39 +341,6 @@ function toSharedMappingInfo(
   };
 }
 
-type MappingRecord = Omit<SharedInfo, 'packageName' | 'outFileName' | 'dev'>;
-
-function mappingRecord(
-  io: FileReaderPort,
-  mappedPath: string,
-  mappedImport: string,
-  config: NormalizedFederationConfig,
-  fedOptions: NormalizedFederationOptions
-): MappingRecord {
-  const mappingVersion = config.features.mappingVersion
-    ? getMappingVersionCore(io, mappedPath, fedOptions.workspaceRoot)
-    : '';
-
-  const mappingConfig = resolveMappingConfig(mappedImport, config);
-  const requiredVersionCfg = mappingConfig.requiredVersion;
-  // An explicit version drives requiredVersion too, the same way the detected one does.
-  const explicitVersion =
-    requiredVersionCfg && typeof requiredVersionCfg === 'object'
-      ? requiredVersionCfg.version
-      : undefined;
-  const asked = explicitVersion && explicitVersion !== 'auto' ? explicitVersion : undefined;
-  const version = asked ?? mappingConfig.version ?? mappingVersion;
-
-  return {
-    requiredVersion: mappingRequiredVersion(requiredVersionCfg, version),
-    singleton: mappingConfig.singleton,
-    strictVersion: mappingConfig.strictVersion,
-    version,
-    ...(mappingConfig.shareScope && { shareScope: mappingConfig.shareScope }),
-    ...(mappingConfig.pool && { pool: mappingConfig.pool }),
-  };
-}
-
 // The config is one per package by construction, but each entry point reads its version from its
 // own package.json. Checked before bundling, so a mismatch fails before anything is written.
 function assertOneRecordPerDeclaredPackage(
@@ -404,39 +370,5 @@ function assertOneRecordPerDeclaredPackage(
           `package.json versions.`
       );
     }
-  }
-}
-
-// '~' stays the default range for a mapping; see README 'Configuring shared mappings'.
-function mappingRequiredVersion(
-  cfg: string | AutoRequiredOptions | undefined,
-  version: string
-): string {
-  if (typeof cfg === 'string') return cfg;
-  if (version.length === 0) return '';
-  return applyAutoRequiredOptions(version, { range: cfg?.range ?? '~' });
-}
-
-export function getMappingVersionCore(
-  io: FileReaderPort,
-  fileName: string,
-  workspaceRoot: string
-): string {
-  const resolvedRoot = path.resolve(workspaceRoot);
-  let dir = path.dirname(path.resolve(fileName));
-
-  while (true) {
-    const candidate = path.join(dir, 'package.json');
-    if (io.isFile(candidate)) {
-      try {
-        const json = JSON.parse(io.readText(candidate));
-        if (typeof json.version === 'string' && json.version) return json.version;
-      } catch (err: unknown) {
-        logger.warn(`[getMappingVersion] Failed to parse ${candidate}: ${(err as Error).message}`);
-      }
-    }
-    const parent = path.dirname(dir);
-    if (dir === resolvedRoot || parent === dir) return '';
-    dir = parent;
   }
 }

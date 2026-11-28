@@ -1,11 +1,6 @@
 import * as path from 'path';
 import type { NormalizedFederationConfig } from '../../domain/config/federation-config.contract.js';
-import {
-  sharedPackageJsonRepository,
-  getPackageInfo,
-  installedVersions,
-  type PackageInfo,
-} from '../../utils/package/package-info.js';
+import { sharedPackageJsonRepository, type PackageInfo } from '../../utils/package/package-info.js';
 import type { PackageJsonRepository } from '../../domain/utils/package-json.contract.js';
 import type {
   ChunkInfo,
@@ -17,7 +12,8 @@ import type { HashPort, IoPort } from '../../domain/utils/io-port.contract.js';
 import { type NormalizedFederationOptions } from '../../domain/core/federation-options.contract.js';
 import { logger } from '../../utils/logger.js';
 import { nodeIo } from '../../utils/io/node-io-adapter.js';
-import { DEFAULT_EXTERNAL_LIST } from './default-external-list.js';
+import { sharedBundleExternals } from './default-external-list.js';
+import { buildResult, resolveSharedVersions, sharedPackageInfos } from './shared-record.js';
 import { rewriteChunkImportsCore, SOURCE_MAP_COMMENT } from './rewrite-chunk-imports.js';
 import { renameChunksByContentCore } from './rename-chunks-by-content.js';
 import { hashBuildMetadata, hashEntryContent } from '../../utils/hash.js';
@@ -121,10 +117,7 @@ export async function bundleSharedCore(
     deps.repo
   );
 
-  const resolvedVersions = installedVersions(Object.keys(sharedBundles), folder, deps.repo);
-  for (const [key, cfg] of Object.entries(sharedBundles)) {
-    if (cfg.packageInfo?.version) resolvedVersions[key] = cfg.packageInfo.version;
-  }
+  const resolvedVersions = resolveSharedVersions(sharedBundles, folder, deps.repo);
   warnUnversionedPackageInfos(sharedBundles, resolvedVersions);
 
   const checksum = getChecksumCore(
@@ -147,13 +140,11 @@ export async function bundleSharedCore(
     fedOptions.dev
   );
 
-  // If we build for the browser and don't remote unused deps from the shared config,
-  // we need to exclude typical node libs to avoid compilation issues
-  const useDefaultExternalList =
-    buildOptions.platform === 'browser' && !config.features.ignoreUnusedDeps;
-
-  const additionalExternals = useDefaultExternalList ? DEFAULT_EXTERNAL_LIST : [];
-  const external = [...additionalExternals, ...externals];
+  const external = sharedBundleExternals(
+    buildOptions.platform,
+    config.features.ignoreUnusedDeps,
+    externals
+  );
 
   if (fedOptions?.cacheExternalArtifacts) {
     const cacheMetadata = bundleCache.getMetadata(checksum);
@@ -186,21 +177,13 @@ export async function bundleSharedCore(
 
   bundleCache.clear();
 
-  const inferredPackageInfos = Object.keys(sharedBundles)
-    .filter(packageName => !sharedBundles[packageName]?.packageInfo)
-    .map(packageName => getPackageInfo(packageName, folder, deps.repo, buildOptions.platform))
-    .filter(pi => !!pi) as PackageInfo[];
-
-  const configuredPackageInfos = Object.keys(sharedBundles)
-    .filter(packageName => !!sharedBundles[packageName]?.packageInfo)
-    .map(packageName => ({
-      packageName,
-      ...sharedBundles[packageName]?.packageInfo,
-      // getChecksumCore falls back to the declared version the same way, so a hit replays this.
-      version: resolvedVersions[packageName] || sharedBundles[packageName]?.version,
-    })) as PackageInfo[];
-
-  const packageInfos = [...inferredPackageInfos, ...configuredPackageInfos];
+  const packageInfos = sharedPackageInfos(
+    sharedBundles,
+    folder,
+    deps.repo,
+    buildOptions.platform,
+    resolvedVersions
+  );
 
   const configState = `BUNDLER_CHUNKS;${builderVersion};${JSON.stringify(config)}`;
 
@@ -517,27 +500,6 @@ function createOutName(
 
   const outName = fedOptions.dev ? `${encName}.${hash}-dev.js` : `${encName}.${hash}.js`;
   return outName;
-}
-
-function buildResult(
-  packageInfos: PackageInfo[],
-  sharedBundles: Record<string, NormalizedExternalConfig>,
-  outFileNames: string[]
-) {
-  return packageInfos.map(pi => {
-    const shared = sharedBundles[pi.packageName];
-    return {
-      packageName: pi.packageName,
-      outFileName: path.basename(outFileNames.shift() || ''),
-      requiredVersion: shared?.requiredVersion,
-      singleton: shared?.singleton,
-      strictVersion: shared?.strictVersion,
-      version: pi.version,
-      ...(shared?.shareScope && { shareScope: shared.shareScope }),
-      ...(shared?.pool && { pool: shared.pool }),
-      ...(shared?.preload && { preload: true }),
-    } as SharedInfo;
-  });
 }
 
 // Never a singleton: a chunk belongs to a build, not to a dependency, so nothing downstream can
