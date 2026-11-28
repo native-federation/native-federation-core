@@ -130,9 +130,11 @@ package the app imports, and of every package those import, so a shared package 
 through another package is kept. `findInstalledPackage` picks the install it reads:
 
 - A package a workspace file imports is looked up from the workspace root.
-- A shared package is looked up from the workspace root, whoever imports it. That is the copy
-  `bundleSharedCore` builds and every importer loads at runtime.
-- A package that is not shared, imported by another package, is looked up from the importer's
+- A specifier that is a key of `shared` is looked up from the workspace root, whoever imports it.
+  That is the copy `bundleSharedCore` builds and every importer loads at runtime. The match is by
+  exact specifier: a secondary entry point that is not itself a key, such as `rxjs/operators` with
+  `includeSecondaries: false`, counts as not shared.
+- Any other specifier, imported by another package, is looked up from the importer's
   directory first, walking up through each parent's `node_modules` as Node does
   ([Node: loading from node_modules folders][node-modules-lookup]; [spec][node-algo]
   `PACKAGE_RESOLVE` step 10; `packageResolve` in [`resolve.js`][node-package-resolve]). It is
@@ -189,15 +191,9 @@ Checked by hand against Node 24.16 `packageExportsResolve`, not by CI, with the 
 - The adapter bundles `entryPoint`, and the scan reads it. The app's own imports of the package are
   resolved by the bundler, which follows Node's algorithm. Where core reads `exports` differently,
   the shared bundle holds other code than the app imports, or a file the package does not export.
-- Under an isolated install a dependency of a dependency is not installed at the workspace root.
-  Looked up only from there, its imports were never scanned, and a shared package only it imports
-  was pruned while the bundle still imported it.
-- A shared package is bundled once from the workspace root and every importer loads that copy, so
-  an importer's own install of it never runs. Scanning that install would keep what the running
-  copy does not import and prune what it does.
-- An install the importer sees, but that blocks the entry point, is still the one it loads. The
-  workspace root's install is other code, so scanning it in its place would keep imports the
-  running code does not have.
+- The scan reads the copy of each package that runs: the shared bundle built from the workspace
+  root for a key of `shared`, and the install Node would load for the importer for anything else.
+  What that copy imports is kept, and only that.
 - Each platform has its own shared bundle, so each reads its own platform's file. The scan reads
   the same file the bundle will, so it keeps the imports that file really has.
 
@@ -210,6 +206,15 @@ Checked by hand against Node 24.16 `packageExportsResolve`, not by CI, with the 
   package author kept private, and the app could not import it under that name either.
 - Taking any condition key without regard to the platform: a browser bundle could hold the `node`
   build, and the scan would read imports the browser file does not have.
+- Looking up every package from the workspace root only: under an isolated install a dependency of
+  a dependency is not installed there, so its imports were never scanned, and a shared package
+  only it imports was pruned while the bundle still imported it.
+- Scanning the importer's own install of a shared package: that install never runs, because every
+  importer loads the one bundle built from the workspace root. Its imports would keep what the
+  running copy does not import and prune what it does.
+- Falling back to the workspace root's install when the importer's install blocks the entry point
+  or has no entry file: the importer's install is still the one it loads. The root's install is
+  other code, so scanning it in its place would keep imports the running code does not have.
 
 ## Limits
 
@@ -259,7 +264,7 @@ Each line is a place where core deliberately does not do what Node does.
   a package it does not declare that the workspace installs, and the bundler, which resolves it
   through its own search paths, still finds it. For an importer inside the workspace the root is an
   ancestor, so the fallback reads nothing Node would not.
-- **Shared packages ignore the importer.** A shared package is read from the workspace root, also
+- **Shared packages ignore the importer.** A key of `shared` is read from the workspace root, also
   when the importer has its own install, which Node would load. In the browser every importer gets
   the one shared bundle through the import map, whoever imports it ([HTML: import
   maps][html-import-maps]), and `bundleSharedCore` builds that bundle from the workspace root.
@@ -284,7 +289,9 @@ Enforced by: `src/lib/utils/package/exports-resolver.spec.ts`,
 `src/lib/config/with-native-federation.spec.ts`
 Issues: core#263, core#264
 History: first matching key in listed order, no platform condition, `null` falling back to `main`
-→ core#264 Node's key order and target rules, a condition per platform
+→ core#264 Node's key order and target rules, a condition per platform; every package the scan
+follows looked up from the workspace root → core#265 looked up from its importer, a key of `shared`
+from the workspace root
 Related: [Shared packages](shared-packages.md), [Published imports](published-imports.md)
 
 [node-exports]: https://nodejs.org/api/packages.html#package-entry-points
