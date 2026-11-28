@@ -16,7 +16,7 @@ export type { PackageInfo, VersionMap } from '../../domain/utils/package-json.co
 export function tryGetPackageInfo(
   packageName: string,
   workspaceRoot: string,
-  repo: PackageJsonRepository = sharedPackageJsonRepository
+  repo: PackageJsonRepository
 ): PackageInfo | null {
   const info = resolveFromRoots(packageName, workspaceRoot, repo);
   return info === NOT_EXPORTED ? null : info;
@@ -30,7 +30,7 @@ export function tryGetPackageInfo(
 export function getPackageInfo(
   packageName: string,
   workspaceRoot: string,
-  repo: PackageJsonRepository = sharedPackageJsonRepository
+  repo: PackageJsonRepository
 ): PackageInfo | null {
   const info = resolveFromRoots(packageName, workspaceRoot, repo);
   if (info && info !== NOT_EXPORTED) return info;
