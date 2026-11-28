@@ -315,6 +315,23 @@ describe('getUsedDependenciesFactoryCore', () => {
       expect(scan(io)).toEqual(['a', 'b', 'c', 'x', 'y']);
     });
 
+    // `a` and `b` each link the same install of `c`: two paths, one real file, one scan.
+    it('scans an install reached through two symlinks once', () => {
+      const io = createMemoryIo();
+      setPackage(io, store('a'), ['b', 'c']);
+      setPackage(io, store('b'), ['c']);
+      setPackage(io, store('c'), ['x']);
+      link(io, '/ws/node_modules', 'a');
+      link(io, storeDeps('a'), 'b');
+      link(io, storeDeps('a'), 'c');
+      link(io, storeDeps('b'), 'c');
+      const readText = vi.spyOn(io, 'readText');
+
+      expect(scan(io)).toEqual(['a', 'b', 'c', 'x']);
+      const reads = readText.mock.calls.filter(([file]) => file.endsWith('/c/index.js'));
+      expect(reads).toHaveLength(1);
+    });
+
     // A linked checkout outside the workspace has no node_modules path back to the root, so the
     // phantom dependency it imports is found only by looking from the workspace root.
     it('scans a phantom dependency of a linked package from the workspace root', () => {
@@ -380,8 +397,11 @@ describe('getUsedDependenciesFactoryCore', () => {
       );
       link(io, '/ws/node_modules', 'a');
       link(io, storeDeps('a'), 'c', '2.0.0');
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
 
       expect(scan(io)).toEqual(['a', 'c']);
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
     });
   });
 
