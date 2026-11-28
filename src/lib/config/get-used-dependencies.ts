@@ -1,4 +1,4 @@
-import { getProjectData as sheriffGetProjectData, type ProjectData } from '@softarc/sheriff-core';
+import { getProjectData as sheriffGetProjectData, type ProjectData } from '@sheriff-arch/sheriff-core';
 import { sharedPackageJsonRepository } from '../utils/package/package-info.js';
 import { resolveInstalledPackageInfo } from '../utils/package/entry-point-resolver.js';
 import { NOT_EXPORTED } from '../utils/package/exports-resolver.js';

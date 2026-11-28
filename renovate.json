@@ -45,8 +45,8 @@
       "automerge": true
     },
     {
-      "description": "Never automerge @softarc/sheriff-core — review compatibility by hand",
-      "matchPackageNames": ["@softarc/sheriff-core"],
+      "description": "Never automerge @sheriff-arch/sheriff-core — review compatibility by hand",
+      "matchPackageNames": ["@sheriff-arch/sheriff-core"],
       "automerge": false
     },
     {

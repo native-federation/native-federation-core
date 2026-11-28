@@ -4,5 +4,3 @@ allowBuilds:
 onlyBuiltDependencies:
   - esbuild
 minimumReleaseAge: 4320
-minimumReleaseAgeExclude:
-  - '@softarc/sheriff-core@0.20.0'

@@ -7,7 +7,7 @@
 // `root`, and the memory io mirrors it at the same absolute paths.
 import * as path from 'path';
 import { vi } from 'vitest';
-import type { ProjectData } from '@softarc/sheriff-core';
+import type { ProjectData } from '@sheriff-arch/sheriff-core';
 import { normalizeFederationOptionsCore } from '../../normalize-options.js';
 import { withNativeFederation } from '../../../config/with-native-federation.js';
 import { getUsedDependenciesFactoryCore } from '../../../config/get-used-dependencies.js';

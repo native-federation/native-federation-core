@@ -1,5 +1,5 @@
 import * as path from 'path';
-import type { ImportSpecifier } from 'es-module-lexer';
+import type { ImportSpecifier } from 'es-module-lexer/minimal';
 import type {
   ChunkMap,
   FederationInfo,

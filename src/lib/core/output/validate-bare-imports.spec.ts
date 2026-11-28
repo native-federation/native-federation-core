@@ -469,7 +469,7 @@ describe('findUnresolvedImportsCore', () => {
 
   // Valid JS the lexer misreads: '/' after a block starts a regex, not a division.
   it('reports a script the lexer cannot parse instead of passing it', () => {
-    const io = createMemoryIo().setFile(out('a.js'), '{}/`/;import "missing";');
+    const io = createMemoryIo().setFile(out('a.js'), 'import "missing"; )');
 
     const { unresolved, unparsable } = findUnresolvedImportsCore(
       io,
@@ -562,7 +562,7 @@ describe('validateBareImports', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     vi.spyOn(logger, 'error').mockImplementation(() => undefined);
     const { config, fedOptions, fedInfo, files } = setup(false);
-    fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'a.js'), '{}/`/;import "x";');
+    fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'a.js'), 'import "x"; )');
 
     expect(() => validateBareImports(config, fedOptions, fedInfo, files, FULL)).not.toThrow();
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("Could not scan 'a.js'"));
@@ -577,7 +577,7 @@ describe('validateBareImports', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     const error = vi.spyOn(logger, 'error').mockImplementation(() => undefined);
     const { config, fedOptions, fedInfo, files } = setup(true);
-    fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'a.js'), '{}/`/;import "x";');
+    fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'a.js'), 'import "x"; )');
 
     expect(() => validateBareImports(config, fedOptions, fedInfo, files, FULL)).toThrow(
       /strictImports/
@@ -589,7 +589,7 @@ describe('validateBareImports', () => {
   it('names both problems when a strict build has an unresolved import and an unscanned file', () => {
     vi.spyOn(logger, 'error').mockImplementation(() => undefined);
     const { config, fedOptions, fedInfo } = setup(true);
-    fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'b.js'), '{}/`/;import "x";');
+    fs.writeFileSync(path.join(fedOptions.workspaceRoot, 'dist', 'b.js'), 'import "x"; )');
 
     expect(() =>
       validateBareImports(config, fedOptions, fedInfo, browser('a.js', 'b.js'), FULL)
