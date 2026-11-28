@@ -25,7 +25,9 @@
 - With `ignoreUnusedDeps` (the default), only the entry points the build reaches are published.
   A shared package nothing reaches is dropped; `keepAll` keeps every entry point of one that is
   still reached.
-- The import scan looks up a package that another package imports from the real directory of the
+- The import scan looks up a package that another package imports where the copy that runs at
+  runtime is installed. A shared package is looked up from the workspace root, where its bundle is
+  built, whoever imports it. Any other package is looked up from the real directory of the
   importing package, as Node resolves it, and from the workspace root only when the importer sees
   no install of it. An install the importer does see decides, also when its `exports` block the
   entry. Each install is scanned, so two versions of one package that import different things are
@@ -48,6 +50,9 @@
 - Under an isolated install a dependency of a dependency is not installed at the workspace root.
   Looked up from there, its imports were never scanned, and a shared package only it imports was
   pruned while the bundle still imported it.
+- A shared package is bundled once from the workspace root and every importer loads that copy, so
+  an importer's own install of it never runs. Scanning that install would keep what the running
+  copy does not import and prune what it does.
 - Fetching a package before it is used is speculative, so it is opt-in per package: the remote
   knows a package is heavy and always needed by what it exposes.
 
