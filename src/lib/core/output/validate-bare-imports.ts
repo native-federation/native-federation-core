@@ -52,14 +52,11 @@ export function validateBareImports(
   const scan = findUnresolvedImportsCore(nodeIo, outputDir, files, config, federationInfo);
   logger.measure(start, 'Validated the bare imports of the published files.');
 
+  // see docs/architecture/published-imports.md
   const strict = config.features.strictImports;
-  // An unlisted chunk or an unscanned file is broken whatever the config says, but a watch rebuild
-  // only warns so the dev loop keeps running; the next full build fails.
   const failsAnyway = (kind: FindingKind) => fullReport && kind !== 'unresolved';
   const fails = (kind: FindingKind) => strict || failsAnyway(kind);
 
-  // A watch rebuild repeating unchanged warnings buries new ones. Only the specifiers are compared:
-  // chunks are named after their content, so an edit renames the importers.
   const findings = toFindings(scan);
   const key = findings.flatMap(f => f.specifier ?? []).join('\n');
   const previous = reportedSpecifiers.get(fedOptions.federationCache);
