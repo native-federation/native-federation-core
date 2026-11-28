@@ -4,7 +4,10 @@
 
 ## Rules
 
-- A shared package is published as one unit, not entry point by entry point.
+- A shared package is published as one unit, not entry point by entry point: one `shared` record
+  in `remoteEntry.json` (`$version: 'v5'`), with each entry point's file under `entries`. Shared
+  mappings are published the same way. Entry points whose metadata differ split into records
+  that share a `packageName`.
 - It has one version for all its entry points: the installed one, unless the config pins a
   version. The declared range is a last resort, with a warning. A vendored copy of an installed
   package pins its version, or it is published as the installed one.
@@ -52,6 +55,8 @@
   `build` has no value that turns it back off.
 - Taking the version from the declared range in `package.json`: a range does not name the bytes,
   so an upgrade would keep serving old files under the old version.
+- One record per entry point (`features.denseExternals: false`, the 4.x default): a host could
+  take one package's entry points from different remotes, at different versions.
 
 ## Limits
 
@@ -62,5 +67,7 @@
 Enforced by: `src/lib/core/build/bundle-shared.spec.ts`,
 `src/lib/config/remove-unused-deps.spec.ts`, `src/lib/config/share-utils.spec.ts`
 Issues: core#104, core#120, core#169, core#233, core#234
+History: one record per entry point, dense records opt-in with `features.denseExternals` → 5.0
+dense records only, the flag removed
 Related: [Shared mappings](shared-mappings.md), [Shared cache](shared-cache.md),
 [Mapping packages](mapping-packages.md), [Package resolution](package-resolution.md)
