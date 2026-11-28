@@ -173,6 +173,7 @@ function findInstalledPackage(
     const pkgJsonPath = deps.repo.findDepPackageJson(name, from);
     if (!pkgJsonPath) continue;
     const info = resolveInstalledPackageInfo(deps.repo, name, pkgJsonPath, platform);
+    // The first install the importer sees decides, also when it resolves nothing.
     if (!info || info === NOT_EXPORTED) return null;
     return { info, directory: deps.io.realpath(path.dirname(pkgJsonPath)) };
   }
