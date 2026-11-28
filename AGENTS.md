@@ -223,6 +223,10 @@ lifetime.
 - Run with `pnpm test` (`vitest`).
 - `src/public-api.spec.ts` snapshots every entry point's exports. A surface change fails it until
   the snapshot is updated (`vitest -u`), so the change is reviewed as a diff.
+- `src/lib/core/characterisation.spec.ts` records what the shared and mapping selection publishes.
+  A change to its snapshot cites an id from `INTENDED_DIFFS`
+  (`src/lib/core/__test-helpers__/characterisation/intended-diffs.ts`), or it is a bug. A row an
+  intended diff flips is an assertion named after that id (`D2: …`).
 - CI runs the typecheck and the suite a second time on the TypeScript floor (last step of
   `verify.yml`). To repeat it locally, run the same commands, then
   `git checkout package.json pnpm-lock.yaml && pnpm install`.
