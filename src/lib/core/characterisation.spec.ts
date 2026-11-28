@@ -288,6 +288,36 @@ describe('characterisation: install layouts', () => {
     config: exposing(() => shareAll(AUTO)),
     scan: mainImports('a'),
   }));
+
+  // `a` has its own `c` (which imports `y`) next to it; the root's `c` imports `x`.
+  snapshotRow('I2', "a shared package reached through a dependency is the root's install", () => ({
+    files: {
+      ...app({ a: '^1.0.0', c: '^1.0.0', x: '^1.0.0', y: '^1.0.0' }),
+      ...installed(
+        'a',
+        '1.0.0',
+        {},
+        { 'index.js': "import 'c';" },
+        `${store('a', '1.0.0')}/node_modules/a`
+      ),
+      ...installed('c', '1.0.0', {}, { 'index.js': "import 'x';" }),
+      ...installed(
+        'c',
+        '2.0.0',
+        {},
+        { 'index.js': "import 'y';" },
+        `${store('c', '2.0.0')}/node_modules/c`
+      ),
+      ...installed('x', '1.0.0'),
+      ...installed('y', '1.0.0'),
+    },
+    links: {
+      'node_modules/a': `${store('a', '1.0.0')}/node_modules/a`,
+      [`${store('a', '1.0.0')}/node_modules/c`]: `${store('c', '2.0.0')}/node_modules/c`,
+    },
+    config: exposing(() => shareAll(AUTO)),
+    scan: mainImports('a'),
+  }));
 });
 
 describe('characterisation: config forms', () => {
@@ -782,5 +812,9 @@ describe('characterisation: exports resolution', () => {
         'browser.js': '',
       }
     )
+  );
+
+  snapshotRow('E8', 'an array skips an element whose matching condition is null', () =>
+    resolving('p', { '.': [{ import: null }, './index.js'] }, {})
   );
 });
