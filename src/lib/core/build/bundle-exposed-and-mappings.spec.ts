@@ -1,10 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
 
-import {
-  bundleExposedAndMappingsCore,
-  getMappingVersionCore,
-} from './bundle-exposed-and-mappings.js';
+import { bundleExposedAndMappingsCore } from './bundle-exposed-and-mappings.js';
+import { getMappingVersionCore } from './mapping-record.js';
 import { createMemoryIo } from '../../utils/io/__test-helpers__/memory-io.js';
 import { createFakeBuildAdapter } from './__test-helpers__/fake-build-adapter.js';
 import { prepareSkipList } from '../../config/default-skip-list.js';
