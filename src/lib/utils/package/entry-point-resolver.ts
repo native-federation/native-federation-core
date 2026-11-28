@@ -75,11 +75,19 @@ export function resolvePackageInfo(
   directory: string,
   platform: 'browser' | 'node'
 ): PackageInfo | NotExported | null {
-  const mainPkgName = getPkgFolder(packageName);
-  if (!mainPkgName) throw new Error(`Could not resolve "${packageName}" in "${directory}`);
-
   const mainPkgJsonPath = repo.findDepPackageJson(packageName, directory);
   if (!mainPkgJsonPath) return null;
+  return resolveInstalledPackageInfo(repo, packageName, mainPkgJsonPath, platform);
+}
+
+export function resolveInstalledPackageInfo(
+  repo: PackageJsonRepository,
+  packageName: string,
+  mainPkgJsonPath: string,
+  platform: 'browser' | 'node'
+): PackageInfo | NotExported | null {
+  const mainPkgName = getPkgFolder(packageName);
+  if (!mainPkgName) throw new Error(`Could not resolve "${packageName}" in "${mainPkgJsonPath}`);
 
   const mainPkgPath = path.dirname(mainPkgJsonPath);
   const mainPkgJson = repo.readJson(mainPkgJsonPath);
@@ -88,7 +96,7 @@ export function resolvePackageInfo(
   const esm = mainPkgJson['type'] === 'module';
 
   if (!version) {
-    logger.debug('No version found for ' + packageName + ' in ' + directory);
+    logger.debug('No version found for ' + packageName + ' in ' + mainPkgPath);
     return null;
   }
 
@@ -119,6 +127,6 @@ export function resolvePackageInfo(
     if (result) return result;
   }
 
-  logger.debug('No entry point found for ' + packageName + ' in ' + directory);
+  logger.debug('No entry point found for ' + packageName + ' in ' + mainPkgPath);
   return null;
 }
