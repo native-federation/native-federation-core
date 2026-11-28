@@ -25,13 +25,8 @@
 - With `ignoreUnusedDeps` (the default), only the entry points the build reaches are published.
   A shared package nothing reaches is dropped; `keepAll` keeps every entry point of one that is
   still reached.
-- The import scan looks up a package that another package imports where the copy that runs at
-  runtime is installed. A shared package is looked up from the workspace root, where its bundle is
-  built, whoever imports it. Any other package is looked up from the real directory of the
-  importing package, as Node resolves it, and from the workspace root only when the importer sees
-  no install of it. An install the importer does see decides, also when its `exports` block the
-  entry. Each install is scanned, so two versions of one package that import different things are
-  both followed.
+- Which install of a package the import scan reads: see
+  [Package resolution](package-resolution.md#which-install-the-unused-dependency-scan-reads).
 - `preload: true` on a shared package is published on its record as `preload`. Like any config
   field, it is part of the shared bundle's config state, so toggling it renames the bundle's entry
   files on a rebuild; it changes nothing else in the build. It asks the runtime to fetch the
@@ -47,12 +42,6 @@
 - A record's version names the bytes in its file.
 - Publishing every entry point of every dependency makes `remoteEntry.json` and the shared
   bundles far larger than what the app uses.
-- Under an isolated install a dependency of a dependency is not installed at the workspace root.
-  Looked up from there, its imports were never scanned, and a shared package only it imports was
-  pruned while the bundle still imported it.
-- A shared package is bundled once from the workspace root and every importer loads that copy, so
-  an importer's own install of it never runs. Scanning that install would keep what the running
-  copy does not import and prune what it does.
 - Fetching a package before it is used is speculative, so it is opt-in per package: the remote
   knows a package is heavy and always needed by what it exposes.
 

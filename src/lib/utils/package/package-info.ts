@@ -23,7 +23,6 @@ export function tryGetPackageInfo(
   return info === NOT_EXPORTED ? null : info;
 }
 
-// Warns when it fails, so only for packages the user asked to share.
 export function getPackageInfo(
   packageName: string,
   workspaceRoot: string,

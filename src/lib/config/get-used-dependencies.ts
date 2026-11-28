@@ -119,8 +119,6 @@ function resolveEntryPoint(io: FileReaderPort, workspaceRoot: string, entryPoint
   return resolved;
 }
 
-// `importer` is the real directory of the package whose entry closure imports `name`; packages
-// imported by workspace files have none.
 interface PendingPackage {
   name: string;
   importer?: string;
@@ -134,15 +132,13 @@ function addTransientDeps(
   configPlatform: 'browser' | 'node'
 ) {
   const packagesAndPeers = new Set<string>(packages);
-  // Keyed on the installed entry file, not the name: two installs of one name can import
-  // different things.
   const scanned = new Set<string>();
   const stack: PendingPackage[] = [...packages].map(name => ({ name }));
 
   while (stack.length > 0) {
     const { name, importer } = stack.pop()!;
 
-    // A shared package runs as the one copy bundled from the workspace root, whoever imports it.
+    // see docs/architecture/package-resolution.md#which-install-the-unused-dependency-scan-reads
     const sharedConfig = shared[name];
     const found = findInstalledPackage(
       name,
@@ -165,9 +161,6 @@ function addTransientDeps(
   return packagesAndPeers;
 }
 
-// Node resolves an import from the importing file, so a dependency of a dependency is only
-// visible from that package's own directory under an isolated install. The workspace root is the
-// fallback only when the importer sees no install at all: an install it does see decides.
 function findInstalledPackage(
   name: string,
   importer: string | undefined,

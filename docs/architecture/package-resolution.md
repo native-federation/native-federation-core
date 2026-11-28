@@ -4,9 +4,10 @@
 
 How core turns a shared package name and entry point (`rxjs`, `rxjs/operators`) into the file it
 bundles. The result is a `PackageInfo` whose `entryPoint` the adapter bundles for the shared
-package and the unused-dependency scan reads for transitive imports. Entry: `getPackageInfo` and
-`tryGetPackageInfo` in `src/lib/utils/package/package-info.ts`, which call `resolvePackageInfo` in
-`src/lib/utils/package/entry-point-resolver.ts`.
+package and the unused-dependency scan reads for transitive imports. Entry: `getPackageInfo` in
+`src/lib/utils/package/package-info.ts` for a shared bundle and `findInstalledPackage` in
+`src/lib/config/get-used-dependencies.ts` for the scan. Both end in `resolveInstalledPackageInfo`
+in `src/lib/utils/package/entry-point-resolver.ts`.
 
 Core follows Node's `exports` resolution ([Node: Package entry points][node-exports],
 [Node: resolution algorithm][node-algo]) wherever it can, and differs on purpose in the places
@@ -16,11 +17,13 @@ listed under [Differences from Node](#differences-from-node).
 
 ### Reading the package
 
-- Core looks for the package from one folder: the workspace root, or, for a shared bundle, the
+- For a shared bundle, core looks for the package from one folder: the workspace root, or the
   folder of `fedOptions.packageJson` when it is set (`bundleSharedCore`). `getPackageJsonFiles`
   lists that folder only when it holds a `package.json`; without one, nothing resolves. From
   there `findDepPackageJson` walks up through the `node_modules` folders to the package's own
-  `package.json`.
+  `package.json`. The scan picks the install it reads as
+  [Which install the unused-dependency scan reads](#which-install-the-unused-dependency-scan-reads)
+  describes.
 - `version` comes from the package root's `package.json`. Without one, the package is not
   resolved. A secondary entry point gets the same version as its package.
 - The entry point is split into the package and a subpath: `rxjs` is `.`, `rxjs/operators` is
@@ -120,6 +123,34 @@ different files.
   transitive dependency or a secondary entry point that is not itself a key, is read with the
   config's top-level `platform`, and with `browser` when the config sets none.
 
+### Which install the unused-dependency scan reads
+
+`addTransientDeps` in `src/lib/config/get-used-dependencies.ts` scans the entry file of every
+package the app imports, and of every package those import, so a shared package reached only
+through another package is kept. `findInstalledPackage` picks the install it reads:
+
+- A package a workspace file imports is looked up from the workspace root.
+- A shared package is looked up from the workspace root, whoever imports it. That is the copy
+  `bundleSharedCore` builds and every importer loads at runtime.
+- A package that is not shared, imported by another package, is looked up from the importer's
+  directory first, walking up through each parent's `node_modules` as Node does
+  ([Node: loading from node_modules folders][node-modules-lookup]; [spec][node-algo]
+  `PACKAGE_RESOLVE` step 10; `packageResolve` in [`resolve.js`][node-package-resolve]). It is
+  looked up from the workspace root only when the importer sees no install of it.
+- The first install the importer sees decides. When its `exports` block the entry point, or it has
+  no `version` or no entry file, the package is not scanned, and the workspace root's install is
+  not read in its place. Node also stops at the first `node_modules/<name>` it finds.
+- The importer's directory is the real path of the folder that holds its `package.json`, with
+  symlinks resolved. Under an isolated install a package's dependencies sit next to its real
+  folder, not next to the symlink in the app's `node_modules`
+  ([pnpm: symlinked node_modules structure][pnpm-symlinks]). Node resolves a module's imports from
+  its real path too, unless `--preserve-symlinks` is set (`finalizeResolution` in
+  [`resolve.js`][node-finalize-realpath]).
+- The walk skips an entry file it has already scanned, compared by real path, not a package name it
+  has seen. Two installs of one package, such as two versions that `a` and `b` each depend on, can
+  import different things, and both are followed. The result is a set of package names.
+- Each install is read with the platform [Platform](#platform) gives it.
+
 ### Not exported
 
 - "Not exported" is the separate value `NOT_EXPORTED`, so `null` keeps meaning "try the next
@@ -129,7 +160,7 @@ different files.
   then `Skip it in your federation.config.js, or remove it from shared`, and the entry point is not
   bundled. A package that is not found at all gets the first sentence without the reason, and the
   advice to skip it or move it into `devDependencies`.
-- The scan uses `tryGetPackageInfo`, which returns `null` for both, without a warning.
+- The scan skips a package in either case, without a warning.
 
 ### Examples
 
@@ -158,6 +189,15 @@ Checked by hand against Node 24.16 `packageExportsResolve`, not by CI, with the 
 - The adapter bundles `entryPoint`, and the scan reads it. The app's own imports of the package are
   resolved by the bundler, which follows Node's algorithm. Where core reads `exports` differently,
   the shared bundle holds other code than the app imports, or a file the package does not export.
+- Under an isolated install a dependency of a dependency is not installed at the workspace root.
+  Looked up only from there, its imports were never scanned, and a shared package only it imports
+  was pruned while the bundle still imported it.
+- A shared package is bundled once from the workspace root and every importer loads that copy, so
+  an importer's own install of it never runs. Scanning that install would keep what the running
+  copy does not import and prune what it does.
+- An install the importer sees, but that blocks the entry point, is still the one it loads. The
+  workspace root's install is other code, so scanning it in its place would keep imports the
+  running code does not have.
 - Each platform has its own shared bundle, so each reads its own platform's file. The scan reads
   the same file the bundle will, so it keeps the imports that file really has.
 
@@ -213,6 +253,16 @@ Each line is a place where core deliberately does not do what Node does.
   The bundler reports such a package itself. Source: [spec][node-algo] `PACKAGE_EXPORTS_RESOLVE`
   step 1 and `isConditionalExportsMainSugar` in [`resolve.js`][node-sugar-impl] for mixed keys;
   `isArrayIndex` in `resolvePackageTarget` ([`resolve.js`][node-target]) for a numeric key.
+- **Workspace-root fallback.** When the importer sees no install of a package that is not shared,
+  the scan reads the one at the workspace root; Node looks only in the importer's own ancestors
+  ([spec][node-algo] `PACKAGE_RESOLVE` step 10). A linked checkout outside the workspace can import
+  a package it does not declare that the workspace installs, and the bundler, which resolves it
+  through its own search paths, still finds it. For an importer inside the workspace the root is an
+  ancestor, so the fallback reads nothing Node would not.
+- **Shared packages ignore the importer.** A shared package is read from the workspace root, also
+  when the importer has its own install, which Node would load. In the browser every importer gets
+  the one shared bundle through the import map, whoever imports it ([HTML: import
+  maps][html-import-maps]), and `bundleSharedCore` builds that bundle from the workspace root.
 
 ### Other limits
 
@@ -220,6 +270,13 @@ Each line is a place where core deliberately does not do what Node does.
   blocks an entry point in that folder hides a later folder whose package exports it. The
   production repository lists one folder, the workspace root or the folder of
   `fedOptions.packageJson`, and only when it holds a `package.json`.
+- The scan does not follow a custom `packageJson` folder. `bundleSharedCore` looks up shared
+  packages from the folder of `fedOptions.packageJson` when it is set, while the scan looks them up,
+  and the packages workspace files import, from the workspace root. When the two folders see
+  different installs, the scan reads another copy than the bundle holds.
+- A shared package that is not installed at the workspace root, only below another package, is
+  found by nothing: the scan, which looks it up from the root, skips it, and the shared bundle
+  warns that it has no metadata for it.
 
 Enforced by: `src/lib/utils/package/exports-resolver.spec.ts`,
 `src/lib/utils/package/entry-point-resolver.spec.ts`, `src/lib/utils/package/package-info.spec.ts`,
@@ -237,8 +294,13 @@ Related: [Shared packages](shared-packages.md), [Published imports](published-im
 [node-conditions]: https://nodejs.org/api/packages.html#conditional-exports
 [node-community]: https://nodejs.org/api/packages.html#community-conditions-definitions
 [node-algo]: https://nodejs.org/api/esm.html#resolution-algorithm-specification
+[node-modules-lookup]: https://nodejs.org/api/modules.html#loading-from-node_modules-folders
+[pnpm-symlinks]: https://pnpm.io/symlinked-node-modules-structure
+[html-import-maps]: https://html.spec.whatwg.org/multipage/webappapis.html#import-maps
 [node-finalize]: https://github.com/nodejs/node/blob/v24.16.0/lib/internal/modules/esm/resolve.js#L225
+[node-finalize-realpath]: https://github.com/nodejs/node/blob/v24.16.0/lib/internal/modules/esm/resolve.js#L275-L288
 [node-target-string]: https://github.com/nodejs/node/blob/v24.16.0/lib/internal/modules/esm/resolve.js#L357-L455
 [node-target]: https://github.com/nodejs/node/blob/v24.16.0/lib/internal/modules/esm/resolve.js#L481-L547
 [node-sugar-impl]: https://github.com/nodejs/node/blob/v24.16.0/lib/internal/modules/esm/resolve.js#L556-L577
 [node-per]: https://github.com/nodejs/node/blob/v24.16.0/lib/internal/modules/esm/resolve.js#L588-L684
+[node-package-resolve]: https://github.com/nodejs/node/blob/v24.16.0/lib/internal/modules/esm/resolve.js#L762-L786
